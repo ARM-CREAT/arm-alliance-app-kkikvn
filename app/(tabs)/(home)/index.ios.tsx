@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { 
   StyleSheet, 
   View, 
@@ -8,12 +8,16 @@ import {
   Image, 
   TouchableOpacity,
   Dimensions,
-  ImageSourcePropType
+  ImageSourcePropType,
+  RefreshControl,
+  ActivityIndicator,
+  Animated
 } from "react-native";
 import { Stack } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter } from "expo-router";
+import * as Haptics from 'expo-haptics';
 
 // Helper to resolve image sources
 function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
@@ -53,12 +57,39 @@ export default function HomeScreen() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const fadeAnim = useState(new Animated.Value(0))[0];
 
   useEffect(() => {
     console.log('HomeScreen: Loading party data');
-    loadNews();
-    loadEvents();
-    loadLeadership();
+    loadAllData();
+  }, []);
+
+  const loadAllData = async () => {
+    await Promise.all([
+      loadNews(),
+      loadEvents(),
+      loadLeadership()
+    ]);
+    setLoading(false);
+    
+    // Fade in animation
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const onRefresh = useCallback(async () => {
+    console.log('User pulled to refresh');
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+    
+    // Haptic feedback on refresh complete
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, []);
 
   const loadNews = async () => {
@@ -123,335 +154,391 @@ export default function HomeScreen() {
 
   const handleDonation = (amount: number) => {
     console.log('User tapped donation button:', amount, 'EUR');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/donation');
   };
 
   const handleJoinParty = () => {
     console.log('User tapped Join Party button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/(tabs)/profile');
   };
 
   const handleContact = () => {
     console.log('User tapped Contact button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push('/contact');
   };
 
   const handleChat = () => {
     console.log('User tapped Public Chat button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push('/chat/public');
   };
 
   const handleIdeology = () => {
     console.log('User tapped Ideology button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/ideology');
   };
+
+  if (loading) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Chargement...</Text>
+        </View>
+      </>
+    );
+  }
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        {/* Header avec logo */}
-        <View style={styles.header}>
-          <Image 
-            source={resolveImageSource('https://prod-finalquest-user-projects-storage-bucket-aws.s3.amazonaws.com/user-projects/74f29b97-c31f-462c-8ec5-6f7655e33c4b/assets/images/2889d5a4-a959-4c51-8000-e693ffffc1fd.jpeg?AWSAccessKeyId=AKIAVRUVRKQJC5DISQ4Q&Signature=u9g3MpsH%2BQuiumXms90t3jriaWA%3D&Expires=1769359070')}
-            style={styles.logo}
-            resizeMode="contain"
+      <ScrollView 
+        style={styles.container} 
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
           />
-          <Text style={styles.partyName}>A.R.M</Text>
-          <Text style={styles.partyFullName}>Alliance pour le Rassemblement Malien</Text>
-          <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
-        </View>
-
-        {/* Idéologie du parti */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="book.fill" 
-              android_material_icon_name="menu-book" 
-              size={24} 
-              color={colors.primary} 
+        }
+      >
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {/* Header avec logo */}
+          <View style={styles.header}>
+            <Image 
+              source={resolveImageSource('https://prod-finalquest-user-projects-storage-bucket-aws.s3.amazonaws.com/user-projects/74f29b97-c31f-462c-8ec5-6f7655e33c4b/assets/images/2889d5a4-a959-4c51-8000-e693ffffc1fd.jpeg?AWSAccessKeyId=AKIAVRUVRKQJC5DISQ4Q&Signature=u9g3MpsH%2BQuiumXms90t3jriaWA%3D&Expires=1769359070')}
+              style={styles.logo}
+              resizeMode="contain"
             />
-            <Text style={styles.sectionTitle}>Notre Idéologie</Text>
+            <Text style={styles.partyName}>A.R.M</Text>
+            <Text style={styles.partyFullName}>Alliance pour le Rassemblement Malien</Text>
+            <View style={styles.mottoContainer}>
+              <View style={styles.mottoLine} />
+              <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
+              <View style={styles.mottoLine} />
+            </View>
           </View>
-          <TouchableOpacity style={styles.ideologyCard} onPress={handleIdeology}>
-            <View style={styles.ideologyContent}>
-              <Text style={styles.ideologyTitle}>Une vision, une force, une mission</Text>
-              <Text style={styles.ideologyText}>
-                A.R.M est un mouvement politique enraciné dans les réalités du peuple malien, fondé sur la fraternité, la liberté et l&apos;égalité.
+
+          {/* Idéologie du parti */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol 
+                ios_icon_name="book.fill" 
+                android_material_icon_name="menu-book" 
+                size={24} 
+                color={colors.primary} 
+              />
+              <Text style={styles.sectionTitle}>Notre Idéologie</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.ideologyCard} 
+              onPress={handleIdeology}
+              activeOpacity={0.8}
+            >
+              <View style={styles.ideologyContent}>
+                <Text style={styles.ideologyTitle}>Une vision, une force, une mission</Text>
+                <Text style={styles.ideologyText}>
+                  A.R.M est un mouvement politique enraciné dans les réalités du peuple malien, fondé sur la fraternité, la liberté et l&apos;égalité.
+                </Text>
+                <View style={styles.ideologyButton}>
+                  <Text style={styles.ideologyButtonText}>Découvrir notre idéologie</Text>
+                  <IconSymbol 
+                    ios_icon_name="arrow.right" 
+                    android_material_icon_name="arrow-forward" 
+                    size={20} 
+                    color={colors.primary} 
+                  />
+                </View>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Programme politique */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol 
+                ios_icon_name="doc.text.fill" 
+                android_material_icon_name="description" 
+                size={24} 
+                color={colors.primary} 
+              />
+              <Text style={styles.sectionTitle}>Notre Programme</Text>
+            </View>
+            <View style={styles.card}>
+              <Text style={styles.programText}>
+                L&apos;A.R.M s&apos;engage pour le développement du Mali à travers des programmes concrets dans tous les secteurs : éducation, santé, économie, agriculture, et infrastructure.
               </Text>
-              <View style={styles.ideologyButton}>
-                <Text style={styles.ideologyButtonText}>Découvrir notre idéologie</Text>
+              <TouchableOpacity style={styles.linkButton} activeOpacity={0.7}>
+                <Text style={styles.linkButtonText}>Voir le programme complet</Text>
                 <IconSymbol 
-                  ios_icon_name="arrow.right" 
-                  android_material_icon_name="arrow-forward" 
+                  ios_icon_name="chevron.right" 
+                  android_material_icon_name="chevron-right" 
                   size={20} 
                   color={colors.primary} 
                 />
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* Programme politique */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="doc.text.fill" 
-              android_material_icon_name="description" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Notre Programme</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.programText}>
-              L&apos;A.R.M s&apos;engage pour le développement du Mali à travers des programmes concrets dans tous les secteurs : éducation, santé, économie, agriculture, et infrastructure.
-            </Text>
-            <TouchableOpacity style={styles.linkButton}>
-              <Text style={styles.linkButtonText}>Voir le programme complet</Text>
-              <IconSymbol 
-                ios_icon_name="chevron.right" 
-                android_material_icon_name="chevron-right" 
-                size={20} 
-                color={colors.primary} 
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Dons */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="heart.fill" 
-              android_material_icon_name="favorite" 
-              size={24} 
-              color={colors.accent} 
-            />
-            <Text style={styles.sectionTitle}>Soutenez-nous</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.donationText}>Votre contribution aide à construire un Mali meilleur</Text>
-            <View style={styles.donationButtons}>
-              <TouchableOpacity 
-                style={styles.donationButton}
-                onPress={() => handleDonation(5)}
-              >
-                <Text style={styles.donationAmount}>5€</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.donationButton}
-                onPress={() => handleDonation(10)}
-              >
-                <Text style={styles.donationAmount}>10€</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.donationButton}
-                onPress={() => handleDonation(20)}
-              >
-                <Text style={styles.donationAmount}>20€</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.customDonationButton}>
-              <Text style={styles.customDonationText}>Montant personnalisé</Text>
-            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Actualités */}
-        {news.length > 0 && (
+          {/* Dons */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
-                ios_icon_name="newspaper.fill" 
-                android_material_icon_name="article" 
+                ios_icon_name="heart.fill" 
+                android_material_icon_name="favorite" 
                 size={24} 
-                color={colors.primary} 
+                color={colors.accent} 
               />
-              <Text style={styles.sectionTitle}>Actualités</Text>
+              <Text style={styles.sectionTitle}>Soutenez-nous</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {news.slice(0, 5).map((item) => (
-                <View key={item.id} style={styles.newsCard}>
-                  {item.imageUrl && (
-                    <Image 
-                      source={resolveImageSource(item.imageUrl)}
-                      style={styles.newsImage}
-                      resizeMode="cover"
-                    />
-                  )}
-                  <View style={styles.newsContent}>
-                    <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={styles.newsExcerpt} numberOfLines={3}>{item.content}</Text>
-                    <Text style={styles.newsDate}>
-                      {new Date(item.publishedAt).toLocaleDateString('fr-FR')}
+            <View style={styles.card}>
+              <Text style={styles.donationText}>Votre contribution aide à construire un Mali meilleur</Text>
+              <View style={styles.donationButtons}>
+                <TouchableOpacity 
+                  style={styles.donationButton}
+                  onPress={() => handleDonation(5)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.donationAmount}>5€</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.donationButton}
+                  onPress={() => handleDonation(10)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.donationAmount}>10€</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.donationButton}
+                  onPress={() => handleDonation(20)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.donationAmount}>20€</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity 
+                style={styles.customDonationButton}
+                onPress={() => handleDonation(0)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.customDonationText}>Montant personnalisé</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Actualités */}
+          {news.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol 
+                  ios_icon_name="newspaper.fill" 
+                  android_material_icon_name="article" 
+                  size={24} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.sectionTitle}>Actualités</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {news.slice(0, 5).map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.newsCard} activeOpacity={0.9}>
+                    {item.imageUrl && (
+                      <Image 
+                        source={resolveImageSource(item.imageUrl)}
+                        style={styles.newsImage}
+                        resizeMode="cover"
+                      />
+                    )}
+                    <View style={styles.newsContent}>
+                      <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.newsExcerpt} numberOfLines={3}>{item.content}</Text>
+                      <Text style={styles.newsDate}>
+                        {new Date(item.publishedAt).toLocaleDateString('fr-FR')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Événements */}
+          {events.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol 
+                  ios_icon_name="calendar.badge.clock" 
+                  android_material_icon_name="event" 
+                  size={24} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.sectionTitle}>Événements à venir</Text>
+              </View>
+              {events.slice(0, 3).map((item) => (
+                <TouchableOpacity key={item.id} style={styles.eventCard} activeOpacity={0.9}>
+                  <View style={styles.eventDate}>
+                    <Text style={styles.eventDay}>
+                      {new Date(item.date).getDate()}
+                    </Text>
+                    <Text style={styles.eventMonth}>
+                      {new Date(item.date).toLocaleDateString('fr-FR', { month: 'short' })}
                     </Text>
                   </View>
-                </View>
+                  <View style={styles.eventInfo}>
+                    <Text style={styles.eventTitle}>{item.title}</Text>
+                    <Text style={styles.eventDescription} numberOfLines={2}>
+                      {item.description}
+                    </Text>
+                    <View style={styles.eventLocation}>
+                      <IconSymbol 
+                        ios_icon_name="location.fill" 
+                        android_material_icon_name="place" 
+                        size={14} 
+                        color={colors.textSecondary} 
+                      />
+                      <Text style={styles.eventLocationText}>{item.location}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
               ))}
-            </ScrollView>
-          </View>
-        )}
+            </View>
+          )}
 
-        {/* Événements */}
-        {events.length > 0 && (
+          {/* Actions rapides */}
+          <View style={styles.section}>
+            <View style={styles.quickActions}>
+              <TouchableOpacity 
+                style={styles.actionCard} 
+                onPress={handleJoinParty}
+                activeOpacity={0.8}
+              >
+                <IconSymbol 
+                  ios_icon_name="person.badge.plus" 
+                  android_material_icon_name="person-add" 
+                  size={32} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.actionTitle}>Adhérer</Text>
+                <Text style={styles.actionSubtitle}>Rejoignez-nous</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionCard} 
+                onPress={handleContact}
+                activeOpacity={0.8}
+              >
+                <IconSymbol 
+                  ios_icon_name="envelope.fill" 
+                  android_material_icon_name="email" 
+                  size={32} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.actionTitle}>Contact</Text>
+                <Text style={styles.actionSubtitle}>Écrivez-nous</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionCard} 
+                onPress={handleChat}
+                activeOpacity={0.8}
+              >
+                <IconSymbol 
+                  ios_icon_name="bubble.left.and.bubble.right.fill" 
+                  android_material_icon_name="chat" 
+                  size={32} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.actionTitle}>Chat Public</Text>
+                <Text style={styles.actionSubtitle}>Discutez</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Direction du parti */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
-                ios_icon_name="calendar.badge.clock" 
-                android_material_icon_name="event" 
+                ios_icon_name="person.3.fill" 
+                android_material_icon_name="group" 
                 size={24} 
                 color={colors.primary} 
               />
-              <Text style={styles.sectionTitle}>Événements à venir</Text>
+              <Text style={styles.sectionTitle}>Direction du Parti</Text>
             </View>
-            {events.slice(0, 3).map((item) => (
-              <View key={item.id} style={styles.eventCard}>
-                <View style={styles.eventDate}>
-                  <Text style={styles.eventDay}>
-                    {new Date(item.date).getDate()}
-                  </Text>
-                  <Text style={styles.eventMonth}>
-                    {new Date(item.date).toLocaleDateString('fr-FR', { month: 'short' })}
-                  </Text>
-                </View>
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventTitle}>{item.title}</Text>
-                  <Text style={styles.eventDescription} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                  <View style={styles.eventLocation}>
-                    <IconSymbol 
-                      ios_icon_name="location.fill" 
-                      android_material_icon_name="place" 
-                      size={14} 
-                      color={colors.textSecondary} 
-                    />
-                    <Text style={styles.eventLocationText}>{item.location}</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
+            <View style={styles.card}>
+              {leadership.length > 0 ? (
+                leadership.map((leader) => (
+                  <LeaderCard 
+                    key={leader.id}
+                    name={leader.name}
+                    position={leader.position}
+                    location={leader.location}
+                    phone={leader.phone}
+                  />
+                ))
+              ) : (
+                <>
+                  <LeaderCard 
+                    name="Lassine Diakité"
+                    position="Président"
+                    location="Yuncos, Toledo, Espagne"
+                    phone="0034632607101"
+                  />
+                  <LeaderCard 
+                    name="Dadou Sangare"
+                    position="Premier Vice-Président"
+                    location="Milan, Italie"
+                  />
+                  <LeaderCard 
+                    name="Oumar Keita"
+                    position="Deuxième Vice-Président"
+                    location="Koutiala, Mali"
+                    phone="0022376304869"
+                  />
+                  <LeaderCard 
+                    name="Karifa Keita"
+                    position="Secrétaire Général"
+                    location="Bamako, Mali"
+                  />
+                  <LeaderCard 
+                    name="Modibo Keita"
+                    position="Secrétaire Administratif"
+                    location="Bamako Sebenikoro, Mali"
+                  />
+                  <LeaderCard 
+                    name="Sokona Keita"
+                    position="Trésorière"
+                    location="Bamako Sebenikoro, Mali"
+                    phone="0022375179920"
+                  />
+                </>
+              )}
+            </View>
           </View>
-        )}
 
-        {/* Actions rapides */}
-        <View style={styles.section}>
-          <View style={styles.quickActions}>
-            <TouchableOpacity style={styles.actionCard} onPress={handleJoinParty}>
+          {/* Siège du parti */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
               <IconSymbol 
-                ios_icon_name="person.badge.plus" 
-                android_material_icon_name="person-add" 
-                size={32} 
+                ios_icon_name="building.2.fill" 
+                android_material_icon_name="location-city" 
+                size={24} 
                 color={colors.primary} 
               />
-              <Text style={styles.actionTitle}>Adhérer</Text>
-              <Text style={styles.actionSubtitle}>Rejoignez-nous</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionCard} onPress={handleContact}>
-              <IconSymbol 
-                ios_icon_name="envelope.fill" 
-                android_material_icon_name="email" 
-                size={32} 
-                color={colors.primary} 
-              />
-              <Text style={styles.actionTitle}>Contact</Text>
-              <Text style={styles.actionSubtitle}>Écrivez-nous</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionCard} onPress={handleChat}>
-              <IconSymbol 
-                ios_icon_name="bubble.left.and.bubble.right.fill" 
-                android_material_icon_name="chat" 
-                size={32} 
-                color={colors.primary} 
-              />
-              <Text style={styles.actionTitle}>Chat Public</Text>
-              <Text style={styles.actionSubtitle}>Discutez</Text>
-            </TouchableOpacity>
+              <Text style={styles.sectionTitle}>Siège du Parti</Text>
+            </View>
+            <View style={styles.card}>
+              <Text style={styles.addressText}>Rue 530, Porte 245</Text>
+              <Text style={styles.addressText}>Sebenikoro, Bamako</Text>
+              <Text style={styles.addressText}>Mali</Text>
+            </View>
           </View>
-        </View>
-
-        {/* Direction du parti */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="person.3.fill" 
-              android_material_icon_name="group" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Direction du Parti</Text>
-          </View>
-          <View style={styles.card}>
-            {leadership.length > 0 ? (
-              leadership.map((leader) => (
-                <LeaderCard 
-                  key={leader.id}
-                  name={leader.name}
-                  position={leader.position}
-                  location={leader.location}
-                  phone={leader.phone}
-                />
-              ))
-            ) : (
-              <>
-                <LeaderCard 
-                  name="Lassine Diakité"
-                  position="Président"
-                  location="Yuncos, Toledo, Espagne"
-                  phone="0034632607101"
-                />
-                <LeaderCard 
-                  name="Dadou Sangare"
-                  position="Premier Vice-Président"
-                  location="Milan, Italie"
-                />
-                <LeaderCard 
-                  name="Oumar Keita"
-                  position="Deuxième Vice-Président"
-                  location="Koutiala, Mali"
-                  phone="0022376304869"
-                />
-                <LeaderCard 
-                  name="Karifa Keita"
-                  position="Secrétaire Général"
-                  location="Bamako, Mali"
-                />
-                <LeaderCard 
-                  name="Modibo Keita"
-                  position="Secrétaire Administratif"
-                  location="Bamako Sebenikoro, Mali"
-                />
-                <LeaderCard 
-                  name="Sokona Keita"
-                  position="Trésorière"
-                  location="Bamako Sebenikoro, Mali"
-                  phone="0022375179920"
-                />
-              </>
-            )}
-          </View>
-        </View>
-
-        {/* Siège du parti */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="building.2.fill" 
-              android_material_icon_name="location-city" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Siège du Parti</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.addressText}>Rue 530, Porte 245</Text>
-            <Text style={styles.addressText}>Sebenikoro, Bamako</Text>
-            <Text style={styles.addressText}>Mali</Text>
-          </View>
-        </View>
+        </Animated.View>
       </ScrollView>
     </>
   );
@@ -491,6 +578,17 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: 20,
   },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
   header: {
     alignItems: 'center',
     paddingVertical: 32,
@@ -503,6 +601,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 60,
     backgroundColor: colors.background,
+    borderWidth: 3,
+    borderColor: colors.secondary,
   },
   partyName: {
     fontSize: 36,
@@ -514,7 +614,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.background,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  mottoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  mottoLine: {
+    width: 40,
+    height: 1,
+    backgroundColor: colors.secondary,
+    marginHorizontal: 12,
   },
   motto: {
     fontSize: 14,
@@ -539,23 +650,23 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   ideologyCard: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   ideologyContent: {
     flex: 1,
@@ -579,7 +690,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   ideologyButtonText: {
     fontSize: 15,
@@ -618,9 +729,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     marginHorizontal: 4,
     alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   donationAmount: {
     fontSize: 20,
@@ -630,7 +746,7 @@ const styles = StyleSheet.create({
   customDonationButton: {
     backgroundColor: colors.secondary,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
   },
   customDonationText: {
@@ -645,15 +761,15 @@ const styles = StyleSheet.create({
   actionCard: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginHorizontal: 4,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   actionTitle: {
     fontSize: 14,
@@ -703,14 +819,14 @@ const styles = StyleSheet.create({
   newsCard: {
     width: width * 0.75,
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 16,
     marginRight: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   newsImage: {
     width: '100%',
@@ -740,20 +856,20 @@ const styles = StyleSheet.create({
   eventCard: {
     flexDirection: 'row',
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   eventDate: {
     width: 60,
     height: 60,
     backgroundColor: colors.primary,
-    borderRadius: 8,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,

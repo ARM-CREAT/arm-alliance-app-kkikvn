@@ -7,11 +7,13 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Alert
+  Alert,
+  ActivityIndicator
 } from "react-native";
 import { Stack } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
+import * as Haptics from 'expo-haptics';
 
 export default function MembershipScreen() {
   const [name, setName] = useState('');
@@ -29,6 +31,8 @@ export default function MembershipScreen() {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
       return;
     }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     setLoading(true);
     console.log('Submitting membership:', { name, email, phone, region, cercle, commune });
@@ -54,6 +58,8 @@ export default function MembershipScreen() {
         return;
       }
 
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
       Alert.alert(
         'Demande envoyée',
         'Votre demande d\'adhésion a été envoyée avec succès. Nous vous contactons bientôt.',
@@ -76,9 +82,7 @@ export default function MembershipScreen() {
   return (
     <>
       <Stack.Screen options={{ 
-        headerShown: true,
-        title: 'Adhésion',
-        headerLargeTitle: true,
+        headerShown: false,
       }} />
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <View style={styles.header}>
@@ -88,6 +92,7 @@ export default function MembershipScreen() {
             size={48} 
             color={colors.primary} 
           />
+          <Text style={styles.title}>Adhérer au Parti</Text>
           <Text style={styles.subtitle}>
             Rejoignez l&apos;Alliance pour le Rassemblement Malien
           </Text>
@@ -102,6 +107,7 @@ export default function MembershipScreen() {
               onChangeText={setName}
               placeholder="Votre nom complet"
               placeholderTextColor={colors.textSecondary}
+              editable={!loading}
             />
           </View>
 
@@ -115,6 +121,7 @@ export default function MembershipScreen() {
               placeholderTextColor={colors.textSecondary}
               keyboardType="email-address"
               autoCapitalize="none"
+              editable={!loading}
             />
           </View>
 
@@ -127,6 +134,7 @@ export default function MembershipScreen() {
               placeholder="+223 XX XX XX XX"
               placeholderTextColor={colors.textSecondary}
               keyboardType="phone-pad"
+              editable={!loading}
             />
           </View>
 
@@ -138,6 +146,7 @@ export default function MembershipScreen() {
               onChangeText={setRegion}
               placeholder="Votre région"
               placeholderTextColor={colors.textSecondary}
+              editable={!loading}
             />
           </View>
 
@@ -149,6 +158,7 @@ export default function MembershipScreen() {
               onChangeText={setCercle}
               placeholder="Votre cercle (optionnel)"
               placeholderTextColor={colors.textSecondary}
+              editable={!loading}
             />
           </View>
 
@@ -160,6 +170,7 @@ export default function MembershipScreen() {
               onChangeText={setCommune}
               placeholder="Votre commune (optionnel)"
               placeholderTextColor={colors.textSecondary}
+              editable={!loading}
             />
           </View>
 
@@ -167,10 +178,13 @@ export default function MembershipScreen() {
             style={[styles.submitButton, loading && styles.submitButtonDisabled]}
             onPress={handleSubmit}
             disabled={loading}
+            activeOpacity={0.8}
           >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Envoi en cours...' : 'Envoyer ma demande'}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color={colors.background} />
+            ) : (
+              <Text style={styles.submitButtonText}>Envoyer ma demande</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.infoBox}>
@@ -185,6 +199,8 @@ export default function MembershipScreen() {
             </Text>
           </View>
         </View>
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
     </>
   );
@@ -200,14 +216,20 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 32,
     paddingHorizontal: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 12,
   },
   form: {
     paddingHorizontal: 20,
@@ -225,18 +247,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
   },
   submitButton: {
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonDisabled: {
     opacity: 0.6,
@@ -249,7 +276,7 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     backgroundColor: colors.backgroundAlt,
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     marginTop: 24,
   },
@@ -259,5 +286,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 12,
     lineHeight: 20,
+  },
+  bottomSpacer: {
+    height: 20,
   },
 });

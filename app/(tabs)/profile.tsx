@@ -8,10 +8,12 @@ import {
   Platform,
   TextInput,
   TouchableOpacity,
-  Alert
+  Alert,
+  ActivityIndicator
 } from "react-native";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
+import * as Haptics from 'expo-haptics';
 
 export default function MembershipScreen() {
   const [name, setName] = useState('');
@@ -28,6 +30,10 @@ export default function MembershipScreen() {
     if (!name || !email || !phone || !region) {
       Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
       return;
+    }
+
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
     setLoading(true);
@@ -52,6 +58,10 @@ export default function MembershipScreen() {
       if (error) {
         Alert.alert('Erreur', `Impossible d'envoyer votre demande: ${error}`);
         return;
+      }
+
+      if (Platform.OS === 'ios') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
       Alert.alert(
@@ -97,6 +107,7 @@ export default function MembershipScreen() {
             onChangeText={setName}
             placeholder="Votre nom complet"
             placeholderTextColor={colors.textSecondary}
+            editable={!loading}
           />
         </View>
 
@@ -110,6 +121,7 @@ export default function MembershipScreen() {
             placeholderTextColor={colors.textSecondary}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!loading}
           />
         </View>
 
@@ -122,6 +134,7 @@ export default function MembershipScreen() {
             placeholder="+223 XX XX XX XX"
             placeholderTextColor={colors.textSecondary}
             keyboardType="phone-pad"
+            editable={!loading}
           />
         </View>
 
@@ -133,6 +146,7 @@ export default function MembershipScreen() {
             onChangeText={setRegion}
             placeholder="Votre région"
             placeholderTextColor={colors.textSecondary}
+            editable={!loading}
           />
         </View>
 
@@ -144,6 +158,7 @@ export default function MembershipScreen() {
             onChangeText={setCercle}
             placeholder="Votre cercle (optionnel)"
             placeholderTextColor={colors.textSecondary}
+            editable={!loading}
           />
         </View>
 
@@ -155,6 +170,7 @@ export default function MembershipScreen() {
             onChangeText={setCommune}
             placeholder="Votre commune (optionnel)"
             placeholderTextColor={colors.textSecondary}
+            editable={!loading}
           />
         </View>
 
@@ -162,10 +178,13 @@ export default function MembershipScreen() {
           style={[styles.submitButton, loading && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={loading}
+          activeOpacity={0.8}
         >
-          <Text style={styles.submitButtonText}>
-            {loading ? 'Envoi en cours...' : 'Envoyer ma demande'}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color={colors.background} />
+          ) : (
+            <Text style={styles.submitButtonText}>Envoyer ma demande</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.infoBox}>
@@ -228,18 +247,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
   },
   submitButton: {
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     marginTop: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonDisabled: {
     opacity: 0.6,
@@ -252,7 +276,7 @@ const styles = StyleSheet.create({
   infoBox: {
     flexDirection: 'row',
     backgroundColor: colors.backgroundAlt,
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     marginTop: 24,
   },
