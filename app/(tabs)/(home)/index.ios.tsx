@@ -141,6 +141,11 @@ export default function HomeScreen() {
     router.push('/chat/public');
   };
 
+  const handleIdeology = () => {
+    console.log('User tapped Ideology button');
+    router.push('/ideology');
+  };
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -155,6 +160,36 @@ export default function HomeScreen() {
           <Text style={styles.partyName}>A.R.M</Text>
           <Text style={styles.partyFullName}>Alliance pour le Rassemblement Malien</Text>
           <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
+        </View>
+
+        {/* Idéologie du parti */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <IconSymbol 
+              ios_icon_name="book.fill" 
+              android_material_icon_name="menu-book" 
+              size={24} 
+              color={colors.primary} 
+            />
+            <Text style={styles.sectionTitle}>Notre Idéologie</Text>
+          </View>
+          <TouchableOpacity style={styles.ideologyCard} onPress={handleIdeology}>
+            <View style={styles.ideologyContent}>
+              <Text style={styles.ideologyTitle}>Une vision, une force, une mission</Text>
+              <Text style={styles.ideologyText}>
+                A.R.M est un mouvement politique enraciné dans les réalités du peuple malien, fondé sur la fraternité, la liberté et l&apos;égalité.
+              </Text>
+              <View style={styles.ideologyButton}>
+                <Text style={styles.ideologyButtonText}>Découvrir notre idéologie</Text>
+                <IconSymbol 
+                  ios_icon_name="arrow.right" 
+                  android_material_icon_name="arrow-forward" 
+                  size={20} 
+                  color={colors.primary} 
+                />
+              </View>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Programme politique */}
@@ -511,6 +546,45 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  ideologyCard: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  ideologyContent: {
+    flex: 1,
+  },
+  ideologyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.background,
+    marginBottom: 12,
+  },
+  ideologyText: {
+    fontSize: 15,
+    color: colors.background,
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  ideologyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  ideologyButtonText: {
+    fontSize: 15,
+    color: colors.primary,
+    fontWeight: '600',
   },
   programText: {
     fontSize: 15,
