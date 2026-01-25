@@ -195,6 +195,14 @@ export default function HomeScreen() {
     router.push('/ideology');
   };
 
+  const handleRegions = () => {
+    console.log('User tapped Regions button');
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    router.push('/regions');
+  };
+
   const handleAIChat = () => {
     console.log('User tapped AI Assistant button');
     if (Platform.OS === 'ios') {
@@ -317,6 +325,53 @@ export default function HomeScreen() {
                 />
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* Présence nationale */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol 
+                ios_icon_name="map.fill" 
+                android_material_icon_name="place" 
+                size={24} 
+                color={colors.primary} 
+              />
+              <Text style={styles.sectionTitle}>Présence Nationale</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.regionsCard} 
+              onPress={handleRegions}
+              activeOpacity={0.8}
+            >
+              <View style={styles.regionsContent}>
+                <View style={styles.regionsStats}>
+                  <View style={styles.regionsStat}>
+                    <Text style={styles.regionsStatNumber}>9</Text>
+                    <Text style={styles.regionsStatLabel}>Régions</Text>
+                  </View>
+                  <View style={styles.regionsStat}>
+                    <Text style={styles.regionsStatNumber}>49</Text>
+                    <Text style={styles.regionsStatLabel}>Cercles</Text>
+                  </View>
+                  <View style={styles.regionsStat}>
+                    <Text style={styles.regionsStatNumber}>726</Text>
+                    <Text style={styles.regionsStatLabel}>Communes</Text>
+                  </View>
+                </View>
+                <Text style={styles.regionsText}>
+                  L&apos;A.R.M est présent dans toutes les régions du Mali
+                </Text>
+                <View style={styles.regionsButton}>
+                  <Text style={styles.regionsButtonText}>Voir toutes les régions</Text>
+                  <IconSymbol 
+                    ios_icon_name="arrow.right" 
+                    android_material_icon_name="arrow-forward" 
+                    size={20} 
+                    color={colors.background} 
+                  />
+                </View>
+              </View>
+            </TouchableOpacity>
           </View>
 
           {/* Dons */}
@@ -753,6 +808,57 @@ const styles = StyleSheet.create({
   ideologyButtonText: {
     fontSize: 15,
     color: colors.primary,
+    fontWeight: '600',
+  },
+  regionsCard: {
+    backgroundColor: colors.accent,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  regionsContent: {
+    flex: 1,
+  },
+  regionsStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  regionsStat: {
+    alignItems: 'center',
+  },
+  regionsStatNumber: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.background,
+  },
+  regionsStatLabel: {
+    fontSize: 12,
+    color: colors.background,
+    marginTop: 4,
+  },
+  regionsText: {
+    fontSize: 15,
+    color: colors.background,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  regionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  regionsButtonText: {
+    fontSize: 15,
+    color: colors.accent,
     fontWeight: '600',
   },
   programText: {
