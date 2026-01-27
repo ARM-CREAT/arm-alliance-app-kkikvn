@@ -226,6 +226,22 @@ export default function HomeScreen() {
     router.push('/ai-chat');
   };
 
+  const handleConferences = () => {
+    console.log('User tapped Video Conferences button');
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    router.push('/conferences');
+  };
+
+  const handleAdminLogin = () => {
+    console.log('User tapped Admin Login button');
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }
+    router.push('/admin/login');
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -545,6 +561,69 @@ export default function HomeScreen() {
                 <Text style={styles.actionSubtitle}>Discutez</Text>
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* Vidéoconférences */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol 
+                ios_icon_name="video.fill" 
+                android_material_icon_name="videocam" 
+                size={24} 
+                color={colors.primary} 
+              />
+              <Text style={styles.sectionTitle}>Vidéoconférences</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.conferenceCard} 
+              onPress={handleConferences}
+              activeOpacity={0.8}
+            >
+              <View style={styles.conferenceContent}>
+                <IconSymbol 
+                  ios_icon_name="video.circle.fill" 
+                  android_material_icon_name="videocam" 
+                  size={48} 
+                  color={colors.background} 
+                />
+                <Text style={styles.conferenceTitle}>Rejoignez nos réunions en ligne</Text>
+                <Text style={styles.conferenceText}>
+                  Participez aux événements et réunions du parti en vidéoconférence
+                </Text>
+                <View style={styles.conferenceButton}>
+                  <Text style={styles.conferenceButtonText}>Voir les conférences</Text>
+                  <IconSymbol 
+                    ios_icon_name="arrow.right" 
+                    android_material_icon_name="arrow-forward" 
+                    size={20} 
+                    color={colors.background} 
+                  />
+                </View>
+              </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Espace Administrateur */}
+          <View style={styles.section}>
+            <TouchableOpacity 
+              style={styles.adminCard} 
+              onPress={handleAdminLogin}
+              activeOpacity={0.8}
+            >
+              <IconSymbol 
+                ios_icon_name="lock.shield.fill" 
+                android_material_icon_name="admin-panel-settings" 
+                size={32} 
+                color={colors.textSecondary} 
+              />
+              <Text style={styles.adminText}>Espace Administrateur</Text>
+              <IconSymbol 
+                ios_icon_name="chevron.right" 
+                android_material_icon_name="chevron-right" 
+                size={20} 
+                color={colors.textSecondary} 
+              />
+            </TouchableOpacity>
           </View>
 
           {/* Direction du parti */}
@@ -1110,5 +1189,65 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginTop: 2,
+  },
+  conferenceCard: {
+    backgroundColor: colors.secondary,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  conferenceContent: {
+    alignItems: 'center',
+  },
+  conferenceTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 12,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  conferenceText: {
+    fontSize: 15,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  conferenceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    width: '100%',
+  },
+  conferenceButtonText: {
+    fontSize: 15,
+    color: colors.background,
+    fontWeight: '600',
+  },
+  adminCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  adminText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginLeft: 12,
   },
 });
