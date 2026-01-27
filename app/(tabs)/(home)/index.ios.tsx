@@ -240,7 +240,7 @@ export default function HomeScreen() {
           {/* Header avec logo */}
           <View style={styles.header}>
             <Image 
-              source={resolveImageSource('https://prod-finalquest-user-projects-storage-bucket-aws.s3.amazonaws.com/user-projects/74f29b97-c31f-462c-8ec5-6f7655e33c4b/assets/images/2889d5a4-a959-4c51-8000-e693ffffc1fd.jpeg?AWSAccessKeyId=AKIAVRUVRKQJC5DISQ4Q&Signature=u9g3MpsH%2BQuiumXms90t3jriaWA%3D&Expires=1769359070')}
+              source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -649,11 +649,10 @@ function LeaderCard({ name, position, location, phone }: {
   return (
     <View style={styles.leaderCard}>
       <View style={styles.leaderIcon}>
-        <IconSymbol 
-          ios_icon_name="person.circle.fill" 
-          android_material_icon_name="account-circle" 
-          size={40} 
-          color={colors.primary} 
+        <Image 
+          source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
+          style={styles.leaderAvatar}
+          resizeMode="cover"
         />
       </View>
       <View style={styles.leaderInfo}>
@@ -941,6 +940,13 @@ const styles = StyleSheet.create({
   },
   leaderIcon: {
     marginRight: 12,
+  },
+  leaderAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: colors.primary,
   },
   leaderInfo: {
     flex: 1,
