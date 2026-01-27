@@ -66,11 +66,11 @@ export default function AIChatScreen() {
     setIsLoading(true);
 
     try {
-      const { apiCall } = await import('@/utils/api');
+      const { BACKEND_URL } = await import('@/utils/api');
       
       console.log('Calling AI endpoint with message:', messageText);
       
-      const response = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3000'}/api/ai/chat`, {
+      const response = await fetch(`${BACKEND_URL}/api/ai/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
