@@ -8,6 +8,13 @@
       "when": 1769272975629,
       "tag": "20260124164255_smart_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1769539780358,
+      "tag": "20260127184940_pale_meltdown",
+      "breakpoints": true
     }
   ]
 }

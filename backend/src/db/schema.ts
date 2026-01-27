@@ -30,6 +30,7 @@ export const leadership = pgTable('leadership', {
   address: text('address'),
   location: text('location'),
   order: integer('order').notNull().default(0),
+  createdBy: text('created_by'),
 });
 
 // Donations table - Party donations
@@ -52,6 +53,7 @@ export const events = pgTable('events', {
   date: timestamp('date').notNull(),
   location: text('location').notNull(),
   imageUrl: text('image_url'),
+  createdBy: text('created_by'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -62,6 +64,7 @@ export const news = pgTable('news', {
   content: text('content').notNull(),
   imageUrl: text('image_url'),
   videoUrl: text('video_url'),
+  createdBy: text('created_by'),
   publishedAt: timestamp('published_at').notNull().defaultNow(),
 });
 
@@ -91,6 +94,7 @@ export const politicalProgram = pgTable('political_program', {
   title: text('title').notNull(),
   description: text('description').notNull(),
   order: integer('order').default(0),
+  createdBy: text('created_by'),
 });
 
 // Regions table - Mali regions with cercles and communes
@@ -108,4 +112,16 @@ export const media = pgTable('media', {
   mimeType: text('mime_type').notNull(),
   size: integer('size').notNull(),
   uploadedAt: timestamp('uploaded_at').notNull().defaultNow(),
+});
+
+// Video conferences table - Virtual meetings and conferences
+export const videoConferences = pgTable('video_conferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description'),
+  scheduledAt: timestamp('scheduled_at').notNull(),
+  meetingUrl: text('meeting_url').notNull(),
+  status: text('status').notNull().default('scheduled'), // scheduled, active, completed, cancelled
+  createdBy: text('created_by').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });

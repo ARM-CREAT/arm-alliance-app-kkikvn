@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
+import { verifyAdminAuth } from '../utils/adminAuth.js';
 
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
@@ -121,6 +122,92 @@ export function register(app: App, fastify: FastifyInstance) {
         return result;
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch media');
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/admin/media/upload - Upload media file (admin only)
+  fastify.post(
+    '/api/admin/media/upload',
+    {
+      schema: {
+        description: 'Upload a media file (admin only)',
+        tags: ['admin', 'media'],
+        consumes: ['multipart/form-data'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              url: { type: 'string' },
+              filename: { type: 'string' },
+              type: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const admin = await verifyAdminAuth(request, reply, app);
+      if (!admin) return;
+
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send({ error: 'No file provided' });
+      }
+
+      app.logger.info(
+        { filename: data.filename, adminId: admin.userId },
+        'Admin processing file upload'
+      );
+
+      let buffer: Buffer;
+      try {
+        buffer = await data.toBuffer();
+      } catch (err) {
+        app.logger.error(
+          { err, filename: data.filename, adminId: admin.userId },
+          'File size limit exceeded'
+        );
+        return reply.status(413).send({ error: 'File too large' });
+      }
+
+      try {
+        // Generate storage key
+        const timestamp = Date.now();
+        const key = `media/${timestamp}-${data.filename}`;
+
+        // Upload to storage
+        const uploadedKey = await app.storage.upload(key, buffer);
+
+        // Generate signed URL
+        const { url } = await app.storage.getSignedUrl(uploadedKey);
+
+        // Store metadata in database
+        await app.db
+          .insert(schema.media)
+          .values({
+            key: uploadedKey,
+            fileName: data.filename,
+            mimeType: data.mimetype,
+            size: buffer.length,
+          });
+
+        app.logger.info(
+          { filename: data.filename, adminId: admin.userId },
+          'File uploaded successfully by admin'
+        );
+
+        return {
+          url,
+          filename: data.filename,
+          type: data.mimetype,
+        };
+      } catch (error) {
+        app.logger.error(
+          { err: error, filename: data.filename, adminId: admin.userId },
+          'Failed to upload file'
+        );
         throw error;
       }
     }
