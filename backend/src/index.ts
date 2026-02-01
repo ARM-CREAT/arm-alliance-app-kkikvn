@@ -17,6 +17,12 @@ import * as analyticsRoutes from './routes/analytics.js';
 import * as adminRoutes from './routes/admin.js';
 import * as conferenceRoutes from './routes/conferences.js';
 import * as adminAnalyticsRoutes from './routes/adminAnalytics.js';
+import * as memberManagementRoutes from './routes/memberManagement.js';
+import * as geographyRoutes from './routes/geography.js';
+import * as electionsRoutes from './routes/elections.js';
+import * as internalMessagingRoutes from './routes/internalMessaging.js';
+import * as adminMembersRoutes from './routes/adminMembers.js';
+import * as initGeographyRoutes from './routes/initGeography.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -51,6 +57,12 @@ analyticsRoutes.register(app, app.fastify);
 adminRoutes.register(app, app.fastify);
 conferenceRoutes.register(app, app.fastify);
 adminAnalyticsRoutes.register(app, app.fastify);
+memberManagementRoutes.register(app, app.fastify);
+geographyRoutes.register(app, app.fastify);
+electionsRoutes.register(app, app.fastify);
+internalMessagingRoutes.register(app, app.fastify);
+adminMembersRoutes.register(app, app.fastify);
+initGeographyRoutes.register(app, app.fastify);
 
 await app.run();
 app.logger.info('A.R.M Political Party Platform running');

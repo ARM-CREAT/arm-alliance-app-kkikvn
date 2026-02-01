@@ -14,38 +14,6 @@ interface RegionBody {
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
-  // GET /api/regions - Get all regions with cercles and communes
-  fastify.get(
-    '/api/regions',
-    {
-      schema: {
-        description: 'Get all regions with cercles and communes',
-        tags: ['regions'],
-        response: {
-          200: { type: 'array' },
-        },
-      },
-    },
-    async (request, reply) => {
-      app.logger.info('Fetching regions');
-
-      try {
-        const result = await app.db
-          .select()
-          .from(schema.regions);
-
-        app.logger.info(
-          { count: result.length },
-          'Regions fetched successfully'
-        );
-        return result;
-      } catch (error) {
-        app.logger.error({ err: error }, 'Failed to fetch regions');
-        throw error;
-      }
-    }
-  );
-
   // POST /api/regions - Create region (admin)
   fastify.post<{ Body: RegionBody }>(
     '/api/regions',

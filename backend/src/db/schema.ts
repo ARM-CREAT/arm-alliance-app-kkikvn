@@ -125,3 +125,94 @@ export const videoConferences = pgTable('video_conferences', {
   createdBy: text('created_by').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// Member Management - Comprehensive member table
+export const memberProfiles = pgTable('member_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id'), // Foreign key to users table (for authenticated members)
+  fullName: text('full_name').notNull(),
+  nina: text('nina'), // National ID number
+  commune: text('commune').notNull(),
+  profession: text('profession').notNull(),
+  phone: text('phone').notNull(),
+  email: text('email'),
+  membershipNumber: text('membership_number').notNull().unique(), // ARM-YYYY-XXXXX
+  qrCode: text('qr_code').notNull().unique(), // QR code data
+  status: text('status').notNull().default('pending'), // pending, active, suspended
+  role: text('role').notNull().default('militant'), // militant, collecteur, superviseur, administrateur
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Cotisations (Membership Fees)
+export const cotisations = pgTable('cotisations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => memberProfiles.id, { onDelete: 'cascade' }),
+  amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
+  type: text('type').notNull(), // monthly, annual, one-time
+  paymentMethod: text('payment_method').notNull(), // sama_money, orange_money, moov_money, bank_transfer
+  transactionId: text('transaction_id'),
+  status: text('status').notNull().default('pending'), // pending, completed, failed
+  paidAt: timestamp('paid_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Geographic Structure - Regions
+export const regionsTable = pgTable('regions_table', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  code: text('code').notNull().unique(),
+  memberCount: integer('member_count').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Geographic Structure - Cercles
+export const cercles = pgTable('cercles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  regionId: uuid('region_id').notNull().references(() => regionsTable.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  code: text('code').notNull().unique(),
+  memberCount: integer('member_count').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Geographic Structure - Communes
+export const communes = pgTable('communes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  cercleId: uuid('cercle_id').notNull().references(() => cercles.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  code: text('code').notNull().unique(),
+  memberCount: integer('member_count').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Internal Messaging
+export const internalMessages = pgTable('internal_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  senderId: text('sender_id').notNull(),
+  targetRole: text('target_role'), // if null, send to all
+  targetRegion: text('target_region'),
+  targetCercle: text('target_cercle'),
+  targetCommune: text('target_commune'),
+  sentAt: timestamp('sent_at').notNull().defaultNow(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Election Results - Module Sentinelle
+export const electionResults = pgTable('election_results', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: uuid('member_id').notNull().references(() => memberProfiles.id, { onDelete: 'cascade' }),
+  electionType: text('election_type').notNull(),
+  region: text('region').notNull(),
+  cercle: text('cercle').notNull(),
+  commune: text('commune').notNull(),
+  bureauVote: text('bureau_vote').notNull(),
+  resultsData: jsonb('results_data').notNull(),
+  pvPhotoUrl: text('pv_photo_url'),
+  submittedAt: timestamp('submitted_at').notNull().defaultNow(),
+  verifiedBy: text('verified_by'),
+  verifiedAt: timestamp('verified_at'),
+  status: text('status').notNull().default('pending'), // pending, verified, rejected
+});

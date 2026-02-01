@@ -15,6 +15,13 @@
       "when": 1769539780358,
       "tag": "20260127184940_pale_meltdown",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769968357412,
+      "tag": "20260201175237_free_ezekiel_stane",
+      "breakpoints": true
     }
   ]
 }
