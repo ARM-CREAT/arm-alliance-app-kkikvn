@@ -7,12 +7,14 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Alert,
   Platform
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
+import { Modal } from "@/components/ui/Modal";
+
+type ContributionType = 'monthly' | 'annual';
 
 export default function DonationScreen() {
   const router = useRouter();
@@ -20,8 +22,20 @@ export default function DonationScreen() {
   const [donorEmail, setDonorEmail] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [contributionType, setContributionType] = useState<ContributionType>('monthly');
   const [paymentMethod, setPaymentMethod] = useState<'visa' | 'mastercard' | 'bank_transfer'>('visa');
   const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+
+  const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info') => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType(type);
+    setModalVisible(true);
+  };
 
   const handleQuickAmount = (value: number) => {
     console.log('User selected quick amount:', value);
@@ -30,21 +44,21 @@ export default function DonationScreen() {
   };
 
   const handleSubmit = async () => {
-    console.log('User tapped Make Donation button');
+    console.log('User tapped Make Contribution button');
     
     if (!donorName || !donorEmail || !amount) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      showModal('Erreur', 'Veuillez remplir tous les champs', 'error');
       return;
     }
 
     const donationAmount = parseFloat(amount);
     if (isNaN(donationAmount) || donationAmount <= 0) {
-      Alert.alert('Erreur', 'Veuillez entrer un montant valide');
+      showModal('Erreur', 'Veuillez entrer un montant valide', 'error');
       return;
     }
 
     setLoading(true);
-    console.log('Processing donation:', { donorName, donorEmail, amount: donationAmount, paymentMethod });
+    console.log('Processing contribution:', { donorName, donorEmail, amount: donationAmount, contributionType, paymentMethod });
 
     try {
       const { apiCall } = await import('@/utils/api');
@@ -54,6 +68,7 @@ export default function DonationScreen() {
           donorName,
           donorEmail,
           amount: donationAmount.toString(),
+          contributionType,
           paymentMethod,
           currency: 'EUR',
         }),
@@ -62,27 +77,37 @@ export default function DonationScreen() {
       setLoading(false);
 
       if (error) {
-        Alert.alert('Erreur', `Impossible de traiter votre don: ${error}`);
+        showModal('Erreur', `Impossible de traiter votre contribution: ${error}`, 'error');
         return;
       }
 
-      Alert.alert(
-        'Merci pour votre don!',
-        `Votre don de ${donationAmount}€ a été enregistré. Vous recevrez un reçu par email.`,
-        [{ text: 'OK', onPress: () => router.back() }]
+      const contributionTypeText = contributionType === 'monthly' ? 'mensuelle' : 'annuelle';
+      showModal(
+        'Merci pour votre contribution!',
+        `Votre contribution ${contributionTypeText} de ${donationAmount}€ a été enregistrée. Vous recevrez un reçu par email.`,
+        'success'
       );
+      
+      // Clear form after success
+      setTimeout(() => {
+        setModalVisible(false);
+        router.back();
+      }, 2000);
     } catch (error) {
       setLoading(false);
-      console.error('Error processing donation:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue. Veuillez réessayer.');
+      console.error('Error processing contribution:', error);
+      showModal('Erreur', 'Une erreur est survenue. Veuillez réessayer.', 'error');
     }
   };
+
+  const monthlyAmountText = selectedAmount ? `${selectedAmount}€/mois` : '';
+  const annualAmountText = selectedAmount ? `${selectedAmount * 12}€/an` : '';
 
   return (
     <>
       <Stack.Screen options={{ 
         headerShown: true,
-        title: 'Faire un don',
+        title: 'Contribution',
         headerBackTitle: 'Retour',
       }} />
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -95,31 +120,76 @@ export default function DonationScreen() {
           />
           <Text style={styles.title}>Soutenez l&apos;A.R.M</Text>
           <Text style={styles.subtitle}>
-            Votre contribution aide à construire un Mali meilleur
+            Votre contribution régulière aide à construire un Mali meilleur
           </Text>
         </View>
 
         <View style={styles.form}>
+          {/* Type de contribution */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Montant du don</Text>
-            <View style={styles.quickAmounts}>
+            <Text style={styles.sectionTitle}>Type de contribution</Text>
+            <View style={styles.contributionTypes}>
               <TouchableOpacity 
-                style={[styles.quickAmountButton, selectedAmount === 5 && styles.quickAmountButtonSelected]}
-                onPress={() => handleQuickAmount(5)}
+                style={[styles.contributionTypeButton, contributionType === 'monthly' && styles.contributionTypeButtonSelected]}
+                onPress={() => setContributionType('monthly')}
               >
-                <Text style={[styles.quickAmountText, selectedAmount === 5 && styles.quickAmountTextSelected]}>5€</Text>
+                <IconSymbol 
+                  ios_icon_name="calendar" 
+                  android_material_icon_name="event" 
+                  size={24} 
+                  color={contributionType === 'monthly' ? colors.background : colors.primary} 
+                />
+                <Text style={[styles.contributionTypeText, contributionType === 'monthly' && styles.contributionTypeTextSelected]}>
+                  Mensuelle
+                </Text>
               </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.contributionTypeButton, contributionType === 'annual' && styles.contributionTypeButtonSelected]}
+                onPress={() => setContributionType('annual')}
+              >
+                <IconSymbol 
+                  ios_icon_name="calendar.badge.clock" 
+                  android_material_icon_name="date-range" 
+                  size={24} 
+                  color={contributionType === 'annual' ? colors.background : colors.primary} 
+                />
+                <Text style={[styles.contributionTypeText, contributionType === 'annual' && styles.contributionTypeTextSelected]}>
+                  Annuelle
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Montant de la contribution</Text>
+            <View style={styles.quickAmounts}>
               <TouchableOpacity 
                 style={[styles.quickAmountButton, selectedAmount === 10 && styles.quickAmountButtonSelected]}
                 onPress={() => handleQuickAmount(10)}
               >
                 <Text style={[styles.quickAmountText, selectedAmount === 10 && styles.quickAmountTextSelected]}>10€</Text>
+                {contributionType === 'monthly' && (
+                  <Text style={[styles.quickAmountSubtext, selectedAmount === 10 && styles.quickAmountTextSelected]}>/mois</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.quickAmountButton, selectedAmount === 20 && styles.quickAmountButtonSelected]}
                 onPress={() => handleQuickAmount(20)}
               >
                 <Text style={[styles.quickAmountText, selectedAmount === 20 && styles.quickAmountTextSelected]}>20€</Text>
+                {contributionType === 'monthly' && (
+                  <Text style={[styles.quickAmountSubtext, selectedAmount === 20 && styles.quickAmountTextSelected]}>/mois</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.quickAmountButton, selectedAmount === 50 && styles.quickAmountButtonSelected]}
+                onPress={() => handleQuickAmount(50)}
+              >
+                <Text style={[styles.quickAmountText, selectedAmount === 50 && styles.quickAmountTextSelected]}>50€</Text>
+                {contributionType === 'monthly' && (
+                  <Text style={[styles.quickAmountSubtext, selectedAmount === 50 && styles.quickAmountTextSelected]}>/mois</Text>
+                )}
               </TouchableOpacity>
             </View>
             
@@ -135,6 +205,17 @@ export default function DonationScreen() {
               placeholderTextColor={colors.textSecondary}
               keyboardType="numeric"
             />
+            
+            {amount && parseFloat(amount) > 0 && (
+              <View style={styles.amountSummary}>
+                <Text style={styles.amountSummaryText}>
+                  {contributionType === 'monthly' 
+                    ? `Contribution mensuelle: ${parseFloat(amount)}€/mois`
+                    : `Contribution annuelle: ${parseFloat(amount)}€/an`
+                  }
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.section}>
@@ -214,7 +295,7 @@ export default function DonationScreen() {
             disabled={loading}
           >
             <Text style={styles.submitButtonText}>
-              {loading ? 'Traitement...' : 'Faire le don'}
+              {loading ? 'Traitement...' : 'Confirmer la contribution'}
             </Text>
           </TouchableOpacity>
 
@@ -226,13 +307,21 @@ export default function DonationScreen() {
               color={colors.primary} 
             />
             <Text style={styles.infoText}>
-              Paiement sécurisé. Vous recevrez un reçu par email.
+              Paiement sécurisé. Vous recevrez un reçu par email et pourrez annuler à tout moment.
             </Text>
           </View>
         </View>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <Modal
+        isVisible={modalVisible}
+        title={modalTitle}
+        message={modalMessage}
+        type={modalType}
+        onClose={() => setModalVisible(false)}
+      />
     </>
   );
 }
@@ -274,6 +363,34 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 12,
   },
+  contributionTypes: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  contributionTypeButton: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    paddingVertical: 20,
+    borderRadius: 12,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  contributionTypeButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  contributionTypeText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 8,
+  },
+  contributionTypeTextSelected: {
+    color: colors.background,
+  },
   quickAmounts: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -298,8 +415,25 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
   },
+  quickAmountSubtext: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   quickAmountTextSelected: {
     color: colors.background,
+  },
+  amountSummary: {
+    backgroundColor: colors.secondary,
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  amountSummaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
   },
   inputGroup: {
     marginBottom: 16,

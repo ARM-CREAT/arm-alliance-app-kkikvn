@@ -93,7 +93,7 @@ export default function HomeScreen() {
     if (Platform.OS === 'ios') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-  }, []);
+  }, [loadAllData]);
 
   const loadNews = async () => {
     console.log('Loading news articles');
@@ -195,14 +195,6 @@ export default function HomeScreen() {
     router.push('/ideology');
   };
 
-  const handleRegions = () => {
-    console.log('User tapped Regions button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push('/regions');
-  };
-
   const handleAIChat = () => {
     console.log('User tapped AI Assistant button');
     if (Platform.OS === 'ios') {
@@ -224,14 +216,6 @@ export default function HomeScreen() {
     ]).start();
 
     router.push('/ai-chat');
-  };
-
-  const handleConferences = () => {
-    console.log('User tapped Video Conferences button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push('/conferences');
   };
 
   const handleAdminLogin = () => {
@@ -343,54 +327,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Présence nationale */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="map.fill" 
-                android_material_icon_name="place" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.sectionTitle}>Présence Nationale</Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.regionsCard} 
-              onPress={handleRegions}
-              activeOpacity={0.8}
-            >
-              <View style={styles.regionsContent}>
-                <View style={styles.regionsStats}>
-                  <View style={styles.regionsStat}>
-                    <Text style={styles.regionsStatNumber}>9</Text>
-                    <Text style={styles.regionsStatLabel}>Régions</Text>
-                  </View>
-                  <View style={styles.regionsStat}>
-                    <Text style={styles.regionsStatNumber}>49</Text>
-                    <Text style={styles.regionsStatLabel}>Cercles</Text>
-                  </View>
-                  <View style={styles.regionsStat}>
-                    <Text style={styles.regionsStatNumber}>726</Text>
-                    <Text style={styles.regionsStatLabel}>Communes</Text>
-                  </View>
-                </View>
-                <Text style={styles.regionsText}>
-                  L&apos;A.R.M est présent dans toutes les régions du Mali
-                </Text>
-                <View style={styles.regionsButton}>
-                  <Text style={styles.regionsButtonText}>Voir toutes les régions</Text>
-                  <IconSymbol 
-                    ios_icon_name="arrow.right" 
-                    android_material_icon_name="arrow-forward" 
-                    size={20} 
-                    color={colors.background} 
-                  />
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Dons */}
+          {/* Contributions */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
@@ -402,36 +339,39 @@ export default function HomeScreen() {
               <Text style={styles.sectionTitle}>Soutenez-nous</Text>
             </View>
             <View style={styles.card}>
-              <Text style={styles.donationText}>Votre contribution aide à construire un Mali meilleur</Text>
-              <View style={styles.donationButtons}>
-                <TouchableOpacity 
-                  style={styles.donationButton}
-                  onPress={() => handleDonation(5)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.donationAmount}>5€</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.donationButton}
-                  onPress={() => handleDonation(10)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.donationAmount}>10€</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.donationButton}
-                  onPress={() => handleDonation(20)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.donationAmount}>20€</Text>
-                </TouchableOpacity>
+              <Text style={styles.donationText}>Votre contribution régulière aide à construire un Mali meilleur</Text>
+              <View style={styles.contributionInfo}>
+                <View style={styles.contributionOption}>
+                  <IconSymbol 
+                    ios_icon_name="calendar" 
+                    android_material_icon_name="event" 
+                    size={20} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.contributionOptionText}>Contribution mensuelle</Text>
+                </View>
+                <View style={styles.contributionOption}>
+                  <IconSymbol 
+                    ios_icon_name="calendar.badge.clock" 
+                    android_material_icon_name="date-range" 
+                    size={20} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.contributionOptionText}>Contribution annuelle</Text>
+                </View>
               </View>
               <TouchableOpacity 
-                style={styles.customDonationButton}
+                style={styles.contributionButton}
                 onPress={() => handleDonation(0)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.customDonationText}>Montant personnalisé</Text>
+                <Text style={styles.contributionButtonText}>Faire une contribution</Text>
+                <IconSymbol 
+                  ios_icon_name="arrow.right" 
+                  android_material_icon_name="arrow-forward" 
+                  size={20} 
+                  color={colors.background} 
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -563,69 +503,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Vidéoconférences */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="video.fill" 
-                android_material_icon_name="videocam" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.sectionTitle}>Vidéoconférences</Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.conferenceCard} 
-              onPress={handleConferences}
-              activeOpacity={0.8}
-            >
-              <View style={styles.conferenceContent}>
-                <IconSymbol 
-                  ios_icon_name="video.circle.fill" 
-                  android_material_icon_name="videocam" 
-                  size={48} 
-                  color={colors.background} 
-                />
-                <Text style={styles.conferenceTitle}>Rejoignez nos réunions en ligne</Text>
-                <Text style={styles.conferenceText}>
-                  Participez aux événements et réunions du parti en vidéoconférence
-                </Text>
-                <View style={styles.conferenceButton}>
-                  <Text style={styles.conferenceButtonText}>Voir les conférences</Text>
-                  <IconSymbol 
-                    ios_icon_name="arrow.right" 
-                    android_material_icon_name="arrow-forward" 
-                    size={20} 
-                    color={colors.background} 
-                  />
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Espace Administrateur */}
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.adminCard} 
-              onPress={handleAdminLogin}
-              activeOpacity={0.8}
-            >
-              <IconSymbol 
-                ios_icon_name="lock.shield.fill" 
-                android_material_icon_name="admin-panel-settings" 
-                size={32} 
-                color={colors.textSecondary} 
-              />
-              <Text style={styles.adminText}>Espace Administrateur</Text>
-              <IconSymbol 
-                ios_icon_name="chevron.right" 
-                android_material_icon_name="chevron-right" 
-                size={20} 
-                color={colors.textSecondary} 
-              />
-            </TouchableOpacity>
-          </View>
-
           {/* Direction du parti */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -704,6 +581,29 @@ export default function HomeScreen() {
               <Text style={styles.addressText}>Sebenikoro, Bamako</Text>
               <Text style={styles.addressText}>Mali</Text>
             </View>
+          </View>
+
+          {/* Espace Administrateur */}
+          <View style={styles.section}>
+            <TouchableOpacity 
+              style={styles.adminCard} 
+              onPress={handleAdminLogin}
+              activeOpacity={0.8}
+            >
+              <IconSymbol 
+                ios_icon_name="lock.shield.fill" 
+                android_material_icon_name="admin-panel-settings" 
+                size={32} 
+                color={colors.textSecondary} 
+              />
+              <Text style={styles.adminText}>Espace Administrateur</Text>
+              <IconSymbol 
+                ios_icon_name="chevron.right" 
+                android_material_icon_name="chevron-right" 
+                size={20} 
+                color={colors.textSecondary} 
+              />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.bottomSpacer} />
@@ -888,57 +788,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  regionsCard: {
-    backgroundColor: colors.accent,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  regionsContent: {
-    flex: 1,
-  },
-  regionsStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
-  },
-  regionsStat: {
-    alignItems: 'center',
-  },
-  regionsStatNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.background,
-  },
-  regionsStatLabel: {
-    fontSize: 12,
-    color: colors.background,
-    marginTop: 4,
-  },
-  regionsText: {
-    fontSize: 15,
-    color: colors.background,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  regionsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.background,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-  },
-  regionsButtonText: {
-    fontSize: 15,
-    color: colors.accent,
-    fontWeight: '600',
-  },
   programText: {
     fontSize: 15,
     color: colors.text,
@@ -962,39 +811,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
-  donationButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+  contributionInfo: {
+    marginBottom: 16,
   },
-  donationButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginHorizontal: 4,
+  contributionOption: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: colors.primary,
+    paddingVertical: 8,
+  },
+  contributionOptionText: {
+    fontSize: 15,
+    color: colors.text,
+    marginLeft: 12,
+  },
+  contributionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.accent,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
   },
-  donationAmount: {
-    fontSize: 20,
+  contributionButtonText: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: colors.background,
-  },
-  customDonationButton: {
-    backgroundColor: colors.secondary,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  customDonationText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
   },
   quickActions: {
     flexDirection: 'row',
@@ -1189,49 +1036,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginTop: 2,
-  },
-  conferenceCard: {
-    backgroundColor: colors.secondary,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  conferenceContent: {
-    alignItems: 'center',
-  },
-  conferenceTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  conferenceText: {
-    fontSize: 15,
-    color: colors.text,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  conferenceButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    width: '100%',
-  },
-  conferenceButtonText: {
-    fontSize: 15,
-    color: colors.background,
-    fontWeight: '600',
   },
   adminCard: {
     flexDirection: 'row',
