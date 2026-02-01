@@ -14,6 +14,7 @@ import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
+import { authenticatedPost } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 
 type PaymentMethod = 'sama_money' | 'orange_money' | 'moov_money';
@@ -36,13 +37,14 @@ export default function CotisationScreen() {
   };
 
   const showModal = (title: string, message: string) => {
+    console.log('[Cotisation] Showing modal:', title, message);
     setModalTitle(title);
     setModalMessage(message);
     setModalVisible(true);
   };
 
   const handlePayment = async () => {
-    console.log('User tapped Pay button');
+    console.log('[Cotisation] User tapped Pay button');
     
     const amountValue = selectedType === 'one-time' 
       ? parseInt(customAmount) 
@@ -53,6 +55,11 @@ export default function CotisationScreen() {
       return;
     }
 
+    if (isNaN(amountValue) || amountValue <= 0) {
+      showModal('Erreur', 'Veuillez entrer un montant valide');
+      return;
+    }
+
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -60,8 +67,6 @@ export default function CotisationScreen() {
     setLoading(true);
 
     try {
-      const { authenticatedPost } = await import('@/utils/api');
-      
       console.log('[Cotisation] Initiating payment:', {
         amount: amountValue,
         type: selectedType,
@@ -81,6 +86,8 @@ export default function CotisationScreen() {
       if (response.paymentInstructions) {
         if (typeof response.paymentInstructions === 'string') {
           instructions = response.paymentInstructions;
+        } else if (response.paymentInstructions.instructions) {
+          instructions = response.paymentInstructions.instructions;
         } else {
           instructions = `ID de cotisation: ${response.cotisationId}\n\n${getPaymentInstructions(selectedPaymentMethod, amountValue)}`;
         }
@@ -90,9 +97,17 @@ export default function CotisationScreen() {
       
       showModal('Instructions de Paiement', instructions);
       
+      // Clear custom amount after successful initiation
+      if (selectedType === 'one-time') {
+        setTimeout(() => {
+          setCustomAmount('');
+        }, 2000);
+      }
+      
     } catch (error: any) {
       console.error('[Cotisation] Payment initiation error:', error);
-      showModal('Erreur', error?.message || 'Une erreur est survenue. Veuillez réessayer.');
+      const errorMessage = error?.message || 'Une erreur est survenue. Veuillez réessayer.';
+      showModal('Erreur', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -505,6 +520,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+    minHeight: 52,
   },
   payButtonDisabled: {
     opacity: 0.6,

@@ -7,14 +7,16 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Platform
+  Platform,
+  ActivityIndicator
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
 import { Modal } from "@/components/ui/Modal";
+import { apiPost } from "@/utils/api";
 
-type ContributionType = 'monthly' | 'annual';
+type ContributionType = 'one-time' | 'monthly' | 'annual';
 
 export default function DonationScreen() {
   const router = useRouter();
@@ -31,6 +33,7 @@ export default function DonationScreen() {
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
 
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info') => {
+    console.log('[Donation] Showing modal:', title, message);
     setModalTitle(title);
     setModalMessage(message);
     setModalType(type);
@@ -38,70 +41,90 @@ export default function DonationScreen() {
   };
 
   const handleQuickAmount = (value: number) => {
-    console.log('User selected quick amount:', value);
+    console.log('[Donation] User selected quick amount:', value);
     setSelectedAmount(value);
     setAmount(value.toString());
   };
 
   const handleSubmit = async () => {
-    console.log('User tapped Make Contribution button');
+    console.log('[Donation] User tapped Make Contribution button');
     
-    if (!donorName || !donorEmail || !amount) {
-      showModal('Erreur', 'Veuillez remplir tous les champs', 'error');
+    if (!donorName.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre nom complet', 'error');
+      return;
+    }
+
+    if (!donorEmail.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre adresse email', 'error');
+      return;
+    }
+
+    if (!amount.trim()) {
+      showModal('Erreur', 'Veuillez entrer un montant', 'error');
       return;
     }
 
     const donationAmount = parseFloat(amount);
     if (isNaN(donationAmount) || donationAmount <= 0) {
-      showModal('Erreur', 'Veuillez entrer un montant valide', 'error');
+      showModal('Erreur', 'Veuillez entrer un montant valide supérieur à 0', 'error');
       return;
     }
 
     setLoading(true);
-    console.log('Processing contribution:', { donorName, donorEmail, amount: donationAmount, contributionType, paymentMethod });
+    console.log('[Donation] Processing contribution:', { 
+      donorName, 
+      donorEmail, 
+      amount: donationAmount, 
+      contributionType, 
+      paymentMethod 
+    });
 
     try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall('/api/donations', {
-        method: 'POST',
-        body: JSON.stringify({
-          donorName,
-          donorEmail,
-          amount: donationAmount.toString(),
-          contributionType,
-          paymentMethod,
-          currency: 'EUR',
-        }),
+      const data = await apiPost('/api/donations', {
+        donorName: donorName.trim(),
+        donorEmail: donorEmail.trim(),
+        amount: donationAmount.toString(),
+        contributionType,
+        paymentMethod,
+        currency: 'EUR',
       });
 
+      console.log('[Donation] Contribution successful:', data);
       setLoading(false);
 
-      if (error) {
-        showModal('Erreur', `Impossible de traiter votre contribution: ${error}`, 'error');
-        return;
-      }
-
-      const contributionTypeText = contributionType === 'monthly' ? 'mensuelle' : 'annuelle';
+      const contributionTypeText = contributionType === 'monthly' 
+        ? 'mensuelle' 
+        : contributionType === 'annual' 
+        ? 'annuelle' 
+        : 'ponctuelle';
+      
       showModal(
         'Merci pour votre contribution!',
-        `Votre contribution ${contributionTypeText} de ${donationAmount}€ a été enregistrée. Vous recevrez un reçu par email.`,
+        `Votre contribution ${contributionTypeText} de ${donationAmount}€ a été enregistrée avec succès. Vous recevrez un reçu par email à ${donorEmail}.`,
         'success'
       );
       
-      // Clear form after success
+      // Clear form after success and navigate back after delay
       setTimeout(() => {
+        setDonorName('');
+        setDonorEmail('');
+        setAmount('');
+        setSelectedAmount(null);
         setModalVisible(false);
         router.back();
-      }, 2000);
-    } catch (error) {
+      }, 3000);
+    } catch (error: any) {
       setLoading(false);
-      console.error('Error processing contribution:', error);
-      showModal('Erreur', 'Une erreur est survenue. Veuillez réessayer.', 'error');
+      console.error('[Donation] Error processing contribution:', error);
+      const errorMessage = error?.message || 'Une erreur est survenue lors du traitement de votre contribution.';
+      showModal('Erreur', errorMessage, 'error');
     }
   };
 
-  const monthlyAmountText = selectedAmount ? `${selectedAmount}€/mois` : '';
-  const annualAmountText = selectedAmount ? `${selectedAmount * 12}€/an` : '';
+  const amountValue = parseFloat(amount) || 0;
+  const monthlyAmountText = amountValue > 0 ? `${amountValue}€/mois` : '';
+  const annualAmountText = amountValue > 0 ? `${amountValue}€/an` : '';
+  const oneTimeAmountText = amountValue > 0 ? `${amountValue}€` : '';
 
   return (
     <>
@@ -120,7 +143,7 @@ export default function DonationScreen() {
           />
           <Text style={styles.title}>Soutenez l&apos;A.R.M</Text>
           <Text style={styles.subtitle}>
-            Votre contribution régulière aide à construire un Mali meilleur
+            Votre contribution aide à construire un Mali meilleur
           </Text>
         </View>
 
@@ -129,6 +152,21 @@ export default function DonationScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Type de contribution</Text>
             <View style={styles.contributionTypes}>
+              <TouchableOpacity 
+                style={[styles.contributionTypeButton, contributionType === 'one-time' && styles.contributionTypeButtonSelected]}
+                onPress={() => setContributionType('one-time')}
+              >
+                <IconSymbol 
+                  ios_icon_name="gift.fill" 
+                  android_material_icon_name="card-giftcard" 
+                  size={24} 
+                  color={contributionType === 'one-time' ? colors.background : colors.primary} 
+                />
+                <Text style={[styles.contributionTypeText, contributionType === 'one-time' && styles.contributionTypeTextSelected]}>
+                  Ponctuelle
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity 
                 style={[styles.contributionTypeButton, contributionType === 'monthly' && styles.contributionTypeButtonSelected]}
                 onPress={() => setContributionType('monthly')}
@@ -172,6 +210,9 @@ export default function DonationScreen() {
                 {contributionType === 'monthly' && (
                   <Text style={[styles.quickAmountSubtext, selectedAmount === 10 && styles.quickAmountTextSelected]}>/mois</Text>
                 )}
+                {contributionType === 'annual' && (
+                  <Text style={[styles.quickAmountSubtext, selectedAmount === 10 && styles.quickAmountTextSelected]}>/an</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.quickAmountButton, selectedAmount === 20 && styles.quickAmountButtonSelected]}
@@ -181,6 +222,9 @@ export default function DonationScreen() {
                 {contributionType === 'monthly' && (
                   <Text style={[styles.quickAmountSubtext, selectedAmount === 20 && styles.quickAmountTextSelected]}>/mois</Text>
                 )}
+                {contributionType === 'annual' && (
+                  <Text style={[styles.quickAmountSubtext, selectedAmount === 20 && styles.quickAmountTextSelected]}>/an</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.quickAmountButton, selectedAmount === 50 && styles.quickAmountButtonSelected]}
@@ -189,6 +233,9 @@ export default function DonationScreen() {
                 <Text style={[styles.quickAmountText, selectedAmount === 50 && styles.quickAmountTextSelected]}>50€</Text>
                 {contributionType === 'monthly' && (
                   <Text style={[styles.quickAmountSubtext, selectedAmount === 50 && styles.quickAmountTextSelected]}>/mois</Text>
+                )}
+                {contributionType === 'annual' && (
+                  <Text style={[styles.quickAmountSubtext, selectedAmount === 50 && styles.quickAmountTextSelected]}>/an</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -206,12 +253,14 @@ export default function DonationScreen() {
               keyboardType="numeric"
             />
             
-            {amount && parseFloat(amount) > 0 && (
+            {amountValue > 0 && (
               <View style={styles.amountSummary}>
                 <Text style={styles.amountSummaryText}>
                   {contributionType === 'monthly' 
-                    ? `Contribution mensuelle: ${parseFloat(amount)}€/mois`
-                    : `Contribution annuelle: ${parseFloat(amount)}€/an`
+                    ? `Contribution mensuelle: ${amountValue}€/mois`
+                    : contributionType === 'annual'
+                    ? `Contribution annuelle: ${amountValue}€/an`
+                    : `Contribution ponctuelle: ${amountValue}€`
                   }
                 </Text>
               </View>
@@ -294,9 +343,11 @@ export default function DonationScreen() {
             onPress={handleSubmit}
             disabled={loading}
           >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Traitement...' : 'Confirmer la contribution'}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color={colors.background} />
+            ) : (
+              <Text style={styles.submitButtonText}>Confirmer la contribution</Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.infoBox}>
@@ -316,7 +367,7 @@ export default function DonationScreen() {
       </ScrollView>
 
       <Modal
-        isVisible={modalVisible}
+        visible={modalVisible}
         title={modalTitle}
         message={modalMessage}
         type={modalType}
@@ -383,7 +434,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   contributionTypeText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: colors.text,
     marginTop: 8,
@@ -486,7 +537,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
+    minHeight: 52,
   },
   submitButtonDisabled: {
     opacity: 0.6,
