@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { apiCall, adminApiCall } from '@/utils/api';
 
@@ -24,11 +24,22 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadStoredToken();
+  const verifyStoredToken = useCallback(async (storedToken: string): Promise<boolean> => {
+    // TODO: Backend Integration - POST /api/admin/verify with Authorization header
+    const { data, error } = await adminApiCall<{ valid: boolean; admin: Admin }>(
+      '/api/admin/verify',
+      storedToken,
+      { method: 'POST', body: JSON.stringify({}) }
+    );
+
+    if (data && data.valid) {
+      setAdmin(data.admin);
+      return true;
+    }
+    return false;
   }, []);
 
-  const loadStoredToken = async () => {
+  const loadStoredToken = useCallback(async () => {
     try {
       console.log('[AdminContext] Loading stored token');
       const storedToken = await SecureStore.getItemAsync('admin_token');
@@ -45,22 +56,11 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [verifyStoredToken]);
 
-  const verifyStoredToken = async (storedToken: string): Promise<boolean> => {
-    // TODO: Backend Integration - POST /api/admin/verify with Authorization header
-    const { data, error } = await adminApiCall<{ valid: boolean; admin: Admin }>(
-      '/api/admin/verify',
-      storedToken,
-      { method: 'POST', body: JSON.stringify({}) }
-    );
-
-    if (data && data.valid) {
-      setAdmin(data.admin);
-      return true;
-    }
-    return false;
-  };
+  useEffect(() => {
+    loadStoredToken();
+  }, [loadStoredToken]);
 
   const login = async (
     username: string,

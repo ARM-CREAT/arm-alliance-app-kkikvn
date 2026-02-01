@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -37,17 +37,7 @@ export default function AdminDashboardScreen() {
     onConfirm: () => {},
   });
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace('/auth');
-      return;
-    }
-    if (user) {
-      loadAnalytics();
-    }
-  }, [user, authLoading]);
-
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     console.log('[AdminDashboard] Loading analytics');
     setIsLoading(true);
 
@@ -67,7 +57,17 @@ export default function AdminDashboardScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace('/auth');
+      return;
+    }
+    if (user) {
+      loadAnalytics();
+    }
+  }, [user, authLoading, router, loadAnalytics]);
 
   const handleLogout = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

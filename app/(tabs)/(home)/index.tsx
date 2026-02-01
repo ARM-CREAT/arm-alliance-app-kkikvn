@@ -62,40 +62,7 @@ export default function HomeScreen() {
   const fadeAnim = useState(new Animated.Value(0))[0];
   const fabScale = useState(new Animated.Value(1))[0];
 
-  useEffect(() => {
-    console.log('HomeScreen: Loading party data');
-    loadAllData();
-  }, []);
-
-  const loadAllData = async () => {
-    await Promise.all([
-      loadNews(),
-      loadEvents(),
-      loadLeadership()
-    ]);
-    setLoading(false);
-    
-    // Fade in animation
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const onRefresh = useCallback(async () => {
-    console.log('User pulled to refresh');
-    setRefreshing(true);
-    await loadAllData();
-    setRefreshing(false);
-    
-    // Haptic feedback on refresh complete
-    if (Platform.OS === 'ios') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }, [loadAllData]);
-
-  const loadNews = async () => {
+  const loadNews = useCallback(async () => {
     console.log('Loading news articles');
     try {
       const { apiCall } = await import('@/utils/api');
@@ -113,9 +80,9 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error loading news:', error);
     }
-  };
+  }, []);
 
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     console.log('Loading events');
     try {
       const { apiCall } = await import('@/utils/api');
@@ -133,9 +100,9 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error loading events:', error);
     }
-  };
+  }, []);
 
-  const loadLeadership = async () => {
+  const loadLeadership = useCallback(async () => {
     console.log('Loading leadership members');
     try {
       const { apiCall } = await import('@/utils/api');
@@ -153,7 +120,40 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error loading leadership:', error);
     }
-  };
+  }, []);
+
+  const loadAllData = useCallback(async () => {
+    await Promise.all([
+      loadNews(),
+      loadEvents(),
+      loadLeadership()
+    ]);
+    setLoading(false);
+    
+    // Fade in animation
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  }, [loadNews, loadEvents, loadLeadership, fadeAnim]);
+
+  useEffect(() => {
+    console.log('HomeScreen: Loading party data');
+    loadAllData();
+  }, [loadAllData]);
+
+  const onRefresh = useCallback(async () => {
+    console.log('User pulled to refresh');
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+    
+    // Haptic feedback on refresh complete
+    if (Platform.OS === 'ios') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, [loadAllData]);
 
   const handleDonation = (amount: number) => {
     console.log('User tapped donation button:', amount, 'EUR');

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -50,16 +50,6 @@ export default function ManageNewsFullScreen() {
     onConfirm: () => {},
   });
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace('/auth');
-      return;
-    }
-    if (user) {
-      loadNews();
-    }
-  }, [user, authLoading]);
-
   const showModal = (
     title: string,
     message: string,
@@ -70,7 +60,7 @@ export default function ManageNewsFullScreen() {
     setModalVisible(true);
   };
 
-  const loadNews = async () => {
+  const loadNews = useCallback(async () => {
     console.log('[ManageNews] Loading news articles');
     setIsLoading(true);
 
@@ -91,7 +81,17 @@ export default function ManageNewsFullScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace('/auth');
+      return;
+    }
+    if (user) {
+      loadNews();
+    }
+  }, [user, authLoading, router, loadNews]);
 
   const onRefresh = async () => {
     setRefreshing(true);
