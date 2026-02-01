@@ -9,6 +9,7 @@ interface DonationBody {
   amount: string;
   paymentMethod?: string;
   currency?: string;
+  contributionType?: 'one-time' | 'monthly' | 'annual';
 }
 
 export function register(app: App, fastify: FastifyInstance) {
@@ -29,6 +30,7 @@ export function register(app: App, fastify: FastifyInstance) {
             amount: { type: 'string' },
             paymentMethod: { type: 'string' },
             currency: { type: 'string' },
+            contributionType: { type: 'string', enum: ['one-time', 'monthly', 'annual'] },
           },
           required: ['donorName', 'donorEmail', 'amount'],
         },
@@ -38,7 +40,7 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { donorName, donorEmail, amount, paymentMethod, currency } =
+      const { donorName, donorEmail, amount, paymentMethod, currency, contributionType } =
         request.body;
       app.logger.info(
         { donorEmail, amount },
@@ -54,6 +56,7 @@ export function register(app: App, fastify: FastifyInstance) {
             amount: amount as any,
             paymentMethod,
             currency: currency || 'EUR',
+            contributionType: (contributionType || 'one-time') as any,
           })
           .returning();
 

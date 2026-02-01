@@ -42,6 +42,7 @@ export const donations = pgTable('donations', {
   currency: text('currency').notNull().default('EUR'),
   paymentMethod: text('payment_method'), // visa, mastercard, bank_transfer
   status: text('status').notNull().default('pending'), // pending, completed, failed
+  contributionType: text('contribution_type').default('one-time'), // one-time, monthly, annual
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
