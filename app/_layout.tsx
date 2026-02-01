@@ -109,6 +109,54 @@ export default function RootLayout() {
                 }} 
               />
               <Stack.Screen 
+                name="member/register" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="member/card" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="member/cotisation" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="member/messages" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="member/election-results" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="admin/manage-members" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="admin/send-message" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="admin/election-verification" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
                 name="conferences" 
                 options={{ 
                   headerShown: false,

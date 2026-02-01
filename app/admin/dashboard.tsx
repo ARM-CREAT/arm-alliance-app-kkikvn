@@ -42,18 +42,20 @@ export default function AdminDashboardScreen() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await authenticatedApiCall<Analytics>(
-        '/api/analytics/overview',
-        { method: 'GET' }
-      );
+      // Try the new admin statistics endpoint first, fallback to old one
+      let data;
+      try {
+        data = await authenticatedApiCall<Analytics>('/api/admin/statistics', { method: 'GET' });
+      } catch (err) {
+        console.log('[AdminDashboard] Trying fallback analytics endpoint');
+        data = await authenticatedApiCall<Analytics>('/api/analytics/overview', { method: 'GET' });
+      }
 
       if (data) {
         setAnalytics(data);
-      } else {
-        console.error('[AdminDashboard] Error loading analytics:', error);
       }
     } catch (error) {
-      console.error('[AdminDashboard] Error:', error);
+      console.error('[AdminDashboard] Error loading analytics:', error);
     } finally {
       setIsLoading(false);
     }
@@ -175,6 +177,76 @@ export default function AdminDashboardScreen() {
                 <Text style={styles.statValue}>{analytics?.totalMessages || 0}</Text>
                 <Text style={styles.statLabel}>Messages</Text>
               </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Gestion des Membres</Text>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/admin/manage-members' as any);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="person.3.fill"
+                  android_material_icon_name="group"
+                  size={24}
+                  color={colors.primary}
+                />
+                <Text style={styles.menuItemText}>Gérer les membres</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/admin/election-verification' as any);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="checkmark.seal.fill"
+                  android_material_icon_name="verified"
+                  size={24}
+                  color={colors.primary}
+                />
+                <Text style={styles.menuItemText}>Vérifier résultats électoraux</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/admin/send-message' as any);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="paperplane.fill"
+                  android_material_icon_name="send"
+                  size={24}
+                  color={colors.primary}
+                />
+                <Text style={styles.menuItemText}>Envoyer message interne</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.section}>

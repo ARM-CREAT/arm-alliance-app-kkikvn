@@ -162,7 +162,13 @@ export default function HomeScreen() {
   const handleJoinParty = () => {
     console.log('User tapped Join Party button');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/(tabs)/profile');
+    router.push('/member/register');
+  };
+
+  const handleMemberCard = () => {
+    console.log('User tapped Member Card button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/member/card');
   };
 
   const handleContact = () => {
@@ -456,6 +462,21 @@ export default function HomeScreen() {
                 />
                 <Text style={styles.actionTitle}>Adhérer</Text>
                 <Text style={styles.actionSubtitle}>Rejoignez-nous</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionCard} 
+                onPress={handleMemberCard}
+                activeOpacity={0.8}
+              >
+                <IconSymbol 
+                  ios_icon_name="person.text.rectangle" 
+                  android_material_icon_name="badge" 
+                  size={32} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.actionTitle}>Ma Carte</Text>
+                <Text style={styles.actionSubtitle}>Carte membre</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -831,14 +852,15 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
   actionCard: {
-    flex: 1,
+    width: '48%',
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 16,
-    marginHorizontal: 4,
+    marginBottom: 12,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
