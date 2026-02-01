@@ -1,0 +1,1 @@
+ALTER TABLE "donations" ADD COLUMN "contribution_type" text DEFAULT 'one-time';
