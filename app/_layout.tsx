@@ -17,6 +17,7 @@ import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 import { AdminProvider } from "@/contexts/AdminContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { LocalizationProvider } from "@/contexts/LocalizationContext";
 import { useFonts } from "expo-font";
 import { colors } from "@/styles/commonStyles";
 
@@ -65,10 +66,11 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <WidgetProvider>
-          <AdminProvider>
-            <ThemeProvider value={ARMTheme}>
+      <LocalizationProvider>
+        <AuthProvider>
+          <WidgetProvider>
+            <AdminProvider>
+              <ThemeProvider value={ARMTheme}>
             <SystemBars style="auto" />
             <Stack
               screenOptions={{
@@ -162,12 +164,19 @@ export default function RootLayout() {
                   headerShown: false,
                 }} 
               />
+              <Stack.Screen 
+                name="settings" 
+                options={{ 
+                  headerShown: false,
+                }} 
+              />
             </Stack>
-            <StatusBar style="auto" />
-          </ThemeProvider>
-        </AdminProvider>
-      </WidgetProvider>
-    </AuthProvider>
+              <StatusBar style="auto" />
+            </ThemeProvider>
+          </AdminProvider>
+        </WidgetProvider>
+      </AuthProvider>
+      </LocalizationProvider>
     </GestureHandlerRootView>
   );
 }

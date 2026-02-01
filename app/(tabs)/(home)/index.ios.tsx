@@ -216,6 +216,12 @@ export default function HomeScreen() {
     router.push('/admin/login');
   };
 
+  const handleSettings = () => {
+    console.log('User tapped Settings button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/settings');
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -477,6 +483,21 @@ export default function HomeScreen() {
                 />
                 <Text style={styles.actionTitle}>Ma Carte</Text>
                 <Text style={styles.actionSubtitle}>Carte membre</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionCard} 
+                onPress={handleSettings}
+                activeOpacity={0.8}
+              >
+                <IconSymbol 
+                  ios_icon_name="gear" 
+                  android_material_icon_name="settings" 
+                  size={32} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.actionTitle}>Paramètres</Text>
+                <Text style={styles.actionSubtitle}>Langue & Devise</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 

@@ -15,6 +15,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedPost } from '@/utils/api';
+import { useLocalization } from '@/contexts/LocalizationContext';
+import { convertCurrency, formatCurrency } from '@/utils/currency';
 import * as Haptics from 'expo-haptics';
 
 type PaymentMethod = 'sama_money' | 'orange_money' | 'moov_money';
@@ -22,6 +24,8 @@ type CotisationType = 'monthly' | 'annual' | 'one-time';
 
 export default function CotisationScreen() {
   const router = useRouter();
+  const { t, currency } = useLocalization();
+  
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -31,10 +35,20 @@ export default function CotisationScreen() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('orange_money');
   const [customAmount, setCustomAmount] = useState('');
 
-  const cotisationAmounts = {
+  // Base amounts in XOF (local currency)
+  const cotisationAmountsXOF = {
     monthly: 5000,
     annual: 50000,
   };
+
+  // Convert to selected currency
+  const cotisationAmounts = {
+    monthly: Math.round(convertCurrency(cotisationAmountsXOF.monthly, 'XOF', currency)),
+    annual: Math.round(convertCurrency(cotisationAmountsXOF.annual, 'XOF', currency)),
+  };
+
+  const minAmountXOF = 1000;
+  const minAmount = Math.round(convertCurrency(minAmountXOF, 'XOF', currency));
 
   const showModal = (title: string, message: string) => {
     console.log('[Cotisation] Showing modal:', title, message);
@@ -50,13 +64,16 @@ export default function CotisationScreen() {
       ? parseInt(customAmount) 
       : cotisationAmounts[selectedType];
 
-    if (selectedType === 'one-time' && (!customAmount || amountValue < 1000)) {
-      showModal('Erreur', 'Le montant minimum est de 1000 FCFA');
+    if (selectedType === 'one-time' && (!customAmount || amountValue < minAmount)) {
+      showModal(
+        t('error'), 
+        t('errorMinAmount', { min: formatCurrency(minAmount, currency) })
+      );
       return;
     }
 
     if (isNaN(amountValue) || amountValue <= 0) {
-      showModal('Erreur', 'Veuillez entrer un montant valide');
+      showModal(t('error'), t('errorAmountValid'));
       return;
     }
 
@@ -69,14 +86,20 @@ export default function CotisationScreen() {
     try {
       console.log('[Cotisation] Initiating payment:', {
         amount: amountValue,
+        currency,
         type: selectedType,
         paymentMethod: selectedPaymentMethod,
       });
 
+      // Convert amount to XOF for backend
+      const amountInXOF = Math.round(convertCurrency(amountValue, currency, 'XOF'));
+
       const response = await authenticatedPost('/api/cotisations/initiate', {
-        amount: amountValue,
+        amount: amountInXOF,
         type: selectedType,
         paymentMethod: selectedPaymentMethod,
+        displayCurrency: currency,
+        displayAmount: amountValue,
       });
 
       console.log('[Cotisation] Payment initiated:', response);
@@ -89,13 +112,13 @@ export default function CotisationScreen() {
         } else if (response.paymentInstructions.instructions) {
           instructions = response.paymentInstructions.instructions;
         } else {
-          instructions = `ID de cotisation: ${response.cotisationId}\n\n${getPaymentInstructions(selectedPaymentMethod, amountValue)}`;
+          instructions = `ID de cotisation: ${response.cotisationId}\n\n${getPaymentInstructions(selectedPaymentMethod, amountInXOF)}`;
         }
       } else {
-        instructions = getPaymentInstructions(selectedPaymentMethod, amountValue);
+        instructions = getPaymentInstructions(selectedPaymentMethod, amountInXOF);
       }
       
-      showModal('Instructions de Paiement', instructions);
+      showModal(t('paymentInstructions'), instructions);
       
       // Clear custom amount after successful initiation
       if (selectedType === 'one-time') {
@@ -107,7 +130,7 @@ export default function CotisationScreen() {
     } catch (error: any) {
       console.error('[Cotisation] Payment initiation error:', error);
       const errorMessage = error?.message || 'Une erreur est survenue. Veuillez réessayer.';
-      showModal('Erreur', errorMessage);
+      showModal(t('error'), errorMessage);
     } finally {
       setLoading(false);
     }
@@ -122,16 +145,20 @@ export default function CotisationScreen() {
     return instructions[method];
   };
 
-  const monthlyAmount = cotisationAmounts.monthly.toLocaleString('fr-FR');
-  const annualAmount = cotisationAmounts.annual.toLocaleString('fr-FR');
+  const monthlyAmount = formatCurrency(cotisationAmounts.monthly, currency);
+  const annualAmount = formatCurrency(cotisationAmounts.annual, currency);
+  const savingsAmount = formatCurrency(
+    (cotisationAmounts.monthly * 12) - cotisationAmounts.annual,
+    currency
+  );
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Payer ma Cotisation',
+          title: t('payCotisation'),
           headerShown: true,
-          headerBackTitle: 'Retour',
+          headerBackTitle: t('back'),
         }}
       />
 
@@ -146,15 +173,15 @@ export default function CotisationScreen() {
             size={48}
             color={colors.primary}
           />
-          <Text style={styles.headerTitle}>Cotisation Militante</Text>
+          <Text style={styles.headerTitle}>{t('militantCotisation')}</Text>
           <Text style={styles.headerSubtitle}>
-            Soutenez l&apos;action de l&apos;A.R.M
+            {t('cotisationDescription')}
           </Text>
         </View>
 
         {/* Cotisation Type Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Type de Cotisation</Text>
+          <Text style={styles.sectionTitle}>{t('contributionType')}</Text>
 
           <TouchableOpacity
             style={[
@@ -174,8 +201,8 @@ export default function CotisationScreen() {
                 />
               </View>
               <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>Mensuelle</Text>
-                <Text style={styles.optionAmount}>{monthlyAmount} FCFA / mois</Text>
+                <Text style={styles.optionTitle}>{t('monthly')}</Text>
+                <Text style={styles.optionAmount}>{monthlyAmount} / {t('monthly').toLowerCase()}</Text>
               </View>
               {selectedType === 'monthly' && (
                 <IconSymbol
@@ -206,9 +233,9 @@ export default function CotisationScreen() {
                 />
               </View>
               <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>Annuelle</Text>
-                <Text style={styles.optionAmount}>{annualAmount} FCFA / an</Text>
-                <Text style={styles.optionSavings}>Économisez 10 000 FCFA</Text>
+                <Text style={styles.optionTitle}>{t('annual')}</Text>
+                <Text style={styles.optionAmount}>{annualAmount} / {t('annual').toLowerCase()}</Text>
+                <Text style={styles.optionSavings}>Économisez {savingsAmount}</Text>
               </View>
               {selectedType === 'annual' && (
                 <IconSymbol
@@ -239,8 +266,8 @@ export default function CotisationScreen() {
                 />
               </View>
               <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>Montant Libre</Text>
-                <Text style={styles.optionDescription}>Contribution ponctuelle</Text>
+                <Text style={styles.optionTitle}>{t('freeAmount')}</Text>
+                <Text style={styles.optionDescription}>{t('oneTimeContribution')}</Text>
               </View>
               {selectedType === 'one-time' && (
                 <IconSymbol
@@ -255,7 +282,7 @@ export default function CotisationScreen() {
               <View style={styles.customAmountContainer}>
                 <TextInput
                   style={styles.customAmountInput}
-                  placeholder="Entrez le montant (min. 1000 FCFA)"
+                  placeholder={`${t('enterAmount')} (min. ${formatCurrency(minAmount, currency)})`}
                   placeholderTextColor={colors.textSecondary}
                   value={customAmount}
                   onChangeText={setCustomAmount}
@@ -268,7 +295,7 @@ export default function CotisationScreen() {
 
         {/* Payment Method Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Moyen de Paiement</Text>
+          <Text style={styles.sectionTitle}>{t('paymentMethod')}</Text>
 
           <TouchableOpacity
             style={[
@@ -347,7 +374,7 @@ export default function CotisationScreen() {
             <ActivityIndicator color={colors.background} />
           ) : (
             <>
-              <Text style={styles.payButtonText}>Procéder au Paiement</Text>
+              <Text style={styles.payButtonText}>{t('proceedPayment')}</Text>
               <IconSymbol
                 ios_icon_name="arrow.right"
                 android_material_icon_name="arrow-forward"
