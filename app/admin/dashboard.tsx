@@ -131,6 +131,26 @@ export default function AdminDashboardScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
+            onPress={() => router.push('/admin/member-registry')}
+            activeOpacity={0.7}
+          >
+            <IconSymbol
+              ios_icon_name="doc.text.fill"
+              android_material_icon_name="description"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.menuItemText}>Registre des Inscriptions</Text>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={20}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
             onPress={() => router.push('/admin/manage-news-full')}
             activeOpacity={0.7}
           >
