@@ -11,19 +11,23 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedPost } from '@/utils/api';
+import { adminPost } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
 export default function SendMessageScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -33,6 +37,37 @@ export default function SendMessageScreen() {
     targetCercle: '',
     targetCommune: '',
   });
+
+  const checkAdminAuth = useCallback(async () => {
+    console.log('[SendMessage] Checking admin authentication');
+    try {
+      const password = await AsyncStorage.getItem('admin_password');
+      const secretCode = await AsyncStorage.getItem('admin_secret_code');
+      
+      const webPassword = Platform.OS === 'web' ? localStorage.getItem('admin_password') : null;
+      const webSecretCode = Platform.OS === 'web' ? localStorage.getItem('admin_secret_code') : null;
+      
+      const hasCredentials = (password && secretCode) || (webPassword && webSecretCode);
+      
+      if (hasCredentials) {
+        console.log('[SendMessage] Admin credentials found');
+        setIsAuthenticated(true);
+        return true;
+      } else {
+        console.log('[SendMessage] No admin credentials, redirecting to login');
+        router.replace('/admin/login');
+        return false;
+      }
+    } catch (error) {
+      console.error('[SendMessage] Error checking admin auth:', error);
+      router.replace('/admin/login');
+      return false;
+    }
+  }, [router]);
+
+  useEffect(() => {
+    checkAdminAuth();
+  }, [checkAdminAuth]);
 
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
     setModalTitle(title);
@@ -63,7 +98,7 @@ export default function SendMessageScreen() {
     try {
       console.log('[SendMessage] Sending message:', formData);
       
-      await authenticatedPost('/api/admin/messages/send', {
+      await adminPost('/api/admin/messages/send', {
         title: formData.title,
         content: formData.content,
         targetRole: formData.targetRole || undefined,
@@ -103,6 +138,15 @@ export default function SendMessageScreen() {
       setLoading(false);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Chargement...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -268,6 +312,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   keyboardView: {
     flex: 1,

@@ -15,8 +15,9 @@ import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
-import { useAuth } from '@/contexts/AuthContext';
-import { authenticatedApiCall } from '@/utils/api';
+
+import { adminGet, adminPost, adminPut, adminDelete } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Modal } from '@/components/ui/Modal';
 
 interface NewsArticle {
@@ -30,7 +31,6 @@ interface NewsArticle {
 
 export default function ManageNewsFullScreen() {
   const router = useRouter();
-  const { user, authLoading } = useAuth();
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,6 +40,7 @@ export default function ManageNewsFullScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -55,17 +56,39 @@ export default function ManageNewsFullScreen() {
     setModalVisible(true);
   };
 
+  const checkAdminAuth = useCallback(async () => {
+    console.log('[ManageNews] Checking admin authentication');
+    try {
+      const password = await AsyncStorage.getItem('admin_password');
+      const secretCode = await AsyncStorage.getItem('admin_secret_code');
+      
+      const webPassword = Platform.OS === 'web' ? localStorage.getItem('admin_password') : null;
+      const webSecretCode = Platform.OS === 'web' ? localStorage.getItem('admin_secret_code') : null;
+      
+      const hasCredentials = (password && secretCode) || (webPassword && webSecretCode);
+      
+      if (hasCredentials) {
+        console.log('[ManageNews] Admin credentials found');
+        setIsAuthenticated(true);
+        return true;
+      } else {
+        console.log('[ManageNews] No admin credentials, redirecting to login');
+        router.replace('/admin/login');
+        return false;
+      }
+    } catch (error) {
+      console.error('[ManageNews] Error checking admin auth:', error);
+      router.replace('/admin/login');
+      return false;
+    }
+  }, [router]);
+
   const loadNews = useCallback(async () => {
     console.log('[ManageNews] Loading news articles');
     try {
-      const response = await authenticatedApiCall<NewsArticle[]>('/api/news', {
-        method: 'GET',
-      });
-      
-      if (response.data) {
-        setNews(response.data);
-        console.log('[ManageNews] Loaded', response.data.length, 'articles');
-      }
+      const response = await adminGet<NewsArticle[]>('/api/news');
+      setNews(response || []);
+      console.log('[ManageNews] Loaded', response?.length || 0, 'articles');
     } catch (error) {
       console.error('[ManageNews] Error loading news:', error);
     } finally {
@@ -75,17 +98,15 @@ export default function ManageNewsFullScreen() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        console.log('[ManageNews] No user, redirecting to admin login');
-        router.replace('/admin/login');
-        return;
+    const initScreen = async () => {
+      const authenticated = await checkAdminAuth();
+      if (authenticated) {
+        loadNews();
       }
-      
-      console.log('[ManageNews] User authenticated, loading news');
-      loadNews();
-    }
-  }, [user, authLoading, router, loadNews]);
+    };
+    
+    initScreen();
+  }, [checkAdminAuth, loadNews]);
 
   const onRefresh = useCallback(() => {
     console.log('[ManageNews] Refreshing news');
@@ -133,24 +154,25 @@ export default function ManageNewsFullScreen() {
     setLoading(true);
 
     try {
-      const endpoint = currentArticle ? `/api/news/${currentArticle.id}` : '/api/news';
-      const method = currentArticle ? 'PUT' : 'POST';
-
-      const response = await authenticatedApiCall<NewsArticle>(endpoint, {
-        method,
-        body: JSON.stringify({
+      if (currentArticle) {
+        await adminPut(`/api/admin/news/${currentArticle.id}`, {
           title: formData.title,
           content: formData.content,
           imageUrl: formData.imageUrl || undefined,
           videoUrl: formData.videoUrl || undefined,
-        }),
-      });
-
-      if (response.data) {
-        showModal('Succès', 'Article enregistré avec succès', 'success');
-        setEditing(false);
-        loadNews();
+        });
+      } else {
+        await adminPost('/api/admin/news', {
+          title: formData.title,
+          content: formData.content,
+          imageUrl: formData.imageUrl || undefined,
+          videoUrl: formData.videoUrl || undefined,
+        });
       }
+
+      showModal('Succès', 'Article enregistré avec succès', 'success');
+      setEditing(false);
+      loadNews();
     } catch (error: any) {
       console.error('[ManageNews] Error saving article:', error);
       showModal('Erreur', error?.message || 'Erreur lors de l\'enregistrement', 'error');
@@ -169,10 +191,7 @@ export default function ManageNewsFullScreen() {
     setLoading(true);
 
     try {
-      await authenticatedApiCall(`/api/news/${article.id}`, {
-        method: 'DELETE',
-      });
-
+      await adminDelete(`/api/admin/news/${article.id}`);
       showModal('Succès', 'Article supprimé avec succès', 'success');
       loadNews();
     } catch (error: any) {
@@ -193,7 +212,7 @@ export default function ManageNewsFullScreen() {
     setFormData({ title: '', content: '', imageUrl: '', videoUrl: '' });
   };
 
-  if (authLoading || (loading && !refreshing)) {
+  if (!isAuthenticated || (loading && !refreshing && !editing)) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />

@@ -15,7 +15,8 @@ import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import { adminGet, adminPut } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
 interface Member {
@@ -46,9 +47,42 @@ export default function ManageMembersScreen() {
     type: 'info' as 'info' | 'success' | 'warning' | 'error' | 'confirm',
     onConfirm: () => {},
   });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const checkAdminAuth = async () => {
+    console.log('[ManageMembers] Checking admin authentication');
+    try {
+      const password = await AsyncStorage.getItem('admin_password');
+      const secretCode = await AsyncStorage.getItem('admin_secret_code');
+      
+      const webPassword = Platform.OS === 'web' ? localStorage.getItem('admin_password') : null;
+      const webSecretCode = Platform.OS === 'web' ? localStorage.getItem('admin_secret_code') : null;
+      
+      const hasCredentials = (password && secretCode) || (webPassword && webSecretCode);
+      
+      if (hasCredentials) {
+        console.log('[ManageMembers] Admin credentials found');
+        setIsAuthenticated(true);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('[ManageMembers] Error checking admin auth:', error);
+      return false;
+    }
+  };
 
   useEffect(() => {
-    loadMembers();
+    const initScreen = async () => {
+      const authenticated = await checkAdminAuth();
+      if (authenticated) {
+        loadMembers();
+      } else {
+        setLoading(false);
+      }
+    };
+    
+    initScreen();
   }, []);
 
   useEffect(() => {
@@ -60,9 +94,9 @@ export default function ManageMembersScreen() {
     setLoading(true);
 
     try {
-      const response = await authenticatedGet('/api/admin/members');
+      const response = await adminGet('/api/admin/members');
       console.log('[ManageMembers] Members loaded:', response);
-      setMembers(response);
+      setMembers(response || []);
     } catch (error: any) {
       console.error('[ManageMembers] Error loading members:', error);
       showModal('Erreur', error?.message || 'Impossible de charger les membres', 'error');
@@ -126,7 +160,7 @@ export default function ManageMembersScreen() {
       async () => {
         setModalVisible(false);
         try {
-          await authenticatedPut(`/api/admin/members/${memberId}/status`, { status: newStatus });
+          await adminPut(`/api/admin/members/${memberId}/status`, { status: newStatus });
           showModal('Succès', 'Statut mis à jour avec succès', 'success');
           await loadMembers();
         } catch (error: any) {
@@ -149,7 +183,7 @@ export default function ManageMembersScreen() {
       async () => {
         setModalVisible(false);
         try {
-          await authenticatedPut(`/api/admin/members/${memberId}/role`, { role: newRole });
+          await adminPut(`/api/admin/members/${memberId}/role`, { role: newRole });
           showModal('Succès', 'Rôle mis à jour avec succès', 'success');
           await loadMembers();
         } catch (error: any) {
@@ -188,7 +222,7 @@ export default function ManageMembersScreen() {
     return roleTexts[role as keyof typeof roleTexts] || role;
   };
 
-  if (loading) {
+  if (!isAuthenticated || loading) {
     return (
       <View style={styles.loadingContainer}>
         <Stack.Screen

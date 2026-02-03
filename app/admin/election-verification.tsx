@@ -14,7 +14,9 @@ import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import { adminGet, adminPut } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 interface ElectionResult {
@@ -32,6 +34,7 @@ interface ElectionResult {
 }
 
 export default function ElectionVerificationScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [results, setResults] = useState<ElectionResult[]>([]);
@@ -43,9 +46,42 @@ export default function ElectionVerificationScreen() {
     type: 'info' as 'info' | 'success' | 'warning' | 'error' | 'confirm',
     onConfirm: () => {},
   });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const checkAdminAuth = async () => {
+    console.log('[ElectionVerification] Checking admin authentication');
+    try {
+      const password = await AsyncStorage.getItem('admin_password');
+      const secretCode = await AsyncStorage.getItem('admin_secret_code');
+      
+      const webPassword = Platform.OS === 'web' ? localStorage.getItem('admin_password') : null;
+      const webSecretCode = Platform.OS === 'web' ? localStorage.getItem('admin_secret_code') : null;
+      
+      const hasCredentials = (password && secretCode) || (webPassword && webSecretCode);
+      
+      if (hasCredentials) {
+        console.log('[ElectionVerification] Admin credentials found');
+        setIsAuthenticated(true);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('[ElectionVerification] Error checking admin auth:', error);
+      return false;
+    }
+  };
 
   useEffect(() => {
-    loadPendingResults();
+    const initScreen = async () => {
+      const authenticated = await checkAdminAuth();
+      if (authenticated) {
+        loadPendingResults();
+      } else {
+        setLoading(false);
+      }
+    };
+    
+    initScreen();
   }, []);
 
   const loadPendingResults = async () => {
@@ -53,9 +89,9 @@ export default function ElectionVerificationScreen() {
     setLoading(true);
 
     try {
-      const response = await authenticatedGet('/api/admin/elections/pending');
+      const response = await adminGet('/api/admin/elections/pending');
       console.log('[ElectionVerification] Results loaded:', response);
-      setResults(response);
+      setResults(response || []);
     } catch (error: any) {
       console.error('[ElectionVerification] Error loading results:', error);
       showModal('Erreur', error?.message || 'Impossible de charger les résultats', 'error');
@@ -97,7 +133,7 @@ export default function ElectionVerificationScreen() {
       async () => {
         setModalVisible(false);
         try {
-          await authenticatedPut(`/api/admin/elections/${resultId}/verify`, { status });
+          await adminPut(`/api/admin/elections/${resultId}/verify`, { status });
           showModal('Succès', `Résultat ${status === 'verified' ? 'vérifié' : 'rejeté'} avec succès`, 'success');
           await loadPendingResults();
         } catch (error: any) {
@@ -119,7 +155,7 @@ export default function ElectionVerificationScreen() {
     });
   };
 
-  if (loading) {
+  if (!isAuthenticated || loading) {
     return (
       <View style={styles.loadingContainer}>
         <Stack.Screen
