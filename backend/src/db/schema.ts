@@ -138,7 +138,7 @@ export const memberProfiles = pgTable('member_profiles', {
   phone: text('phone').notNull(),
   email: text('email'),
   membershipNumber: text('membership_number').notNull().unique(), // ARM-YYYY-XXXXX
-  qrCode: text('qr_code').notNull().unique(), // QR code data
+  qrCode: text('qr_code').notNull(), // QR code data (no unique constraint - visual representation only)
   status: text('status').notNull().default('pending'), // pending, active, suspended
   role: text('role').notNull().default('militant'), // militant, collecteur, superviseur, administrateur
   createdAt: timestamp('created_at').notNull().defaultNow(),

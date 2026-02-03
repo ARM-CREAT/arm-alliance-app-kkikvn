@@ -1,0 +1,1 @@
+ALTER TABLE "member_profiles" DROP CONSTRAINT "member_profiles_qr_code_unique";
