@@ -13,9 +13,9 @@ import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
-import { useAuth } from '@/contexts/AuthContext';
-import { authenticatedApiCall } from '@/utils/api';
+import { adminGet } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Analytics {
   totalMembers: number;
@@ -26,18 +26,46 @@ interface Analytics {
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
 
+  const checkAdminAuth = useCallback(async () => {
+    console.log('[AdminDashboard] Checking admin authentication');
+    try {
+      const password = await AsyncStorage.getItem('admin_password');
+      const secretCode = await AsyncStorage.getItem('admin_secret_code');
+      
+      // Also check localStorage for web
+      const webPassword = Platform.OS === 'web' ? localStorage.getItem('admin_password') : null;
+      const webSecretCode = Platform.OS === 'web' ? localStorage.getItem('admin_secret_code') : null;
+      
+      const hasCredentials = (password && secretCode) || (webPassword && webSecretCode);
+      
+      if (hasCredentials) {
+        console.log('[AdminDashboard] Admin credentials found');
+        setIsAuthenticated(true);
+        return true;
+      } else {
+        console.log('[AdminDashboard] No admin credentials, redirecting to login');
+        router.replace('/admin/login');
+        return false;
+      }
+    } catch (error) {
+      console.error('[AdminDashboard] Error checking admin auth:', error);
+      router.replace('/admin/login');
+      return false;
+    }
+  }, [router]);
+
   const loadAnalytics = useCallback(async () => {
     console.log('[AdminDashboard] Loading analytics');
     try {
-      const response = await authenticatedApiCall<Analytics>('/api/admin/analytics');
+      const response = await adminGet<Analytics>('/api/admin/analytics');
       
       setAnalytics(response);
       console.log('[AdminDashboard] Analytics loaded:', response);
@@ -49,27 +77,42 @@ export default function AdminDashboardScreen() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        console.log('[AdminDashboard] No user, redirecting to admin login');
-        router.replace('/admin/login');
-        return;
+    const initDashboard = async () => {
+      const authenticated = await checkAdminAuth();
+      if (authenticated) {
+        console.log('[AdminDashboard] Admin authenticated, loading analytics');
+        loadAnalytics();
       }
-      
-      console.log('[AdminDashboard] User authenticated, loading analytics');
-      loadAnalytics();
-    }
-  }, [user, authLoading, router, loadAnalytics]);
+    };
+    
+    initDashboard();
+  }, [checkAdminAuth, loadAnalytics]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     console.log('Admin logout requested');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    
+    // Clear admin credentials
+    try {
+      await AsyncStorage.removeItem('admin_password');
+      await AsyncStorage.removeItem('admin_secret_code');
+      
+      if (Platform.OS === 'web') {
+        localStorage.removeItem('admin_password');
+        localStorage.removeItem('admin_secret_code');
+      }
+      
+      console.log('[AdminDashboard] Admin credentials cleared');
+    } catch (error) {
+      console.error('[AdminDashboard] Error clearing credentials:', error);
+    }
+    
     router.replace('/admin/login');
   };
 
-  if (authLoading || loading) {
+  if (!isAuthenticated || loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
