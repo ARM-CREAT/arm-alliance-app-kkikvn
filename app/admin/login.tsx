@@ -16,11 +16,14 @@ import { colors } from '@/styles/commonStyles';
 import { Modal } from '@/components/ui/Modal';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
   const [password, setPassword] = useState('');
+  const [secretCode, setSecretCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showSecretCode, setShowSecretCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -39,42 +42,68 @@ export default function AdminLoginScreen() {
     setShowPassword(!showPassword);
   };
 
+  const toggleSecretCodeVisibility = () => {
+    console.log('User toggled secret code visibility');
+    setShowSecretCode(!showSecretCode);
+  };
+
   const handleLogin = async () => {
     console.log('Admin login attempt');
     
-    if (!password.trim()) {
+    const trimmedPassword = password.trim();
+    const trimmedSecretCode = secretCode.trim();
+    
+    if (!trimmedPassword) {
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      showModal('Erreur', 'Veuillez entrer le mot de passe secret', 'error');
+      showModal('Erreur', 'Veuillez entrer le mot de passe administrateur', 'error');
+      return;
+    }
+
+    if (!trimmedSecretCode) {
+      if (Platform.OS === 'ios') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+      showModal('Erreur', 'Veuillez entrer le code secret', 'error');
       return;
     }
 
     setLoading(true);
-    console.log('Verifying admin password...');
+    console.log('Verifying admin credentials...');
 
     try {
-      // Store the admin password temporarily for authenticated requests
-      // This will be used in the admin dashboard and management screens
+      // Store the admin credentials for authenticated requests
+      await AsyncStorage.setItem('admin_password', trimmedPassword);
+      await AsyncStorage.setItem('admin_secret_code', trimmedSecretCode);
+      
       if (Platform.OS === 'web') {
-        localStorage.setItem('admin_password', password);
+        localStorage.setItem('admin_password', trimmedPassword);
+        localStorage.setItem('admin_secret_code', trimmedSecretCode);
       }
 
-      // For now, we'll just navigate to the dashboard
-      // The actual verification will happen when making admin API calls
-      console.log('Admin login successful, navigating to dashboard');
+      console.log('Admin credentials stored, navigating to dashboard');
       
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      router.replace('/admin/dashboard');
+      showModal(
+        'Succès', 
+        'Connexion réussie ! Bienvenue dans l\'espace administrateur.', 
+        'success'
+      );
+      
+      // Navigate after a short delay to show success message
+      setTimeout(() => {
+        router.replace('/admin/dashboard');
+      }, 1000);
     } catch (error) {
       console.error('Admin login error:', error);
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      showModal('Erreur', 'Mot de passe incorrect', 'error');
+      showModal('Erreur', 'Erreur lors de la connexion. Veuillez réessayer.', 'error');
     } finally {
       setLoading(false);
     }
@@ -108,20 +137,33 @@ export default function AdminLoginScreen() {
           <Text style={styles.title}>Espace Administrateur</Text>
           <Text style={styles.subtitle}>A.R.M - Alliance pour le Rassemblement Malien</Text>
 
+          <View style={styles.infoBox}>
+            <IconSymbol
+              ios_icon_name="info.circle.fill"
+              android_material_icon_name="info"
+              size={20}
+              color={colors.primary}
+            />
+            <Text style={styles.infoText}>
+              Identifiants par défaut:{'\n'}
+              Mot de passe: admin123{'\n'}
+              Code secret: arm2024secure
+            </Text>
+          </View>
+
           <View style={styles.form}>
-            <Text style={styles.label}>Mot de passe secret</Text>
+            <Text style={styles.label}>Mot de passe administrateur</Text>
             <View style={styles.passwordContainer}>
               <TextInput
                 style={styles.passwordInput}
-                placeholder="Entrez le mot de passe secret"
+                placeholder="Entrez le mot de passe"
                 placeholderTextColor={colors.textSecondary}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                returnKeyType="done"
-                onSubmitEditing={handleLogin}
+                returnKeyType="next"
                 editable={!loading}
               />
               <TouchableOpacity
@@ -132,6 +174,35 @@ export default function AdminLoginScreen() {
                 <IconSymbol
                   ios_icon_name={showPassword ? "eye.slash.fill" : "eye.fill"}
                   android_material_icon_name={showPassword ? "visibility-off" : "visibility"}
+                  size={24}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.label}>Code secret</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Entrez le code secret"
+                placeholderTextColor={colors.textSecondary}
+                value={secretCode}
+                onChangeText={setSecretCode}
+                secureTextEntry={!showSecretCode}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                editable={!loading}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={toggleSecretCodeVisibility}
+                activeOpacity={0.7}
+              >
+                <IconSymbol
+                  ios_icon_name={showSecretCode ? "eye.slash.fill" : "eye.fill"}
+                  android_material_icon_name={showSecretCode ? "visibility-off" : "visibility"}
                   size={24}
                   color={colors.textSecondary}
                 />
@@ -201,7 +272,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 48,
+    marginBottom: 24,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: 'flex-start',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    marginLeft: 12,
+    lineHeight: 20,
   },
   form: {
     width: '100%',
@@ -221,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   passwordInput: {
     flex: 1,
@@ -241,6 +329,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 56,
+    marginTop: 8,
   },
   buttonDisabled: {
     opacity: 0.6,

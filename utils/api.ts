@@ -1,6 +1,8 @@
+
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BEARER_TOKEN_KEY } from "@/lib/auth";
 
 /**
@@ -32,6 +34,33 @@ export const getBearerToken = async (): Promise<string | null> => {
     }
   } catch (error) {
     console.error("[API] Error retrieving bearer token:", error);
+    return null;
+  }
+};
+
+/**
+ * Get admin credentials from storage
+ * @returns Object with password and secretCode, or null if not found
+ */
+export const getAdminCredentials = async (): Promise<{ password: string; secretCode: string } | null> => {
+  try {
+    let password: string | null = null;
+    let secretCode: string | null = null;
+
+    if (Platform.OS === "web") {
+      password = localStorage.getItem('admin_password');
+      secretCode = localStorage.getItem('admin_secret_code');
+    } else {
+      password = await AsyncStorage.getItem('admin_password');
+      secretCode = await AsyncStorage.getItem('admin_secret_code');
+    }
+
+    if (password && secretCode) {
+      return { password, secretCode };
+    }
+    return null;
+  } catch (error) {
+    console.error("[API] Error retrieving admin credentials:", error);
     return null;
   }
 };
@@ -178,6 +207,42 @@ export const authenticatedApiCall = async <T = any>(
 };
 
 /**
+ * Admin API call helper
+ * Automatically retrieves bearer token AND admin credentials from storage
+ * Adds both to headers for admin endpoints
+ *
+ * @param endpoint - API endpoint path
+ * @param options - Fetch options (method, headers, body, etc.)
+ * @returns Parsed JSON response
+ * @throws Error if token or admin credentials not found or request fails
+ */
+export const adminApiCall = async <T = any>(
+  endpoint: string,
+  options?: RequestInit
+): Promise<T> => {
+  const token = await getBearerToken();
+  const adminCreds = await getAdminCredentials();
+
+  if (!token) {
+    throw new Error("Authentication token not found. Please sign in.");
+  }
+
+  if (!adminCreds) {
+    throw new Error("Admin credentials not found. Please log in as admin.");
+  }
+
+  return apiCall<T>(endpoint, {
+    ...options,
+    headers: {
+      ...options?.headers,
+      Authorization: `Bearer ${token}`,
+      'x-admin-password': adminCreds.password,
+      'x-admin-secret': adminCreds.secretCode,
+    },
+  });
+};
+
+/**
  * Authenticated GET request
  */
 export const authenticatedGet = async <T = any>(endpoint: string): Promise<T> => {
@@ -229,6 +294,63 @@ export const authenticatedPatch = async <T = any>(
  */
 export const authenticatedDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
   return authenticatedApiCall<T>(endpoint, {
+    method: "DELETE",
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Admin GET request
+ */
+export const adminGet = async <T = any>(endpoint: string): Promise<T> => {
+  return adminApiCall<T>(endpoint, { method: "GET" });
+};
+
+/**
+ * Admin POST request
+ */
+export const adminPost = async <T = any>(
+  endpoint: string,
+  data: any
+): Promise<T> => {
+  return adminApiCall<T>(endpoint, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Admin PUT request
+ */
+export const adminPut = async <T = any>(
+  endpoint: string,
+  data: any
+): Promise<T> => {
+  return adminApiCall<T>(endpoint, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Admin PATCH request
+ */
+export const adminPatch = async <T = any>(
+  endpoint: string,
+  data: any
+): Promise<T> => {
+  return adminApiCall<T>(endpoint, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+};
+
+/**
+ * Admin DELETE request
+ * Always sends a body to avoid FST_ERR_CTP_EMPTY_JSON_BODY errors
+ */
+export const adminDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
+  return adminApiCall<T>(endpoint, {
     method: "DELETE",
     body: JSON.stringify(data),
   });
