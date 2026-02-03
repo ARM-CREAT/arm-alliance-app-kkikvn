@@ -14,11 +14,13 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { Modal } from '@/components/ui/Modal';
+import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -30,6 +32,11 @@ export default function AdminLoginScreen() {
     setModalMessage(message);
     setModalType(type);
     setModalVisible(true);
+  };
+
+  const togglePasswordVisibility = () => {
+    console.log('User toggled password visibility');
+    setShowPassword(!showPassword);
   };
 
   const handleLogin = async () => {
@@ -103,19 +110,33 @@ export default function AdminLoginScreen() {
 
           <View style={styles.form}>
             <Text style={styles.label}>Mot de passe secret</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Entrez le mot de passe secret"
-              placeholderTextColor={colors.textSecondary}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              editable={!loading}
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Entrez le mot de passe secret"
+                placeholderTextColor={colors.textSecondary}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+                editable={!loading}
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={togglePasswordVisibility}
+                activeOpacity={0.7}
+              >
+                <IconSymbol
+                  ios_icon_name={showPassword ? "eye.slash.fill" : "eye.fill"}
+                  android_material_icon_name={showPassword ? "visibility-off" : "visibility"}
+                  size={24}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
@@ -193,15 +214,25 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 8,
   },
-  input: {
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 24,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    color: colors.text,
+  },
+  eyeButton: {
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   button: {
     backgroundColor: colors.primary,
