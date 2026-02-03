@@ -14,6 +14,7 @@ export const colors = {
   success: '#28A745',     // Success green
   warning: '#FFC107',     // Warning yellow
   danger: '#DC3545',      // Danger red
+  error: '#DC3545',       // Error red (alias for danger)
   highlight: '#2D8B3C',   // Green highlight
 };
 

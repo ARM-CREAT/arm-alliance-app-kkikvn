@@ -14,10 +14,10 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
+import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedApiCall } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
-import * as Haptics from 'expo-haptics';
 
 interface NewsArticle {
   id: string;
@@ -30,84 +30,86 @@ interface NewsArticle {
 
 export default function ManageNewsFullScreen() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, authLoading } = useAuth();
   const [news, setNews] = useState<NewsArticle[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [editingNews, setEditingNews] = useState<NewsArticle | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [currentArticle, setCurrentArticle] = useState<NewsArticle | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+
   const [formData, setFormData] = useState({
     title: '',
     content: '',
     imageUrl: '',
     videoUrl: '',
   });
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalConfig, setModalConfig] = useState({
-    title: '',
-    message: '',
-    type: 'info' as 'info' | 'success' | 'warning' | 'error' | 'confirm',
-    onConfirm: () => {},
-  });
 
-  const showModal = (
-    title: string,
-    message: string,
-    type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info',
-    onConfirm?: () => void
-  ) => {
-    setModalConfig({ title, message, type, onConfirm: onConfirm || (() => {}) });
+  const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType(type);
     setModalVisible(true);
   };
 
   const loadNews = useCallback(async () => {
     console.log('[ManageNews] Loading news articles');
-    setIsLoading(true);
-
     try {
-      const { data, error } = await authenticatedApiCall<NewsArticle[]>('/api/news', {
+      const response = await authenticatedApiCall<NewsArticle[]>('/api/news', {
         method: 'GET',
       });
-
-      if (data) {
-        setNews(data);
-      } else {
-        console.error('[ManageNews] Error loading news:', error);
-        showModal('Erreur', error || 'Impossible de charger les actualités', 'error');
+      
+      if (response.data) {
+        setNews(response.data);
+        console.log('[ManageNews] Loaded', response.data.length, 'articles');
       }
     } catch (error) {
-      console.error('[ManageNews] Error:', error);
-      showModal('Erreur', 'Une erreur est survenue', 'error');
+      console.error('[ManageNews] Error loading news:', error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace('/auth');
-      return;
-    }
-    if (user) {
+    if (!authLoading) {
+      if (!user) {
+        console.log('[ManageNews] No user, redirecting to admin login');
+        router.replace('/admin/login');
+        return;
+      }
+      
+      console.log('[ManageNews] User authenticated, loading news');
       loadNews();
     }
   }, [user, authLoading, router, loadNews]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(() => {
+    console.log('[ManageNews] Refreshing news');
     setRefreshing(true);
-    await loadNews();
-    setRefreshing(false);
-  };
+    loadNews();
+  }, [loadNews]);
 
   const handleCreate = () => {
-    setIsCreating(true);
-    setEditingNews(null);
+    console.log('[ManageNews] Creating new article');
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setEditing(true);
+    setCurrentArticle(null);
     setFormData({ title: '', content: '', imageUrl: '', videoUrl: '' });
   };
 
   const handleEdit = (article: NewsArticle) => {
-    setEditingNews(article);
-    setIsCreating(false);
+    console.log('[ManageNews] Editing article:', article.id);
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setEditing(true);
+    setCurrentArticle(article);
     setFormData({
       title: article.title,
       content: article.content,
@@ -117,257 +119,291 @@ export default function ManageNewsFullScreen() {
   };
 
   const handleSave = async () => {
+    console.log('[ManageNews] Saving article');
+    
     if (!formData.title.trim() || !formData.content.trim()) {
-      showModal('Erreur', 'Le titre et le contenu sont requis', 'error');
+      showModal('Erreur', 'Le titre et le contenu sont obligatoires', 'error');
       return;
     }
 
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsLoading(true);
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    setLoading(true);
 
     try {
-      if (isCreating) {
-        // Create new article
-        const { data, error } = await authenticatedApiCall<NewsArticle>('/api/news', {
-          method: 'POST',
-          body: JSON.stringify(formData),
-        });
+      const endpoint = currentArticle ? `/api/news/${currentArticle.id}` : '/api/news';
+      const method = currentArticle ? 'PUT' : 'POST';
 
-        if (data) {
-          showModal('Succès', 'Article créé avec succès', 'success');
-          setIsCreating(false);
-          setFormData({ title: '', content: '', imageUrl: '', videoUrl: '' });
-          await loadNews();
-        } else {
-          showModal('Erreur', error || 'Impossible de créer l\'article', 'error');
-        }
-      } else if (editingNews) {
-        // Update existing article
-        const { data, error } = await authenticatedApiCall<NewsArticle>(
-          `/api/news/${editingNews.id}`,
-          {
-            method: 'PUT',
-            body: JSON.stringify(formData),
-          }
-        );
+      const response = await authenticatedApiCall<NewsArticle>(endpoint, {
+        method,
+        body: JSON.stringify({
+          title: formData.title,
+          content: formData.content,
+          imageUrl: formData.imageUrl || undefined,
+          videoUrl: formData.videoUrl || undefined,
+        }),
+      });
 
-        if (data) {
-          showModal('Succès', 'Article mis à jour avec succès', 'success');
-          setEditingNews(null);
-          setFormData({ title: '', content: '', imageUrl: '', videoUrl: '' });
-          await loadNews();
-        } else {
-          showModal('Erreur', error || 'Impossible de mettre à jour l\'article', 'error');
-        }
+      if (response.data) {
+        showModal('Succès', 'Article enregistré avec succès', 'success');
+        setEditing(false);
+        loadNews();
       }
-    } catch (error) {
-      console.error('[ManageNews] Save error:', error);
-      showModal('Erreur', 'Une erreur est survenue', 'error');
+    } catch (error: any) {
+      console.error('[ManageNews] Error saving article:', error);
+      showModal('Erreur', error?.message || 'Erreur lors de l\'enregistrement', 'error');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleDelete = (article: NewsArticle) => {
-    showModal(
-      'Confirmer la suppression',
-      `Voulez-vous vraiment supprimer "${article.title}" ?`,
-      'confirm',
-      async () => {
-        setModalVisible(false);
-        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        setIsLoading(true);
+  const handleDelete = async (article: NewsArticle) => {
+    console.log('[ManageNews] Deleting article:', article.id);
+    
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }
 
-        try {
-          const { error } = await authenticatedApiCall(`/api/news/${article.id}`, {
-            method: 'DELETE',
-          });
+    setLoading(true);
 
-          if (!error) {
-            showModal('Succès', 'Article supprimé avec succès', 'success');
-            await loadNews();
-          } else {
-            showModal('Erreur', error || 'Impossible de supprimer l\'article', 'error');
-          }
-        } catch (error) {
-          console.error('[ManageNews] Delete error:', error);
-          showModal('Erreur', 'Une erreur est survenue', 'error');
-        } finally {
-          setIsLoading(false);
-        }
-      }
-    );
+    try {
+      await authenticatedApiCall(`/api/news/${article.id}`, {
+        method: 'DELETE',
+      });
+
+      showModal('Succès', 'Article supprimé avec succès', 'success');
+      loadNews();
+    } catch (error: any) {
+      console.error('[ManageNews] Error deleting article:', error);
+      showModal('Erreur', error?.message || 'Erreur lors de la suppression', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancel = () => {
-    setIsCreating(false);
-    setEditingNews(null);
+    console.log('[ManageNews] Canceling edit');
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setEditing(false);
+    setCurrentArticle(null);
     setFormData({ title: '', content: '', imageUrl: '', videoUrl: '' });
   };
 
-  if (authLoading) {
+  if (authLoading || (loading && !refreshing)) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Chargement...</Text>
       </View>
     );
   }
 
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: 'Gérer les actualités',
-          headerStyle: { backgroundColor: colors.primary },
-          headerTintColor: '#FFFFFF',
-          headerTitleStyle: { fontWeight: 'bold' },
-        }}
-      />
-      <Modal
-        visible={modalVisible}
-        title={modalConfig.title}
-        message={modalConfig.message}
-        type={modalConfig.type}
-        onClose={() => setModalVisible(false)}
-        onConfirm={modalConfig.onConfirm}
-      />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
-        }
-      >
-        {(isCreating || editingNews) ? (
-          <View style={styles.formContainer}>
-            <Text style={styles.formTitle}>
-              {isCreating ? 'Créer un article' : 'Modifier l\'article'}
-            </Text>
+  if (editing) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            title: currentArticle ? 'Modifier l\'Article' : 'Nouvel Article',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+          }}
+        />
 
-            <TextInput
-              style={styles.input}
-              placeholder="Titre *"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.title}
-              onChangeText={(text) => setFormData({ ...formData, title: text })}
-            />
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Titre *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Titre de l'article"
+                placeholderTextColor={colors.textSecondary}
+                value={formData.title}
+                onChangeText={(text) => setFormData({ ...formData, title: text })}
+              />
+            </View>
 
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Contenu *"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.content}
-              onChangeText={(text) => setFormData({ ...formData, content: text })}
-              multiline
-              numberOfLines={6}
-            />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Contenu *</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Contenu de l'article"
+                placeholderTextColor={colors.textSecondary}
+                value={formData.content}
+                onChangeText={(text) => setFormData({ ...formData, content: text })}
+                multiline
+                numberOfLines={6}
+              />
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="URL de l'image (optionnel)"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.imageUrl}
-              onChangeText={(text) => setFormData({ ...formData, imageUrl: text })}
-            />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>URL de l&apos;image (optionnel)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://..."
+                placeholderTextColor={colors.textSecondary}
+                value={formData.imageUrl}
+                onChangeText={(text) => setFormData({ ...formData, imageUrl: text })}
+                autoCapitalize="none"
+              />
+            </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="URL de la vidéo (optionnel)"
-              placeholderTextColor={colors.textSecondary}
-              value={formData.videoUrl}
-              onChangeText={(text) => setFormData({ ...formData, videoUrl: text })}
-            />
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>URL de la vidéo (optionnel)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="https://..."
+                placeholderTextColor={colors.textSecondary}
+                value={formData.videoUrl}
+                onChangeText={(text) => setFormData({ ...formData, videoUrl: text })}
+                autoCapitalize="none"
+              />
+            </View>
 
-            <View style={styles.formButtons}>
+            <View style={styles.buttonRow}>
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton]}
                 onPress={handleCancel}
+                activeOpacity={0.8}
               >
                 <Text style={styles.cancelButtonText}>Annuler</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.button, styles.saveButton]}
                 onPress={handleSave}
-                disabled={isLoading}
+                activeOpacity={0.8}
+                disabled={loading}
               >
-                {isLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
                 ) : (
                   <Text style={styles.saveButtonText}>Enregistrer</Text>
                 )}
               </TouchableOpacity>
             </View>
           </View>
-        ) : (
-          <>
-            <TouchableOpacity style={styles.createButton} onPress={handleCreate}>
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={24}
-                color="#FFFFFF"
-              />
-              <Text style={styles.createButtonText}>Créer un article</Text>
-            </TouchableOpacity>
+        </ScrollView>
 
-            {isLoading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.loadingText}>Chargement...</Text>
+        <Modal
+          visible={modalVisible}
+          title={modalTitle}
+          message={modalMessage}
+          type={modalType}
+          onClose={() => setModalVisible(false)}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: 'Gérer les Actualités',
+          headerShown: true,
+          headerBackTitle: 'Retour',
+        }}
+      />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={handleCreate}
+            activeOpacity={0.8}
+          >
+            <IconSymbol
+              ios_icon_name="plus.circle.fill"
+              android_material_icon_name="add-circle"
+              size={24}
+              color={colors.background}
+            />
+            <Text style={styles.createButtonText}>Nouvel Article</Text>
+          </TouchableOpacity>
+        </View>
+
+        {news.length === 0 ? (
+          <View style={styles.emptyState}>
+            <IconSymbol
+              ios_icon_name="newspaper"
+              android_material_icon_name="article"
+              size={64}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.emptyStateText}>Aucun article</Text>
+            <Text style={styles.emptyStateSubtext}>Créez votre premier article</Text>
+          </View>
+        ) : (
+          <View style={styles.newsList}>
+            {news.map((article) => (
+              <View key={article.id} style={styles.newsItem}>
+                <View style={styles.newsItemHeader}>
+                  <Text style={styles.newsItemTitle}>{article.title}</Text>
+                  <Text style={styles.newsItemDate}>
+                    {new Date(article.publishedAt).toLocaleDateString('fr-FR')}
+                  </Text>
+                </View>
+                <Text style={styles.newsItemContent} numberOfLines={3}>
+                  {article.content}
+                </Text>
+                <View style={styles.newsItemActions}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => handleEdit(article)}
+                    activeOpacity={0.7}
+                  >
+                    <IconSymbol
+                      ios_icon_name="pencil"
+                      android_material_icon_name="edit"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.editButtonText}>Modifier</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDelete(article)}
+                    activeOpacity={0.7}
+                  >
+                    <IconSymbol
+                      ios_icon_name="trash"
+                      android_material_icon_name="delete"
+                      size={18}
+                      color={colors.error}
+                    />
+                    <Text style={styles.deleteButtonText}>Supprimer</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            ) : news.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <IconSymbol
-                  ios_icon_name="newspaper"
-                  android_material_icon_name="article"
-                  size={64}
-                  color={colors.textSecondary}
-                />
-                <Text style={styles.emptyText}>Aucun article</Text>
-              </View>
-            ) : (
-              <View style={styles.newsList}>
-                {news.map((article) => (
-                  <View key={article.id} style={styles.newsCard}>
-                    <Text style={styles.newsTitle}>{article.title}</Text>
-                    <Text style={styles.newsContent} numberOfLines={3}>
-                      {article.content}
-                    </Text>
-                    <View style={styles.newsActions}>
-                      <TouchableOpacity
-                        style={styles.editButton}
-                        onPress={() => handleEdit(article)}
-                      >
-                        <IconSymbol
-                          ios_icon_name="pencil"
-                          android_material_icon_name="edit"
-                          size={20}
-                          color={colors.primary}
-                        />
-                        <Text style={styles.editButtonText}>Modifier</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() => handleDelete(article)}
-                      >
-                        <IconSymbol
-                          ios_icon_name="trash"
-                          android_material_icon_name="delete"
-                          size={20}
-                          color={colors.danger}
-                        />
-                        <Text style={styles.deleteButtonText}>Supprimer</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </>
+            ))}
+          </View>
         )}
       </ScrollView>
-    </>
+
+      <Modal
+        visible={modalVisible}
+        title={modalTitle}
+        message={modalMessage}
+        type={modalType}
+        onClose={() => setModalVisible(false)}
+      />
+    </View>
   );
 }
 
@@ -376,66 +412,161 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    padding: 20,
-    paddingTop: Platform.OS === 'android' ? 48 : 20,
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingTop: Platform.OS === 'android' ? 16 : 0,
+    paddingBottom: 40,
   },
   loadingContainer: {
     flex: 1,
-    alignItems: 'center',
+    backgroundColor: colors.background,
     justifyContent: 'center',
-    paddingVertical: 40,
+    alignItems: 'center',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: colors.textSecondary,
   },
+  header: {
+    padding: 20,
+  },
   createButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginBottom: 24,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   createButtonText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+    color: colors.background,
+    marginLeft: 8,
   },
-  formContainer: {
+  newsList: {
+    paddingHorizontal: 20,
+  },
+  newsItem: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  formTitle: {
-    fontSize: 20,
+  newsItemHeader: {
+    marginBottom: 8,
+  },
+  newsItemTitle: {
+    fontSize: 17,
     fontWeight: 'bold',
     color: colors.text,
+    marginBottom: 4,
+  },
+  newsItemDate: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  newsItemContent: {
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  newsItemActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundAlt,
+  },
+  editButtonText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundAlt,
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    color: colors.error,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginTop: 8,
+  },
+  form: {
+    padding: 20,
+  },
+  inputGroup: {
     marginBottom: 20,
   },
+  label: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
   input: {
-    backgroundColor: colors.background,
-    borderRadius: 12,
+    backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
-    marginBottom: 16,
   },
   textArea: {
-    height: 120,
+    minHeight: 120,
     textAlignVertical: 'top',
   },
-  formButtons: {
+  buttonRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
     gap: 12,
-    marginTop: 8,
   },
   button: {
     flex: 1,
@@ -445,7 +576,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: colors.border,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   cancelButtonText: {
     fontSize: 16,
@@ -454,81 +587,15 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 16,
-  },
-  newsList: {
-    gap: 16,
-  },
-  newsCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
-    elevation: 4,
-  },
-  newsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  newsContent: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  newsActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  editButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  editButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  deleteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  deleteButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.danger,
+    color: colors.background,
   },
 });

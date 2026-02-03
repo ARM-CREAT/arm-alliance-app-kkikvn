@@ -1,7 +1,7 @@
 
 import { Stack } from "expo-router";
-import { useColorScheme, Alert } from "react-native";
-import React, { useEffect } from "react";
+import { useColorScheme } from "react-native";
+import React, { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
@@ -20,6 +20,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { LocalizationProvider } from "@/contexts/LocalizationContext";
 import { useFonts } from "expo-font";
 import { colors } from "@/styles/commonStyles";
+import { Modal } from "@/components/ui/Modal";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -44,6 +45,7 @@ export default function RootLayout() {
 
   const colorScheme = useColorScheme();
   const { isConnected } = useNetworkState();
+  const [showNetworkModal, setShowNetworkModal] = useState(false);
 
   useEffect(() => {
     if (loaded) {
@@ -53,10 +55,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (isConnected === false) {
-      Alert.alert(
-        "Pas de connexion Internet",
-        "Veuillez vérifier votre connexion Internet pour utiliser l'application."
-      );
+      setShowNetworkModal(true);
+    } else {
+      setShowNetworkModal(false);
     }
   }, [isConnected]);
 
@@ -172,6 +173,15 @@ export default function RootLayout() {
               />
             </Stack>
               <StatusBar style="auto" />
+              
+              {/* Network Status Modal */}
+              <Modal
+                visible={showNetworkModal}
+                title="Pas de connexion Internet"
+                message="Veuillez vérifier votre connexion Internet pour utiliser l'application."
+                type="warning"
+                onClose={() => setShowNetworkModal(false)}
+              />
             </ThemeProvider>
           </AdminProvider>
         </WidgetProvider>

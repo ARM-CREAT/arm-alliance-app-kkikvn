@@ -43,15 +43,10 @@ export default function PublicChatScreen() {
   const loadMessages = async () => {
     console.log('Loading public chat messages');
     try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<ChatMessage[]>('/api/chat/public');
+      const { apiGet } = await import('@/utils/api');
+      const data = await apiGet<ChatMessage[]>('/api/chat/public');
       
-      if (error) {
-        console.error('Failed to load chat messages:', error);
-        return;
-      }
-      
-      if (data) {
+      if (Array.isArray(data)) {
         setMessages(data);
         console.log('Loaded', data.length, 'chat messages');
       }
@@ -73,19 +68,11 @@ export default function PublicChatScreen() {
     console.log('User sending message:', messageText);
 
     try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<ChatMessage>('/api/chat/public', {
-        method: 'POST',
-        body: JSON.stringify({
-          userName,
-          message: messageText.trim(),
-        }),
+      const { apiPost } = await import('@/utils/api');
+      const data = await apiPost<ChatMessage>('/api/chat/public', {
+        userName,
+        message: messageText.trim(),
       });
-
-      if (error) {
-        console.error('Failed to send message:', error);
-        return;
-      }
 
       if (data) {
         // Add the new message to the list

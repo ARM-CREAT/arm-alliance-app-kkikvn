@@ -1,185 +1,327 @@
 
-import React, { useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Alert,
-  Platform
-} from "react-native";
-import { Stack, useRouter } from "expo-router";
-import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
+  Platform,
+  KeyboardAvoidingView,
+  ActivityIndicator,
+  Linking,
+} from 'react-native';
+import { Stack } from 'expo-router';
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors } from '@/styles/commonStyles';
+import * as Haptics from 'expo-haptics';
+import { apiPost } from '@/utils/api';
+import { Modal } from '@/components/ui/Modal';
+import { Map, MapMarker } from '@/components/Map';
 
 export default function ContactScreen() {
-  const router = useRouter();
-  const [senderName, setSenderName] = useState('');
-  const [senderEmail, setSenderEmail] = useState('');
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    subject: '',
+    message: '',
+  });
+
+  const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
+    setModalTitle(title);
+    setModalMessage(message);
+    setModalType(type);
+    setModalVisible(true);
+  };
 
   const handleSubmit = async () => {
     console.log('User tapped Send Message button');
     
-    if (!senderName || !senderEmail || !subject || !message) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+    // Validation
+    if (!formData.name.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre nom', 'error');
+      return;
+    }
+    if (!formData.email.trim() && !formData.phone.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre email ou téléphone', 'error');
+      return;
+    }
+    if (!formData.subject.trim()) {
+      showModal('Erreur', 'Veuillez entrer un sujet', 'error');
+      return;
+    }
+    if (!formData.message.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre message', 'error');
       return;
     }
 
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
     setLoading(true);
-    console.log('Sending message:', { senderName, senderEmail, subject, message });
 
     try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall('/api/messages', {
-        method: 'POST',
-        body: JSON.stringify({
-          senderName,
-          senderEmail,
-          subject,
-          message,
-        }),
+      console.log('[Contact] Submitting message:', formData);
+      
+      const response = await apiPost('/api/messages', {
+        senderName: formData.name,
+        senderEmail: formData.email || 'noemail@arm-mali.org',
+        subject: formData.subject,
+        message: formData.message,
       });
-
-      setLoading(false);
-
-      if (error) {
-        Alert.alert('Erreur', `Impossible d'envoyer votre message: ${error}`);
-        return;
-      }
-
-      Alert.alert(
-        'Message envoyé',
-        'Votre message a été envoyé avec succès. Nous vous répondrons bientôt.',
-        [{ text: 'OK', onPress: () => router.back() }]
+      
+      console.log('[Contact] Message sent successfully:', response);
+      
+      showModal(
+        'Message Envoyé',
+        'Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.',
+        'success'
       );
-    } catch (error) {
+      
+      // Reset form
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        subject: '',
+        message: '',
+      });
+      
+    } catch (error: any) {
+      console.error('[Contact] Error sending message:', error);
+      showModal(
+        'Erreur',
+        error?.message || 'Une erreur est survenue lors de l\'envoi du message. Veuillez réessayer.',
+        'error'
+      );
+    } finally {
       setLoading(false);
-      console.error('Error sending message:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue. Veuillez réessayer.');
     }
   };
 
+  const handleCall = (phone: string) => {
+    console.log('User tapped call button:', phone);
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    Linking.openURL(`tel:${phone}`);
+  };
+
+  const handleEmail = (email: string) => {
+    console.log('User tapped email button:', email);
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    Linking.openURL(`mailto:${email}`);
+  };
+
+  // Mali headquarters location
+  const headquarters: MapMarker = {
+    id: 'hq',
+    latitude: 12.6392,
+    longitude: -8.0029,
+    title: 'Siège A.R.M',
+    description: 'Rue 530, Porte 245, Sebenikoro, Bamako',
+  };
+
   return (
-    <>
-      <Stack.Screen options={{ 
-        headerShown: true,
-        title: 'Contactez-nous',
-        headerBackTitle: 'Retour',
-      }} />
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-        <View style={styles.header}>
-          <IconSymbol 
-            ios_icon_name="envelope.fill" 
-            android_material_icon_name="email" 
-            size={48} 
-            color={colors.primary} 
-          />
-          <Text style={styles.title}>Contactez-nous</Text>
-          <Text style={styles.subtitle}>
-            Envoyez-nous un message, nous vous répondrons rapidement
-          </Text>
-        </View>
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: 'Contactez-nous',
+          headerShown: true,
+          headerBackTitle: 'Retour',
+        }}
+      />
 
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Votre nom</Text>
-            <TextInput
-              style={styles.input}
-              value={senderName}
-              onChangeText={setSenderName}
-              placeholder="Nom complet"
-              placeholderTextColor={colors.textSecondary}
-            />
-          </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Contact Info */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Informations de Contact</Text>
+            
+            <View style={styles.contactCard}>
+              <View style={styles.contactItem}>
+                <IconSymbol
+                  ios_icon_name="building.2.fill"
+                  android_material_icon_name="location-city"
+                  size={24}
+                  color={colors.primary}
+                />
+                <View style={styles.contactInfo}>
+                  <Text style={styles.contactLabel}>Siège</Text>
+                  <Text style={styles.contactValue}>Rue 530, Porte 245</Text>
+                  <Text style={styles.contactValue}>Sebenikoro, Bamako, Mali</Text>
+                </View>
+              </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Votre email</Text>
-            <TextInput
-              style={styles.input}
-              value={senderEmail}
-              onChangeText={setSenderEmail}
-              placeholder="votre@email.com"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
+              <View style={styles.contactItem}>
+                <IconSymbol
+                  ios_icon_name="phone.fill"
+                  android_material_icon_name="phone"
+                  size={24}
+                  color={colors.primary}
+                />
+                <View style={styles.contactInfo}>
+                  <Text style={styles.contactLabel}>Téléphone</Text>
+                  <TouchableOpacity onPress={() => handleCall('+34632607101')}>
+                    <Text style={styles.contactLink}>+34 632 607 101</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleCall('+22376304869')}>
+                    <Text style={styles.contactLink}>+223 76 30 48 69</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Sujet</Text>
-            <TextInput
-              style={styles.input}
-              value={subject}
-              onChangeText={setSubject}
-              placeholder="Sujet de votre message"
-              placeholderTextColor={colors.textSecondary}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Message</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={message}
-              onChangeText={setMessage}
-              placeholder="Écrivez votre message ici..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={6}
-              textAlignVertical="top"
-            />
-          </View>
-
-          <TouchableOpacity 
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Envoi en cours...' : 'Envoyer le message'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.contactInfo}>
-          <Text style={styles.contactTitle}>Autres moyens de contact</Text>
-          
-          <View style={styles.contactItem}>
-            <IconSymbol 
-              ios_icon_name="building.2.fill" 
-              android_material_icon_name="location-city" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <View style={styles.contactText}>
-              <Text style={styles.contactLabel}>Siège</Text>
-              <Text style={styles.contactValue}>Rue 530, Porte 245</Text>
-              <Text style={styles.contactValue}>Sebenikoro, Bamako, Mali</Text>
+              <View style={styles.contactItem}>
+                <IconSymbol
+                  ios_icon_name="envelope.fill"
+                  android_material_icon_name="email"
+                  size={24}
+                  color={colors.primary}
+                />
+                <View style={styles.contactInfo}>
+                  <Text style={styles.contactLabel}>Email</Text>
+                  <TouchableOpacity onPress={() => handleEmail('contact@arm-mali.org')}>
+                    <Text style={styles.contactLink}>contact@arm-mali.org</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </View>
 
-          <View style={styles.contactItem}>
-            <IconSymbol 
-              ios_icon_name="phone.fill" 
-              android_material_icon_name="phone" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <View style={styles.contactText}>
-              <Text style={styles.contactLabel}>Téléphone</Text>
-              <Text style={styles.contactValue}>+34 632 607 101</Text>
+          {/* Map */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Notre Localisation</Text>
+            <View style={styles.mapContainer}>
+              <Map
+                markers={[headquarters]}
+                initialRegion={{
+                  latitude: 12.6392,
+                  longitude: -8.0029,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
+                }}
+                style={styles.map}
+              />
             </View>
           </View>
-        </View>
 
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
-    </>
+          {/* Contact Form */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Envoyez-nous un Message</Text>
+            
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Nom *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Votre nom complet"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.name}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  autoCapitalize="words"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="votre.email@exemple.com"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.email}
+                  onChangeText={(text) => setFormData({ ...formData, email: text })}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Téléphone</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="+223 XX XX XX XX"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.phone}
+                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Sujet *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Sujet de votre message"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.subject}
+                  onChangeText={(text) => setFormData({ ...formData, subject: text })}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Message *</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Votre message..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.message}
+                  onChangeText={(text) => setFormData({ ...formData, message: text })}
+                  multiline
+                  numberOfLines={6}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+                onPress={handleSubmit}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <>
+                    <IconSymbol
+                      ios_icon_name="paperplane.fill"
+                      android_material_icon_name="send"
+                      size={20}
+                      color={colors.background}
+                    />
+                    <Text style={styles.submitButtonText}>Envoyer</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Modal
+        visible={modalVisible}
+        title={modalTitle}
+        message={modalMessage}
+        type={modalType}
+        onClose={() => setModalVisible(false)}
+      />
+    </View>
   );
 }
 
@@ -188,31 +330,88 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
   contentContainer: {
+    paddingTop: Platform.OS === 'android' ? 16 : 0,
     paddingBottom: 40,
   },
-  header: {
-    alignItems: 'center',
-    paddingVertical: 32,
+  section: {
     paddingHorizontal: 20,
+    marginTop: 24,
   },
-  title: {
-    fontSize: 28,
+  sectionTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginTop: 16,
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  subtitle: {
-    fontSize: 16,
+  contactCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  contactInfo: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  contactLabel: {
+    fontSize: 13,
     color: colors.textSecondary,
-    textAlign: 'center',
+    marginBottom: 4,
+  },
+  contactValue: {
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: 2,
+  },
+  contactLink: {
+    fontSize: 15,
+    color: colors.primary,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  mapContainer: {
+    height: 250,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  map: {
+    flex: 1,
   },
   form: {
-    paddingHorizontal: 20,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   label: {
     fontSize: 15,
@@ -221,66 +420,40 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
   },
   textArea: {
     minHeight: 120,
-    paddingTop: 12,
+    textAlignVertical: 'top',
   },
   submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
+    borderRadius: 12,
     marginTop: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonDisabled: {
     opacity: 0.6,
   },
   submitButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
     color: colors.background,
-  },
-  contactInfo: {
-    paddingHorizontal: 20,
-    marginTop: 32,
-  },
-  contactTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  contactItem: {
-    flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  contactText: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  contactLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-    marginBottom: 4,
-  },
-  contactValue: {
-    fontSize: 15,
-    color: colors.text,
-  },
-  bottomSpacer: {
-    height: 20,
+    marginLeft: 8,
   },
 });

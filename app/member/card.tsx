@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,11 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
-import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
-
-const { width } = Dimensions.get('window');
+import { Modal } from '@/components/ui/Modal';
+import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedGet } from '@/utils/api';
 
 interface MemberData {
   id: string;
@@ -31,37 +31,16 @@ interface MemberData {
   createdAt: string;
 }
 
+const { width } = Dimensions.get('window');
+
 export default function MemberCardScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const [memberData, setMemberData] = useState<MemberData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
-
-  useEffect(() => {
-    loadMemberCard();
-  }, []);
-
-  const loadMemberCard = async () => {
-    console.log('[MemberCard] Loading member card data');
-    setLoading(true);
-
-    try {
-      const { authenticatedGet } = await import('@/utils/api');
-      
-      const response = await authenticatedGet('/api/members/me');
-      
-      console.log('[MemberCard] Member data loaded:', response);
-      
-      setMemberData(response);
-    } catch (error: any) {
-      console.error('[MemberCard] Error loading member card:', error);
-      showModal('Erreur', error?.message || 'Impossible de charger votre carte de membre. Veuillez vous connecter ou vous inscrire.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const showModal = (title: string, message: string) => {
     setModalTitle(title);
@@ -69,8 +48,48 @@ export default function MemberCardScreen() {
     setModalVisible(true);
   };
 
+  const loadMemberCard = useCallback(async () => {
+    console.log('[MemberCard] Loading member card data');
+    setLoading(true);
+
+    try {
+      // If user is authenticated, use their profile
+      if (user) {
+        const response = await authenticatedGet<{ member?: MemberData }>('/api/members/me');
+        
+        if (response.member) {
+          setMemberData(response.member);
+          console.log('[MemberCard] Member data loaded:', response.member);
+        } else {
+          showModal(
+            'Aucune Carte',
+            'Vous n\'avez pas encore de carte de membre. Veuillez vous inscrire d\'abord.'
+          );
+        }
+      } else {
+        // For non-authenticated users, show registration prompt
+        showModal(
+          'Inscription Requise',
+          'Veuillez vous inscrire pour obtenir votre carte de membre.'
+        );
+      }
+    } catch (error: any) {
+      console.error('[MemberCard] Error loading member card:', error);
+      showModal(
+        'Erreur',
+        'Impossible de charger votre carte de membre. Veuillez vous inscrire si vous n\'êtes pas encore membre.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadMemberCard();
+  }, [loadMemberCard]);
+
   const handlePayCotisation = () => {
-    console.log('User tapped Pay Cotisation button');
+    console.log('[MemberCard] User tapped Pay Cotisation');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -78,76 +97,95 @@ export default function MemberCardScreen() {
   };
 
   const handleViewMessages = () => {
-    console.log('User tapped View Messages button');
+    console.log('[MemberCard] User tapped View Messages');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    router.push('/member/messages' as any);
+    router.push('/member/messages');
   };
 
   const handleSubmitElectionResults = () => {
-    console.log('User tapped Submit Election Results button');
+    console.log('[MemberCard] User tapped Submit Election Results');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    router.push('/member/election-results' as any);
+    router.push('/member/election-results');
   };
 
   const getStatusColor = (status: string) => {
-    const statusColors = {
-      active: '#10B981',
-      pending: '#F59E0B',
-      suspended: '#EF4444',
+    const statusColorMap: Record<string, string> = {
+      pending: colors.warning,
+      active: colors.success,
+      suspended: colors.error,
     };
-    return statusColors[status as keyof typeof statusColors] || colors.textSecondary;
+    return statusColorMap[status] || colors.textSecondary;
   };
 
   const getStatusText = (status: string) => {
-    const statusTexts = {
-      active: 'Actif',
+    const statusTextMap: Record<string, string> = {
       pending: 'En attente',
+      active: 'Actif',
       suspended: 'Suspendu',
     };
-    return statusTexts[status as keyof typeof statusTexts] || status;
+    return statusTextMap[status] || status;
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Stack.Screen
-          options={{
-            title: 'Carte de Membre',
-            headerShown: true,
-          }}
-        />
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
+        <Text style={styles.loadingText}>Chargement de votre carte...</Text>
       </View>
     );
   }
 
   if (!memberData) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={styles.container}>
         <Stack.Screen
           options={{
             title: 'Carte de Membre',
             headerShown: true,
+            headerBackTitle: 'Retour',
           }}
         />
-        <IconSymbol
-          ios_icon_name="exclamationmark.triangle"
-          android_material_icon_name="warning"
-          size={48}
-          color={colors.textSecondary}
+
+        <View style={styles.emptyState}>
+          <IconSymbol
+            ios_icon_name="person.crop.circle.badge.xmark"
+            android_material_icon_name="badge"
+            size={80}
+            color={colors.textSecondary}
+          />
+          <Text style={styles.emptyStateTitle}>Aucune Carte de Membre</Text>
+          <Text style={styles.emptyStateText}>
+            Vous devez d&apos;abord vous inscrire pour obtenir votre carte de membre.
+          </Text>
+          <TouchableOpacity
+            style={styles.registerButton}
+            onPress={() => router.push('/member/register')}
+            activeOpacity={0.8}
+          >
+            <IconSymbol
+              ios_icon_name="person.badge.plus"
+              android_material_icon_name="person-add"
+              size={20}
+              color={colors.background}
+            />
+            <Text style={styles.registerButtonText}>S&apos;inscrire Maintenant</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Modal
+          visible={modalVisible}
+          title={modalTitle}
+          message={modalMessage}
+          type="info"
+          onClose={() => {
+            setModalVisible(false);
+            router.back();
+          }}
         />
-        <Text style={styles.errorText}>Aucune carte de membre trouvée</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => router.push('/member/register')}
-        >
-          <Text style={styles.retryButtonText}>S&apos;inscrire</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -159,19 +197,16 @@ export default function MemberCardScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Carte de Membre',
+          title: 'Ma Carte de Membre',
           headerShown: true,
+          headerBackTitle: 'Retour',
         }}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
-      >
-        {/* Digital Member Card */}
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+        {/* Member Card */}
         <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            {/* Card Header */}
+          <View style={[styles.memberCard, { borderTopColor: statusColor }]}>
             <View style={styles.cardHeader}>
               <Image
                 source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
@@ -179,52 +214,53 @@ export default function MemberCardScreen() {
                 resizeMode="contain"
               />
               <View style={styles.cardHeaderText}>
-                <Text style={styles.cardTitle}>A.R.M</Text>
-                <Text style={styles.cardSubtitle}>Carte de Membre</Text>
+                <Text style={styles.cardPartyName}>A.R.M</Text>
+                <Text style={styles.cardPartySubtitle}>Alliance pour le Rassemblement Malien</Text>
               </View>
             </View>
 
-            {/* Member Info */}
             <View style={styles.cardBody}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Nom</Text>
-                <Text style={styles.infoValue}>{memberData.fullName}</Text>
+              <View style={styles.cardField}>
+                <Text style={styles.cardLabel}>Nom</Text>
+                <Text style={styles.cardValue}>{memberData.fullName}</Text>
               </View>
 
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>N° Membre</Text>
-                <Text style={styles.infoValueBold}>{memberData.membershipNumber}</Text>
+              <View style={styles.cardField}>
+                <Text style={styles.cardLabel}>Numéro de Membre</Text>
+                <Text style={styles.cardValueHighlight}>{memberData.membershipNumber}</Text>
               </View>
 
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Commune</Text>
-                <Text style={styles.infoValue}>{memberData.commune}</Text>
+              <View style={styles.cardRow}>
+                <View style={[styles.cardField, { flex: 1 }]}>
+                  <Text style={styles.cardLabel}>Commune</Text>
+                  <Text style={styles.cardValue}>{memberData.commune}</Text>
+                </View>
+
+                <View style={[styles.cardField, { flex: 1 }]}>
+                  <Text style={styles.cardLabel}>Profession</Text>
+                  <Text style={styles.cardValue}>{memberData.profession}</Text>
+                </View>
               </View>
 
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Profession</Text>
-                <Text style={styles.infoValue}>{memberData.profession}</Text>
-              </View>
-
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Statut</Text>
+              <View style={styles.cardField}>
+                <Text style={styles.cardLabel}>Statut</Text>
                 <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                   <Text style={styles.statusText}>{statusText}</Text>
                 </View>
               </View>
+
+              {memberData.qrCode && (
+                <View style={styles.qrCodeContainer}>
+                  <Image
+                    source={{ uri: memberData.qrCode }}
+                    style={styles.qrCode}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.qrCodeLabel}>Code QR de Membre</Text>
+                </View>
+              )}
             </View>
 
-            {/* QR Code */}
-            <View style={styles.qrCodeContainer}>
-              <Image
-                source={{ uri: memberData.qrCode }}
-                style={styles.qrCode}
-                resizeMode="contain"
-              />
-              <Text style={styles.qrCodeLabel}>Code QR de vérification</Text>
-            </View>
-
-            {/* Card Footer */}
             <View style={styles.cardFooter}>
               <Text style={styles.cardFooterText}>
                 Membre depuis {new Date(memberData.createdAt).toLocaleDateString('fr-FR')}
@@ -235,25 +271,18 @@ export default function MemberCardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.actionsSection}>
-          <Text style={styles.sectionTitle}>Actions Rapides</Text>
-
           <TouchableOpacity
             style={styles.actionButton}
             onPress={handlePayCotisation}
             activeOpacity={0.8}
           >
-            <View style={styles.actionIconContainer}>
-              <IconSymbol
-                ios_icon_name="creditcard.fill"
-                android_material_icon_name="payment"
-                size={24}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Payer ma Cotisation</Text>
-              <Text style={styles.actionSubtitle}>Mensuelle ou annuelle</Text>
-            </View>
+            <IconSymbol
+              ios_icon_name="creditcard.fill"
+              android_material_icon_name="payment"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.actionButtonText}>Payer ma Cotisation</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -267,18 +296,13 @@ export default function MemberCardScreen() {
             onPress={handleViewMessages}
             activeOpacity={0.8}
           >
-            <View style={styles.actionIconContainer}>
-              <IconSymbol
-                ios_icon_name="envelope.fill"
-                android_material_icon_name="email"
-                size={24}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Messages Internes</Text>
-              <Text style={styles.actionSubtitle}>Notifications du parti</Text>
-            </View>
+            <IconSymbol
+              ios_icon_name="envelope.fill"
+              android_material_icon_name="email"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.actionButtonText}>Mes Messages</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -292,18 +316,13 @@ export default function MemberCardScreen() {
             onPress={handleSubmitElectionResults}
             activeOpacity={0.8}
           >
-            <View style={styles.actionIconContainer}>
-              <IconSymbol
-                ios_icon_name="doc.text.fill"
-                android_material_icon_name="description"
-                size={24}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Module Sentinelle</Text>
-              <Text style={styles.actionSubtitle}>Soumettre résultats électoraux</Text>
-            </View>
+            <IconSymbol
+              ios_icon_name="checkmark.seal.fill"
+              android_material_icon_name="how-to-vote"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.actionButtonText}>Soumettre Résultats Électoraux</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -318,6 +337,7 @@ export default function MemberCardScreen() {
         visible={modalVisible}
         title={modalTitle}
         message={modalMessage}
+        type="info"
         onClose={() => setModalVisible(false)}
       />
     </View>
@@ -347,35 +367,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
-  errorContainer: {
+  emptyState: {
     flex: 1,
-    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 40,
+    paddingVertical: 60,
   },
-  errorText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginTop: 16,
-    marginBottom: 24,
+  emptyStateTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 24,
     textAlign: 'center',
   },
-  retryButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  retryButtonText: {
+  emptyStateText: {
     fontSize: 16,
-    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 12,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  registerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 32,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  registerButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: colors.background,
+    marginLeft: 8,
   },
   cardContainer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
-  card: {
+  memberCard: {
     backgroundColor: colors.card,
     borderRadius: 20,
     overflow: 'hidden',
@@ -384,6 +421,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 16,
     elevation: 8,
+    borderTopWidth: 4,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -392,71 +430,77 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   cardLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.background,
+    borderWidth: 2,
+    borderColor: colors.secondary,
   },
   cardHeaderText: {
+    flex: 1,
     marginLeft: 16,
   },
-  cardTitle: {
+  cardPartyName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: colors.background,
   },
-  cardSubtitle: {
-    fontSize: 14,
+  cardPartySubtitle: {
+    fontSize: 12,
     color: colors.background,
     marginTop: 2,
   },
   cardBody: {
     padding: 20,
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  cardField: {
+    marginBottom: 16,
   },
-  infoLabel: {
-    fontSize: 14,
+  cardRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  cardLabel: {
+    fontSize: 12,
     color: colors.textSecondary,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  cardValue: {
+    fontSize: 16,
+    color: colors.text,
     fontWeight: '500',
   },
-  infoValue: {
-    fontSize: 15,
-    color: colors.text,
-    fontWeight: '600',
-  },
-  infoValueBold: {
-    fontSize: 16,
+  cardValueHighlight: {
+    fontSize: 20,
     color: colors.primary,
     fontWeight: 'bold',
   },
   statusBadge: {
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 20,
   },
   statusText: {
     fontSize: 13,
-    color: '#FFFFFF',
+    color: colors.background,
     fontWeight: '600',
   },
   qrCodeContainer: {
     alignItems: 'center',
-    paddingVertical: 24,
-    backgroundColor: colors.backgroundAlt,
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   qrCode: {
-    width: 180,
-    height: 180,
-    backgroundColor: '#FFFFFF',
+    width: width * 0.5,
+    height: width * 0.5,
+    backgroundColor: colors.background,
     borderRadius: 12,
-    padding: 8,
   },
   qrCodeLabel: {
     fontSize: 13,
@@ -465,55 +509,35 @@ const styles = StyleSheet.create({
   },
   cardFooter: {
     backgroundColor: colors.backgroundAlt,
-    padding: 16,
+    padding: 12,
     alignItems: 'center',
   },
   cardFooterText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
   },
   actionsSection: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    marginTop: 24,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
   },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.backgroundAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  actionContent: {
+  actionButtonText: {
     flex: 1,
-  },
-  actionTitle: {
     fontSize: 16,
-    fontWeight: '600',
     color: colors.text,
-  },
-  actionSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
+    fontWeight: '500',
+    marginLeft: 12,
   },
 });

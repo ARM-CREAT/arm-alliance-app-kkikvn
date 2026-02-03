@@ -18,6 +18,7 @@ import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter } from "expo-router";
 import * as Haptics from 'expo-haptics';
+import { apiGet } from "@/utils/api";
 
 // Helper to resolve image sources
 function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
@@ -62,84 +63,36 @@ export default function HomeScreen() {
   const fadeAnim = useState(new Animated.Value(0))[0];
   const fabScale = useState(new Animated.Value(1))[0];
 
-  const loadNews = useCallback(async () => {
-    console.log('Loading news articles');
-    try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<NewsItem[]>('/api/news');
-      
-      if (error) {
-        console.error('Failed to load news:', error);
-        return;
-      }
-      
-      if (data) {
-        setNews(data);
-        console.log('Loaded', data.length, 'news articles');
-      }
-    } catch (error) {
-      console.error('Error loading news:', error);
-    }
-  }, []);
-
-  const loadEvents = useCallback(async () => {
-    console.log('Loading events');
-    try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<EventItem[]>('/api/events');
-      
-      if (error) {
-        console.error('Failed to load events:', error);
-        return;
-      }
-      
-      if (data) {
-        setEvents(data);
-        console.log('Loaded', data.length, 'events');
-      }
-    } catch (error) {
-      console.error('Error loading events:', error);
-    }
-  }, []);
-
-  const loadLeadership = useCallback(async () => {
-    console.log('Loading leadership members');
-    try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<LeadershipMember[]>('/api/leadership');
-      
-      if (error) {
-        console.error('Failed to load leadership:', error);
-        return;
-      }
-      
-      if (data) {
-        setLeadership(data);
-        console.log('Loaded', data.length, 'leadership members');
-      }
-    } catch (error) {
-      console.error('Error loading leadership:', error);
-    }
-  }, []);
-
   const loadAllData = useCallback(async () => {
-    await Promise.all([
-      loadNews(),
-      loadEvents(),
-      loadLeadership()
-    ]);
-    setLoading(false);
+    console.log('[HomeScreen] Loading all data');
     
-    // Fade in animation
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  }, [loadNews, loadEvents, loadLeadership, fadeAnim]);
+    try {
+      // Load all data in parallel
+      const [newsRes, eventsRes, leadershipRes] = await Promise.all([
+        apiGet<NewsItem[]>('/api/news'),
+        apiGet<EventItem[]>('/api/events'),
+        apiGet<LeadershipMember[]>('/api/leadership'),
+      ]);
+
+      if (Array.isArray(newsRes)) setNews(newsRes);
+      if (Array.isArray(eventsRes)) setEvents(eventsRes);
+      if (Array.isArray(leadershipRes)) setLeadership(leadershipRes);
+    } catch (error) {
+      console.error('[HomeScreen] Error loading data:', error);
+    } finally {
+      setLoading(false);
+      
+      // Fade in animation
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [fadeAnim]);
 
   useEffect(() => {
-    console.log('HomeScreen: Loading party data');
+    console.log('[HomeScreen] Component mounted, loading data');
     loadAllData();
   }, [loadAllData]);
 
