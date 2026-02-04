@@ -66,16 +66,18 @@ export const getAdminCredentials = async (): Promise<{ password: string; secretC
 };
 
 /**
- * Generic API call helper with error handling
+ * Generic API call helper with error handling and retry logic
  *
  * @param endpoint - API endpoint path (e.g., '/users', '/auth/login')
  * @param options - Fetch options (method, headers, body, etc.)
+ * @param retryCount - Number of retries (default: 2)
  * @returns Parsed JSON response
  * @throws Error if backend is not configured or request fails
  */
 export const apiCall = async <T = any>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit,
+  retryCount: number = 2
 ): Promise<T> => {
   if (!isBackendConfigured()) {
     throw new Error("Backend URL not configured. Please rebuild the app.");
@@ -84,63 +86,87 @@ export const apiCall = async <T = any>(
   const url = `${BACKEND_URL}${endpoint}`;
   console.log("[API] Calling:", url, options?.method || "GET");
 
-  try {
-    const fetchOptions: RequestInit = {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    };
+  let lastError: any = null;
 
-    console.log("[API] Fetch options:", JSON.stringify(fetchOptions, null, 2));
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`[API] Retry attempt ${attempt}/${retryCount}`);
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
 
-    // Always send the token if we have it (needed for cross-domain/iframe support)
-    const token = await getBearerToken();
-    if (token) {
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        Authorization: `Bearer ${token}`,
+      const fetchOptions: RequestInit = {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
       };
-    }
 
-    const response = await fetch(url, fetchOptions);
+      console.log("[API] Fetch options:", JSON.stringify(fetchOptions, null, 2));
 
-    if (!response.ok) {
-      let errorText = '';
-      try {
-        errorText = await response.text();
-      } catch (e) {
-        errorText = 'Unable to read error response';
+      // Always send the token if we have it (needed for cross-domain/iframe support)
+      const token = await getBearerToken();
+      if (token) {
+        fetchOptions.headers = {
+          ...fetchOptions.headers,
+          Authorization: `Bearer ${token}`,
+        };
       }
-      console.error("[API] Error response:", response.status, errorText);
-      
-      // Parse error message if it's JSON
-      let errorMessage = `Erreur ${response.status}`;
-      try {
-        const errorJson = JSON.parse(errorText);
-        errorMessage = errorJson.error || errorJson.message || errorMessage;
-      } catch (e) {
-        // Not JSON, use the text
-        if (errorText) {
-          errorMessage = errorText;
+
+      const response = await fetch(url, fetchOptions);
+
+      if (!response.ok) {
+        let errorText = '';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          errorText = 'Unable to read error response';
         }
+        console.error("[API] Error response:", response.status, errorText);
+        
+        // Parse error message if it's JSON
+        let errorMessage = `Erreur ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorJson.message || errorMessage;
+        } catch (e) {
+          // Not JSON, use the text
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      console.log("[API] Success:", data);
+      return data;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`[API] Request failed (attempt ${attempt + 1}/${retryCount + 1}):`, error);
+      
+      // Don't retry on authentication errors (401, 403)
+      if (error.message?.includes('401') || error.message?.includes('403') || error.message?.includes('Unauthorized')) {
+        throw error;
       }
       
-      throw new Error(errorMessage);
+      // Continue to next retry attempt
+      if (attempt < retryCount) {
+        continue;
+      }
     }
-
-    const data = await response.json();
-    console.log("[API] Success:", data);
-    return data;
-  } catch (error: any) {
-    console.error("[API] Request failed:", error);
-    // Re-throw with a more user-friendly message if it's a network error
-    if (error.message === 'Failed to fetch' || error.message === 'Network request failed') {
-      throw new Error("Erreur de connexion au serveur. Vérifiez votre connexion internet.");
-    }
-    throw error;
   }
+
+  // All retries failed
+  console.error("[API] All retry attempts failed");
+  // Re-throw with a more user-friendly message if it's a network error
+  if (lastError?.message === 'Failed to fetch' || lastError?.message === 'Network request failed' || lastError?.name === 'TypeError') {
+    throw new Error("Impossible de se connecter au serveur. Vérifiez votre connexion internet ou réessayez plus tard.");
+  }
+  throw lastError;
 };
 
 /**

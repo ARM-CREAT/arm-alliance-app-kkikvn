@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,17 +17,48 @@ import { Modal } from '@/components/ui/Modal';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { adminGet } from '@/utils/api';
+import { adminGet, BACKEND_URL, isBackendConfigured } from '@/utils/api';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('');
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+
+  useEffect(() => {
+    checkBackendConnection();
+  }, []);
+
+  const checkBackendConnection = async () => {
+    console.log('[AdminLogin] Checking backend connection...');
+    console.log('[AdminLogin] Backend URL:', BACKEND_URL);
+    console.log('[AdminLogin] Backend configured:', isBackendConfigured());
+    
+    if (!isBackendConfigured()) {
+      setBackendStatus('offline');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/health`, { method: 'GET' });
+      if (response.ok) {
+        console.log('[AdminLogin] Backend is online');
+        setBackendStatus('online');
+      } else {
+        console.log('[AdminLogin] Backend returned error:', response.status);
+        setBackendStatus('offline');
+      }
+    } catch (error) {
+      console.error('[AdminLogin] Backend connection failed:', error);
+      setBackendStatus('offline');
+    }
+  };
 
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
     setModalTitle(title);
@@ -44,6 +75,31 @@ export default function AdminLoginScreen() {
   const handleLogin = async () => {
     console.log('Admin login attempt with password:', password ? '***' : '(empty)');
     
+    // Check backend status first
+    if (backendStatus === 'offline') {
+      if (Platform.OS === 'ios') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+      showModal(
+        'Serveur hors ligne', 
+        'Le serveur est actuellement hors ligne ou en cours de redémarrage. Veuillez patienter quelques instants et réessayer.', 
+        'error'
+      );
+      return;
+    }
+
+    if (backendStatus === 'checking') {
+      if (Platform.OS === 'ios') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+      showModal(
+        'Vérification en cours', 
+        'Veuillez patienter pendant que nous vérifions la connexion au serveur.', 
+        'warning'
+      );
+      return;
+    }
+    
     const trimmedPassword = password.trim();
     
     if (!trimmedPassword) {
@@ -55,6 +111,7 @@ export default function AdminLoginScreen() {
     }
 
     setLoading(true);
+    setConnectionStatus('Connexion au serveur...');
     console.log('Verifying admin credentials...');
 
     try {
@@ -69,11 +126,13 @@ export default function AdminLoginScreen() {
       }
 
       console.log('Admin credentials stored, verifying with backend...');
+      setConnectionStatus('Vérification des identifiants...');
       
       // Verify credentials by making a test API call
       try {
         const result = await adminGet('/api/admin/analytics');
         console.log('Admin credentials verified successfully:', result);
+        setConnectionStatus('Connexion réussie !');
       } catch (error: any) {
         console.error('Admin verification failed:', error);
         console.error('Error details:', {
@@ -92,10 +151,10 @@ export default function AdminLoginScreen() {
         
         // Provide specific error message
         const errorMsg = error?.message || 'Erreur de connexion';
-        if (errorMsg.includes('403') || errorMsg.includes('Invalid') || errorMsg.includes('Missing')) {
+        if (errorMsg.includes('403') || errorMsg.includes('Invalid') || errorMsg.includes('Missing') || errorMsg.includes('Unauthorized')) {
           throw new Error('Mot de passe incorrect. Le mot de passe par défaut est: admin123');
-        } else if (errorMsg.includes('connexion') || errorMsg.includes('Network') || errorMsg.includes('fetch')) {
-          throw new Error('Impossible de se connecter au serveur. Vérifiez votre connexion internet.');
+        } else if (errorMsg.includes('connexion') || errorMsg.includes('Network') || errorMsg.includes('fetch') || errorMsg.includes('Impossible')) {
+          throw new Error('Impossible de se connecter au serveur. Le serveur est peut-être en cours de redémarrage. Veuillez patienter 30 secondes et réessayer.');
         } else {
           throw new Error(errorMsg);
         }
@@ -124,6 +183,7 @@ export default function AdminLoginScreen() {
       showModal('Erreur', errorMessage, 'error');
     } finally {
       setLoading(false);
+      setConnectionStatus('');
     }
   };
 
@@ -184,6 +244,49 @@ export default function AdminLoginScreen() {
             </Text>
           </View>
 
+          {backendStatus === 'checking' ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.statusText}>Vérification de la connexion au serveur...</Text>
+            </View>
+          ) : null}
+
+          {backendStatus === 'offline' ? (
+            <View style={[styles.statusBox, styles.statusBoxOffline]}>
+              <IconSymbol
+                ios_icon_name="exclamationmark.triangle.fill"
+                android_material_icon_name="warning"
+                size={20}
+                color={colors.error}
+              />
+              <View style={styles.statusTextContainer}>
+                <Text style={styles.statusTextOffline}>Serveur hors ligne</Text>
+                <Text style={styles.statusSubtext}>
+                  Le serveur est en cours de redémarrage. Veuillez patienter 30 secondes et réessayer.
+                </Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={checkBackendConnection}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.retryButtonText}>Réessayer</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {backendStatus === 'online' ? (
+            <View style={[styles.statusBox, styles.statusBoxOnline]}>
+              <IconSymbol
+                ios_icon_name="checkmark.circle.fill"
+                android_material_icon_name="check-circle"
+                size={20}
+                color={colors.success}
+              />
+              <Text style={styles.statusTextOnline}>Serveur en ligne</Text>
+            </View>
+          ) : null}
+
           <View style={styles.form}>
             <Text style={styles.label}>Mot de passe administrateur</Text>
             <View style={styles.passwordContainer}>
@@ -215,13 +318,18 @@ export default function AdminLoginScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[styles.button, (loading || backendStatus !== 'online') && styles.buttonDisabled]}
               onPress={handleLogin}
-              disabled={loading}
+              disabled={loading || backendStatus !== 'online'}
               activeOpacity={0.7}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="#fff" />
+                  {connectionStatus ? (
+                    <Text style={styles.loadingText}>{connectionStatus}</Text>
+                  ) : null}
+                </View>
               ) : (
                 <Text style={styles.buttonText}>Se connecter</Text>
               )}
@@ -387,6 +495,72 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 14,
+    marginTop: 8,
+  },
+  statusBox: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    gap: 12,
+  },
+  statusBoxOnline: {
+    backgroundColor: '#D4EDDA',
+    borderColor: colors.success,
+  },
+  statusBoxOffline: {
+    backgroundColor: '#F8D7DA',
+    borderColor: colors.error,
+    alignItems: 'flex-start',
+  },
+  statusText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  statusTextContainer: {
+    flex: 1,
+  },
+  statusTextOnline: {
+    fontSize: 14,
+    color: '#155724',
+    fontWeight: '600',
+  },
+  statusTextOffline: {
+    fontSize: 14,
+    color: '#721C24',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  statusSubtext: {
+    fontSize: 12,
+    color: '#721C24',
+    lineHeight: 16,
+    marginBottom: 8,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignSelf: 'flex-start',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   publicAccessBox: {
     flexDirection: 'row',
