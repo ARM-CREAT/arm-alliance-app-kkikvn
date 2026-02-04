@@ -21,9 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function AdminLoginScreen() {
   const router = useRouter();
   const [password, setPassword] = useState('');
-  const [secretCode, setSecretCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showSecretCode, setShowSecretCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -42,16 +40,10 @@ export default function AdminLoginScreen() {
     setShowPassword(!showPassword);
   };
 
-  const toggleSecretCodeVisibility = () => {
-    console.log('User toggled secret code visibility');
-    setShowSecretCode(!showSecretCode);
-  };
-
   const handleLogin = async () => {
     console.log('Admin login attempt');
     
     const trimmedPassword = password.trim();
-    const trimmedSecretCode = secretCode.trim();
     
     if (!trimmedPassword) {
       if (Platform.OS === 'ios') {
@@ -61,25 +53,18 @@ export default function AdminLoginScreen() {
       return;
     }
 
-    if (!trimmedSecretCode) {
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-      showModal('Erreur', 'Veuillez entrer le code secret', 'error');
-      return;
-    }
-
     setLoading(true);
     console.log('Verifying admin credentials...');
 
     try {
       // Store the admin credentials for authenticated requests
+      // Using the same password for both fields to simplify
       await AsyncStorage.setItem('admin_password', trimmedPassword);
-      await AsyncStorage.setItem('admin_secret_code', trimmedSecretCode);
+      await AsyncStorage.setItem('admin_secret_code', trimmedPassword);
       
       if (Platform.OS === 'web') {
         localStorage.setItem('admin_password', trimmedPassword);
-        localStorage.setItem('admin_secret_code', trimmedSecretCode);
+        localStorage.setItem('admin_secret_code', trimmedPassword);
       }
 
       console.log('Admin credentials stored, navigating to dashboard');
@@ -145,9 +130,8 @@ export default function AdminLoginScreen() {
               color={colors.primary}
             />
             <Text style={styles.infoText}>
-              Identifiants par défaut:{'\n'}
-              Mot de passe: admin123{'\n'}
-              Code secret: arm2024secure
+              Un seul mot de passe pour accéder à l&apos;espace administrateur.{'\n'}
+              Mot de passe par défaut: admin123
             </Text>
           </View>
 
@@ -163,7 +147,8 @@ export default function AdminLoginScreen() {
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
-                returnKeyType="next"
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
                 editable={!loading}
               />
               <TouchableOpacity
@@ -174,35 +159,6 @@ export default function AdminLoginScreen() {
                 <IconSymbol
                   ios_icon_name={showPassword ? "eye.slash.fill" : "eye.fill"}
                   android_material_icon_name={showPassword ? "visibility-off" : "visibility"}
-                  size={24}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>Code secret</Text>
-            <View style={styles.passwordContainer}>
-              <TextInput
-                style={styles.passwordInput}
-                placeholder="Entrez le code secret"
-                placeholderTextColor={colors.textSecondary}
-                value={secretCode}
-                onChangeText={setSecretCode}
-                secureTextEntry={!showSecretCode}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="done"
-                onSubmitEditing={handleLogin}
-                editable={!loading}
-              />
-              <TouchableOpacity
-                style={styles.eyeButton}
-                onPress={toggleSecretCodeVisibility}
-                activeOpacity={0.7}
-              >
-                <IconSymbol
-                  ios_icon_name={showSecretCode ? "eye.slash.fill" : "eye.fill"}
-                  android_material_icon_name={showSecretCode ? "visibility-off" : "visibility"}
                   size={24}
                   color={colors.textSecondary}
                 />

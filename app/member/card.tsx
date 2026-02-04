@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -18,6 +19,9 @@ import * as Haptics from 'expo-haptics';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedGet } from '@/utils/api';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 
 interface MemberData {
   id: string;
@@ -32,12 +36,15 @@ interface MemberData {
 }
 
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - 40;
+const CARD_HEIGHT = (CARD_WIDTH * 638) / 1013; // Aspect ratio from the image
 
 export default function MemberCardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const [memberData, setMemberData] = useState<MemberData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
@@ -53,13 +60,12 @@ export default function MemberCardScreen() {
     setLoading(true);
 
     try {
-      // If user is authenticated, use their profile
       if (user) {
-        const response = await authenticatedGet<{ member?: MemberData }>('/api/members/me');
+        const response = await authenticatedGet<MemberData>('/api/members/me');
         
-        if (response.member) {
-          setMemberData(response.member);
-          console.log('[MemberCard] Member data loaded:', response.member);
+        if (response) {
+          setMemberData(response);
+          console.log('[MemberCard] Member data loaded:', response);
         } else {
           showModal(
             'Aucune Carte',
@@ -67,7 +73,6 @@ export default function MemberCardScreen() {
           );
         }
       } else {
-        // For non-authenticated users, show registration prompt
         showModal(
           'Inscription Requise',
           'Veuillez vous inscrire pour obtenir votre carte de membre.'
@@ -87,6 +92,68 @@ export default function MemberCardScreen() {
   useEffect(() => {
     loadMemberCard();
   }, [loadMemberCard]);
+
+  const handleDownloadCard = async () => {
+    console.log('[MemberCard] User tapped Download Card');
+    
+    if (!memberData) {
+      showModal('Erreur', 'Aucune carte à télécharger');
+      return;
+    }
+
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    setDownloading(true);
+
+    try {
+      // Request permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      
+      if (status !== 'granted') {
+        showModal(
+          'Permission Requise',
+          'Veuillez autoriser l\'accès à la galerie pour télécharger votre carte.'
+        );
+        setDownloading(false);
+        return;
+      }
+
+      // For now, we'll share the card image URL
+      // In a production app, you would generate a custom card image with the member's data
+      const cardImageUrl = require('@/assets/images/0be5c379-285b-4791-9ed0-c19c441eb117.png');
+      
+      // Check if sharing is available
+      const isAvailable = await Sharing.isAvailableAsync();
+      
+      if (isAvailable) {
+        // Share the card
+        await Sharing.shareAsync(cardImageUrl, {
+          mimeType: 'image/png',
+          dialogTitle: 'Télécharger votre carte de membre',
+        });
+        
+        showModal(
+          'Succès',
+          'Votre carte de membre a été partagée avec succès!'
+        );
+      } else {
+        showModal(
+          'Non Disponible',
+          'Le partage n\'est pas disponible sur cet appareil.'
+        );
+      }
+    } catch (error: any) {
+      console.error('[MemberCard] Error downloading card:', error);
+      showModal(
+        'Erreur',
+        'Impossible de télécharger la carte. Veuillez réessayer.'
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const handlePayCotisation = () => {
     console.log('[MemberCard] User tapped Pay Cotisation');
@@ -128,6 +195,14 @@ export default function MemberCardScreen() {
       suspended: 'Suspendu',
     };
     return statusTextMap[status] || status;
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   if (loading) {
@@ -192,6 +267,12 @@ export default function MemberCardScreen() {
 
   const statusColor = getStatusColor(memberData.status);
   const statusText = getStatusText(memberData.status);
+  const formattedDate = formatDate(memberData.createdAt);
+
+  // Split full name into first name and last name
+  const nameParts = memberData.fullName.split(' ');
+  const lastName = nameParts[0] || '';
+  const firstName = nameParts.slice(1).join(' ') || '';
 
   return (
     <View style={styles.container}>
@@ -204,67 +285,64 @@ export default function MemberCardScreen() {
       />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {/* Member Card */}
+        {/* Member Card with Background Image */}
         <View style={styles.cardContainer}>
-          <View style={[styles.memberCard, { borderTopColor: statusColor }]}>
-            <View style={styles.cardHeader}>
-              <Image
-                source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
-                style={styles.cardLogo}
-                resizeMode="contain"
-              />
-              <View style={styles.cardHeaderText}>
-                <Text style={styles.cardPartyName}>A.R.M</Text>
-                <Text style={styles.cardPartySubtitle}>Alliance pour le Rassemblement Malien</Text>
+          <View style={styles.memberCard}>
+            <Image
+              source={require('@/assets/images/0be5c379-285b-4791-9ed0-c19c441eb117.png')}
+              style={styles.cardBackground}
+              resizeMode="cover"
+            />
+            
+            {/* Overlay with member data */}
+            <View style={styles.cardOverlay}>
+              {/* Name fields */}
+              <View style={styles.nameContainer}>
+                <Text style={styles.cardDataText}>{lastName}</Text>
+              </View>
+              
+              <View style={styles.firstNameContainer}>
+                <Text style={styles.cardDataText}>{firstName}</Text>
+              </View>
+              
+              {/* Membership number */}
+              <View style={styles.membershipNumberContainer}>
+                <Text style={styles.cardDataText}>{memberData.membershipNumber}</Text>
+              </View>
+              
+              {/* Date */}
+              <View style={styles.dateContainer}>
+                <Text style={styles.cardDataText}>{formattedDate}</Text>
               </View>
             </View>
+          </View>
 
-            <View style={styles.cardBody}>
-              <View style={styles.cardField}>
-                <Text style={styles.cardLabel}>Nom</Text>
-                <Text style={styles.cardValue}>{memberData.fullName}</Text>
-              </View>
+          {/* Download Button */}
+          <TouchableOpacity
+            style={[styles.downloadButton, downloading && styles.downloadButtonDisabled]}
+            onPress={handleDownloadCard}
+            disabled={downloading}
+            activeOpacity={0.8}
+          >
+            {downloading ? (
+              <ActivityIndicator color={colors.background} size="small" />
+            ) : (
+              <>
+                <IconSymbol
+                  ios_icon_name="arrow.down.circle.fill"
+                  android_material_icon_name="download"
+                  size={24}
+                  color={colors.background}
+                />
+                <Text style={styles.downloadButtonText}>Télécharger ma carte</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
-              <View style={styles.cardField}>
-                <Text style={styles.cardLabel}>Numéro de Membre</Text>
-                <Text style={styles.cardValueHighlight}>{memberData.membershipNumber}</Text>
-              </View>
-
-              <View style={styles.cardRow}>
-                <View style={[styles.cardField, { flex: 1 }]}>
-                  <Text style={styles.cardLabel}>Commune</Text>
-                  <Text style={styles.cardValue}>{memberData.commune}</Text>
-                </View>
-
-                <View style={[styles.cardField, { flex: 1 }]}>
-                  <Text style={styles.cardLabel}>Profession</Text>
-                  <Text style={styles.cardValue}>{memberData.profession}</Text>
-                </View>
-              </View>
-
-              <View style={styles.cardField}>
-                <Text style={styles.cardLabel}>Statut</Text>
-                <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-                  <Text style={styles.statusText}>{statusText}</Text>
-                </View>
-              </View>
-
-              {memberData.qrCode && (
-                <View style={styles.qrCodeContainer}>
-                  <Image
-                    source={{ uri: memberData.qrCode }}
-                    style={styles.qrCode}
-                    resizeMode="contain"
-                  />
-                  <Text style={styles.qrCodeLabel}>Code QR de Membre</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.cardFooter}>
-              <Text style={styles.cardFooterText}>
-                Membre depuis {new Date(memberData.createdAt).toLocaleDateString('fr-FR')}
-              </Text>
+          {/* Status Badge */}
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+              <Text style={styles.statusText}>Statut: {statusText}</Text>
             </View>
           </View>
         </View>
@@ -322,7 +400,7 @@ export default function MemberCardScreen() {
               size={24}
               color={colors.primary}
             />
-            <Text style={styles.actionButtonText}>Soumettre Résultats Électoraux</Text>
+            <Text style={styles.actionButtonText}>Vérification Électorale</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -413,108 +491,92 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   memberCard: {
-    backgroundColor: colors.card,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 16,
-    elevation: 8,
-    borderTopWidth: 4,
+    elevation: 10,
   },
-  cardHeader: {
+  cardBackground: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  cardOverlay: {
+    flex: 1,
+    padding: 20,
+  },
+  nameContainer: {
+    position: 'absolute',
+    left: 180,
+    top: 290,
+    width: 200,
+  },
+  firstNameContainer: {
+    position: 'absolute',
+    left: 180,
+    top: 330,
+    width: 200,
+  },
+  membershipNumberContainer: {
+    position: 'absolute',
+    left: 180,
+    top: 370,
+    width: 200,
+  },
+  dateContainer: {
+    position: 'absolute',
+    left: 180,
+    top: 410,
+    width: 200,
+  },
+  cardDataText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000000',
+    textTransform: 'uppercase',
+  },
+  downloadButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.primary,
-    padding: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 20,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  cardLogo: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.background,
-    borderWidth: 2,
-    borderColor: colors.secondary,
+  downloadButtonDisabled: {
+    opacity: 0.6,
   },
-  cardHeaderText: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  cardPartyName: {
-    fontSize: 24,
+  downloadButtonText: {
+    fontSize: 17,
     fontWeight: 'bold',
     color: colors.background,
+    marginLeft: 12,
   },
-  cardPartySubtitle: {
-    fontSize: 12,
-    color: colors.background,
-    marginTop: 2,
-  },
-  cardBody: {
-    padding: 20,
-  },
-  cardField: {
-    marginBottom: 16,
-  },
-  cardRow: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  cardLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  cardValue: {
-    fontSize: 16,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  cardValueHighlight: {
-    fontSize: 20,
-    color: colors.primary,
-    fontWeight: 'bold',
+  statusContainer: {
+    alignItems: 'center',
+    marginTop: 16,
   },
   statusBadge: {
-    alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     borderRadius: 20,
   },
   statusText: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.background,
     fontWeight: '600',
-  },
-  qrCodeContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  qrCode: {
-    width: width * 0.5,
-    height: width * 0.5,
-    backgroundColor: colors.background,
-    borderRadius: 12,
-  },
-  qrCodeLabel: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 12,
-  },
-  cardFooter: {
-    backgroundColor: colors.backgroundAlt,
-    padding: 12,
-    alignItems: 'center',
-  },
-  cardFooterText: {
-    fontSize: 12,
-    color: colors.textSecondary,
   },
   actionsSection: {
     paddingHorizontal: 20,
