@@ -127,6 +127,21 @@ export default function AdminLoginScreen() {
         const result = await adminGet('/api/admin/analytics');
         console.log('Admin credentials verified successfully:', result);
         setConnectionStatus('Connexion réussie !');
+        
+        if (Platform.OS === 'ios') {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+
+        showModal(
+          'Succès', 
+          'Connexion réussie ! Bienvenue dans l\'espace administrateur.', 
+          'success'
+        );
+        
+        // Navigate after a short delay to show success message
+        setTimeout(() => {
+          router.replace('/admin/dashboard');
+        }, 1000);
       } catch (error: any) {
         console.error('Admin verification failed:', error);
         console.error('Error details:', {
@@ -140,29 +155,14 @@ export default function AdminLoginScreen() {
         
         // Provide specific error message
         const errorMsg = error?.message || 'Erreur de connexion';
-        if (errorMsg.includes('403') || errorMsg.includes('Invalid') || errorMsg.includes('Missing') || errorMsg.includes('Unauthorized')) {
+        if (errorMsg.includes('403') || errorMsg.includes('Invalid') || errorMsg.includes('Missing') || errorMsg.includes('Unauthorized') || errorMsg.includes('401')) {
           throw new Error('Mot de passe incorrect. Le mot de passe par défaut est: admin123');
-        } else if (errorMsg.includes('connexion') || errorMsg.includes('Network') || errorMsg.includes('fetch') || errorMsg.includes('Impossible')) {
+        } else if (errorMsg.includes('connexion') || errorMsg.includes('Network') || errorMsg.includes('fetch') || errorMsg.includes('Impossible') || errorMsg.includes('CORS')) {
           throw new Error('Impossible de se connecter au serveur. Le serveur est peut-être en cours de redémarrage. Veuillez patienter 30 secondes et réessayer.');
         } else {
           throw new Error(errorMsg);
         }
       }
-      
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      showModal(
-        'Succès', 
-        'Connexion réussie ! Bienvenue dans l\'espace administrateur.', 
-        'success'
-      );
-      
-      // Navigate after a short delay to show success message
-      setTimeout(() => {
-        router.replace('/admin/dashboard');
-      }, 1000);
     } catch (error: any) {
       console.error('Admin login error:', error);
       if (Platform.OS === 'ios') {

@@ -2,9 +2,11 @@
 # 🚀 Quick Start Guide - Member Management System
 
 ## Prerequisites
-- Backend is deployed at: `https://9jhxnf8kze6atkt4nns335jz9jc2wdkb.app.specular.dev`
+- Backend is deployed at: `https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev`
 - Authentication is configured (Better Auth with email/password + Google + Apple OAuth)
+- Admin authentication is configured (Custom headers with password: `admin123`)
 - All member management endpoints are live
+- CORS is properly configured for admin authentication headers
 
 ---
 
@@ -52,10 +54,22 @@ The admin authentication system has been successfully integrated and is now work
 - **Conference Management** - Manage video conferences
 
 #### Technical Details:
-The admin authentication uses a **dual-header verification** system:
-1. Frontend stores `admin_password` and `admin_secret_code` in AsyncStorage/localStorage
-2. API layer sends both `x-admin-password` and `x-admin-secret` headers with every admin request
-3. Backend verifies that BOTH headers match the `ADMIN_PASSWORD` environment variable
+The admin authentication uses a **custom header verification** system:
+1. Frontend stores `admin_password` and `admin_secret_code` in AsyncStorage (native) or localStorage (web)
+2. API layer (`utils/api.ts`) automatically injects `x-admin-password` and `x-admin-secret` headers with every admin request
+3. Backend middleware (`verifyAdminAuth`) validates headers against `ADMIN_PASSWORD` environment variable
+4. CORS is configured to allow these custom headers across all platforms (Web, iOS, Android)
+
+**Admin API Functions:**
+- `adminGet(endpoint)` - GET request with admin headers
+- `adminPost(endpoint, data)` - POST request with admin headers
+- `adminPut(endpoint, data)` - PUT request with admin headers
+- `adminDelete(endpoint)` - DELETE request with admin headers
+
+**Credential Management:**
+- `setAdminCredentials(password, secretCode)` - Store admin credentials
+- `getAdminCredentials()` - Retrieve admin credentials
+- `clearAdminCredentials()` - Clear admin credentials (logout)
 
 ---
 

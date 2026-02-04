@@ -7,6 +7,134 @@ The comprehensive member management system has been successfully integrated into
 
 ---
 
+## 🔐 ADMIN AUTHENTICATION SYSTEM
+
+### 🔑 Admin Password
+**Password:** `admin123`
+
+This is the **ONLY** password needed to access the admin panel. It is configured in the backend environment variable `ADMIN_PASSWORD`.
+
+### How Admin Authentication Works
+
+1. **Login Flow** (`/admin/login`):
+   - Admin enters password: `admin123`
+   - Frontend stores credentials in AsyncStorage (native) or localStorage (web)
+   - Credentials are automatically added to all admin API requests as headers
+
+2. **Authentication Headers**:
+   All admin API calls include these custom headers:
+   - `x-admin-password`: The admin password
+   - `x-admin-secret`: The admin password (same value)
+
+3. **Backend Verification**:
+   - Backend middleware (`verifyAdminAuth`) validates headers
+   - If valid → Admin operations allowed
+   - If invalid → Returns 403 Forbidden
+
+### Admin API Functions
+
+The `utils/api.ts` provides dedicated admin functions that automatically inject auth headers:
+
+```typescript
+// Admin API calls (auto-inject admin headers)
+adminGet(endpoint)        // GET with admin auth
+adminPost(endpoint, data) // POST with admin auth
+adminPut(endpoint, data)  // PUT with admin auth
+adminDelete(endpoint)     // DELETE with admin auth
+```
+
+### Admin Credential Management
+
+```typescript
+// Store admin credentials
+await setAdminCredentials(password, secretCode);
+
+// Retrieve admin credentials
+const creds = await getAdminCredentials();
+// Returns: { password: string, secretCode: string } | null
+
+// Clear admin credentials (logout)
+await clearAdminCredentials();
+```
+
+### Admin Dashboard Features
+
+Once logged in with `admin123`, admins can access:
+
+1. **Analytics Dashboard** (`/admin/dashboard`)
+   - Total members, donations, messages
+   - Recent activity feed
+   - Quick navigation to all management screens
+
+2. **Content Management**:
+   - **News** (`/admin/manage-news-full`): Create, edit, delete articles
+   - **Events** (`/admin/manage-events`): Manage upcoming events
+   - **Leadership** (`/admin/manage-leadership`): Manage party leadership
+   - **Program** (`/admin/manage-program`): Edit political program
+
+3. **Member Management** (`/admin/manage-members`):
+   - View all registered members
+   - Approve/suspend members
+   - Change roles (militant, collecteur, superviseur, administrateur)
+   - Search and filter by status
+
+4. **Member Registry** (`/admin/member-registry`):
+   - Complete member database
+   - Export member data
+
+5. **Election Verification** (`/admin/election-verification`):
+   - Verify election results from militants
+   - Approve/reject submissions
+
+6. **Media Upload** (`/admin/media-upload`):
+   - Upload photos, videos, documents
+   - Manage media library
+
+7. **Messaging** (`/admin/send-message`):
+   - Send targeted messages to members
+   - Filter by role, region, cercle, commune
+
+### CORS Configuration
+
+The backend CORS is properly configured to allow admin authentication:
+- **Allowed Headers**: `x-admin-password`, `x-admin-secret`, `Content-Type`, `Authorization`
+- **Exposed Headers**: `x-admin-password`, `x-admin-secret`
+- **Credentials**: `true`
+- **Methods**: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`
+
+This ensures admin headers work across all platforms (Web, iOS, Android).
+
+### Security Notes
+
+⚠️ **IMPORTANT**: For production deployment:
+
+1. **Change the Password**: Update `ADMIN_PASSWORD` environment variable
+2. **Use Strong Password**: At least 16 characters, mixed case, numbers, symbols
+3. **Consider Multi-Admin**: Implement individual admin accounts
+4. **Add 2FA**: Consider two-factor authentication
+5. **Audit Logs**: Track admin actions
+
+### Testing Admin Features
+
+1. **Login as Admin**:
+   ```
+   Navigate to: /admin/login
+   Password: admin123
+   ```
+
+2. **Test Admin Operations**:
+   - Create a news article
+   - Create an event
+   - Approve a member
+   - Send a message
+   - View analytics
+
+3. **Verify Authentication**:
+   - Logout and try accessing admin routes (should redirect to login)
+   - Login again and verify session persistence
+
+---
+
 ## 🔐 Authentication Setup
 
 **Status:** ✅ Already configured via `setup_auth` tool
