@@ -59,25 +59,51 @@ export default function HomeScreen() {
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fadeAnim = useState(new Animated.Value(0))[0];
   const fabScale = useState(new Animated.Value(1))[0];
 
   const loadAllData = useCallback(async () => {
     console.log('[HomeScreen] Loading all data (PUBLIC - no authentication required)');
+    setError(null);
     
     try {
-      // Load all data in parallel
-      const [newsRes, eventsRes, leadershipRes] = await Promise.all([
+      // Load all data in parallel with individual error handling
+      const results = await Promise.allSettled([
         apiGet<NewsItem[]>('/api/news'),
         apiGet<EventItem[]>('/api/events'),
         apiGet<LeadershipMember[]>('/api/leadership'),
       ]);
 
-      if (Array.isArray(newsRes)) setNews(newsRes);
-      if (Array.isArray(eventsRes)) setEvents(eventsRes);
-      if (Array.isArray(leadershipRes)) setLeadership(leadershipRes);
-    } catch (error) {
+      // Handle news
+      if (results[0].status === 'fulfilled' && Array.isArray(results[0].value)) {
+        setNews(results[0].value);
+      } else {
+        console.error('[HomeScreen] Failed to load news:', results[0]);
+      }
+
+      // Handle events
+      if (results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
+        setEvents(results[1].value);
+      } else {
+        console.error('[HomeScreen] Failed to load events:', results[1]);
+      }
+
+      // Handle leadership
+      if (results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
+        setLeadership(results[2].value);
+      } else {
+        console.error('[HomeScreen] Failed to load leadership:', results[2]);
+      }
+
+      // Check if all failed
+      const allFailed = results.every(r => r.status === 'rejected');
+      if (allFailed) {
+        setError('Impossible de charger les données. Vérifiez votre connexion.');
+      }
+    } catch (error: any) {
       console.error('[HomeScreen] Error loading data:', error);
+      setError(error.message || 'Une erreur est survenue');
     } finally {
       setLoading(false);
       
@@ -176,442 +202,462 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
-      </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Chargement...</Text>
+        </View>
+      </>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView 
-        style={styles.scrollView} 
-        contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
-        }
-      >
-        <Animated.View style={{ opacity: fadeAnim }}>
-          {/* Header avec logo */}
-          <View style={styles.header}>
-            <Image 
-              source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
-              style={styles.logo}
-              resizeMode="contain"
+      <View style={styles.container}>
+        <ScrollView 
+          style={styles.scrollView} 
+          contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
             />
-            <Text style={styles.partyName}>A.R.M</Text>
-            <Text style={styles.partyFullName}>Alliance pour le Rassemblement Malien</Text>
-            <View style={styles.mottoContainer}>
-              <View style={styles.mottoLine} />
-              <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
-              <View style={styles.mottoLine} />
-            </View>
-          </View>
+          }
+        >
+          <Animated.View style={{ opacity: fadeAnim }}>
+            {/* Error message */}
+            {error && (
+              <View style={styles.errorContainer}>
+                <IconSymbol 
+                  ios_icon_name="exclamationmark.triangle.fill" 
+                  android_material_icon_name="warning" 
+                  size={24} 
+                  color={colors.warning} 
+                />
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity onPress={loadAllData} style={styles.retryButton}>
+                  <Text style={styles.retryButtonText}>Réessayer</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-          {/* Idéologie du parti */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="book.fill" 
-                android_material_icon_name="menu-book" 
-                size={24} 
-                color={colors.primary} 
+            {/* Header avec logo */}
+            <View style={styles.header}>
+              <Image 
+                source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
+                style={styles.logo}
+                resizeMode="contain"
               />
-              <Text style={styles.sectionTitle}>Notre Idéologie</Text>
+              <Text style={styles.partyName}>A.R.M</Text>
+              <Text style={styles.partyFullName}>Alliance pour le Rassemblement Malien</Text>
+              <View style={styles.mottoContainer}>
+                <View style={styles.mottoLine} />
+                <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
+                <View style={styles.mottoLine} />
+              </View>
             </View>
-            <TouchableOpacity 
-              style={styles.ideologyCard} 
-              onPress={handleIdeology}
-              activeOpacity={0.8}
-            >
-              <View style={styles.ideologyContent}>
-                <Text style={styles.ideologyTitle}>Une vision, une force, une mission</Text>
-                <Text style={styles.ideologyText}>
-                  A.R.M est un mouvement politique enraciné dans les réalités du peuple malien, fondé sur la fraternité, la liberté et l&apos;égalité.
+
+            {/* Idéologie du parti */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol 
+                  ios_icon_name="book.fill" 
+                  android_material_icon_name="menu-book" 
+                  size={24} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.sectionTitle}>Notre Idéologie</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.ideologyCard} 
+                onPress={handleIdeology}
+                activeOpacity={0.8}
+              >
+                <View style={styles.ideologyContent}>
+                  <Text style={styles.ideologyTitle}>Une vision, une force, une mission</Text>
+                  <Text style={styles.ideologyText}>
+                    A.R.M est un mouvement politique enraciné dans les réalités du peuple malien, fondé sur la fraternité, la liberté et l&apos;égalité.
+                  </Text>
+                  <View style={styles.ideologyButton}>
+                    <Text style={styles.ideologyButtonText}>Découvrir notre idéologie</Text>
+                    <IconSymbol 
+                      ios_icon_name="arrow.right" 
+                      android_material_icon_name="arrow-forward" 
+                      size={20} 
+                      color={colors.primary} 
+                    />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Programme politique */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol 
+                  ios_icon_name="doc.text.fill" 
+                  android_material_icon_name="description" 
+                  size={24} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.sectionTitle}>Notre Programme</Text>
+              </View>
+              <View style={styles.card}>
+                <Text style={styles.programText}>
+                  L&apos;A.R.M s&apos;engage pour le développement du Mali à travers des programmes concrets dans tous les secteurs : éducation, santé, économie, agriculture, et infrastructure.
                 </Text>
-                <View style={styles.ideologyButton}>
-                  <Text style={styles.ideologyButtonText}>Découvrir notre idéologie</Text>
+                <TouchableOpacity style={styles.linkButton} activeOpacity={0.7}>
+                  <Text style={styles.linkButtonText}>Voir le programme complet</Text>
+                  <IconSymbol 
+                    ios_icon_name="chevron.right" 
+                    android_material_icon_name="chevron-right" 
+                    size={20} 
+                    color={colors.primary} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Contributions */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol 
+                  ios_icon_name="heart.fill" 
+                  android_material_icon_name="favorite" 
+                  size={24} 
+                  color={colors.accent} 
+                />
+                <Text style={styles.sectionTitle}>Soutenez-nous</Text>
+              </View>
+              <View style={styles.card}>
+                <Text style={styles.donationText}>Votre contribution régulière aide à construire un Mali meilleur</Text>
+                <View style={styles.contributionInfo}>
+                  <View style={styles.contributionOption}>
+                    <IconSymbol 
+                      ios_icon_name="calendar" 
+                      android_material_icon_name="event" 
+                      size={20} 
+                      color={colors.primary} 
+                    />
+                    <Text style={styles.contributionOptionText}>Contribution mensuelle</Text>
+                  </View>
+                  <View style={styles.contributionOption}>
+                    <IconSymbol 
+                      ios_icon_name="calendar.badge.clock" 
+                      android_material_icon_name="date-range" 
+                      size={20} 
+                      color={colors.primary} 
+                    />
+                    <Text style={styles.contributionOptionText}>Contribution annuelle</Text>
+                  </View>
+                </View>
+                <TouchableOpacity 
+                  style={styles.contributionButton}
+                  onPress={() => handleDonation(0)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.contributionButtonText}>Faire une contribution</Text>
                   <IconSymbol 
                     ios_icon_name="arrow.right" 
                     android_material_icon_name="arrow-forward" 
                     size={20} 
+                    color={colors.background} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Actualités */}
+            {news.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <IconSymbol 
+                    ios_icon_name="newspaper.fill" 
+                    android_material_icon_name="article" 
+                    size={24} 
                     color={colors.primary} 
                   />
+                  <Text style={styles.sectionTitle}>Actualités</Text>
                 </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {news.slice(0, 5).map((item) => (
+                    <TouchableOpacity key={item.id} style={styles.newsCard} activeOpacity={0.9}>
+                      {item.imageUrl && (
+                        <Image 
+                          source={resolveImageSource(item.imageUrl)}
+                          style={styles.newsImage}
+                          resizeMode="cover"
+                        />
+                      )}
+                      <View style={styles.newsContent}>
+                        <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
+                        <Text style={styles.newsExcerpt} numberOfLines={3}>{item.content}</Text>
+                        <Text style={styles.newsDate}>
+                          {new Date(item.publishedAt).toLocaleDateString('fr-FR')}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
-            </TouchableOpacity>
-          </View>
+            )}
 
-          {/* Programme politique */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="doc.text.fill" 
-                android_material_icon_name="description" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.sectionTitle}>Notre Programme</Text>
+            {/* Événements */}
+            {events.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <IconSymbol 
+                    ios_icon_name="calendar.badge.clock" 
+                    android_material_icon_name="event" 
+                    size={24} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.sectionTitle}>Événements à venir</Text>
+                </View>
+                {events.slice(0, 3).map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.eventCard} activeOpacity={0.9}>
+                    <View style={styles.eventDate}>
+                      <Text style={styles.eventDay}>
+                        {new Date(item.date).getDate()}
+                      </Text>
+                      <Text style={styles.eventMonth}>
+                        {new Date(item.date).toLocaleDateString('fr-FR', { month: 'short' })}
+                      </Text>
+                    </View>
+                    <View style={styles.eventInfo}>
+                      <Text style={styles.eventTitle}>{item.title}</Text>
+                      <Text style={styles.eventDescription} numberOfLines={2}>
+                        {item.description}
+                      </Text>
+                      <View style={styles.eventLocation}>
+                        <IconSymbol 
+                          ios_icon_name="location.fill" 
+                          android_material_icon_name="place" 
+                          size={14} 
+                          color={colors.textSecondary} 
+                        />
+                        <Text style={styles.eventLocationText}>{item.location}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Actions rapides */}
+            <View style={styles.section}>
+              <View style={styles.quickActions}>
+                <TouchableOpacity 
+                  style={styles.actionCard} 
+                  onPress={handleJoinParty}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="person.badge.plus" 
+                    android_material_icon_name="person-add" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.actionTitle}>Adhérer</Text>
+                  <Text style={styles.actionSubtitle}>Sans mot de passe</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.actionCard} 
+                  onPress={handleMemberCard}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="person.text.rectangle" 
+                    android_material_icon_name="badge" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.actionTitle}>Ma Carte</Text>
+                  <Text style={styles.actionSubtitle}>Accès libre</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.actionCard} 
+                  onPress={handleSettings}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="gear" 
+                    android_material_icon_name="settings" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.actionTitle}>Paramètres</Text>
+                  <Text style={styles.actionSubtitle}>Langue & Devise</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.actionCard} 
+                  onPress={handleContact}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="envelope.fill" 
+                    android_material_icon_name="email" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.actionTitle}>Contact</Text>
+                  <Text style={styles.actionSubtitle}>Écrivez-nous</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.actionCard} 
+                  onPress={handleChat}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="bubble.left.and.bubble.right.fill" 
+                    android_material_icon_name="chat" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.actionTitle}>Chat Public</Text>
+                  <Text style={styles.actionSubtitle}>Discutez</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.card}>
-              <Text style={styles.programText}>
-                L&apos;A.R.M s&apos;engage pour le développement du Mali à travers des programmes concrets dans tous les secteurs : éducation, santé, économie, agriculture, et infrastructure.
-              </Text>
-              <TouchableOpacity style={styles.linkButton} activeOpacity={0.7}>
-                <Text style={styles.linkButtonText}>Voir le programme complet</Text>
+
+            {/* Direction du parti */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol 
+                  ios_icon_name="person.3.fill" 
+                  android_material_icon_name="group" 
+                  size={24} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.sectionTitle}>Direction du Parti</Text>
+              </View>
+              <View style={styles.card}>
+                {leadership.length > 0 ? (
+                  leadership.map((leader) => (
+                    <LeaderCard 
+                      key={leader.id}
+                      name={leader.name}
+                      position={leader.position}
+                      location={leader.location}
+                      phone={leader.phone}
+                    />
+                  ))
+                ) : (
+                  <>
+                    <LeaderCard 
+                      name="Lassine Diakité"
+                      position="Président"
+                      location="Yuncos, Toledo, Espagne"
+                      phone="0034632607101"
+                    />
+                    <LeaderCard 
+                      name="Dadou Sangare"
+                      position="Premier Vice-Président"
+                      location="Milan, Italie"
+                    />
+                    <LeaderCard 
+                      name="Oumar Keita"
+                      position="Deuxième Vice-Président"
+                      location="Koutiala, Mali"
+                      phone="0022376304869"
+                    />
+                    <LeaderCard 
+                      name="Karifa Keita"
+                      position="Secrétaire Général"
+                      location="Bamako, Mali"
+                    />
+                    <LeaderCard 
+                      name="Modibo Keita"
+                      position="Secrétaire Administratif"
+                      location="Bamako Sebenikoro, Mali"
+                    />
+                    <LeaderCard 
+                      name="Sokona Keita"
+                      position="Trésorière"
+                      location="Bamako Sebenikoro, Mali"
+                      phone="0022375179920"
+                    />
+                  </>
+                )}
+              </View>
+            </View>
+
+            {/* Siège du parti */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol 
+                  ios_icon_name="building.2.fill" 
+                  android_material_icon_name="location-city" 
+                  size={24} 
+                  color={colors.primary} 
+                />
+                <Text style={styles.sectionTitle}>Siège du Parti</Text>
+              </View>
+              <View style={styles.card}>
+                <Text style={styles.addressText}>Rue 530, Porte 245</Text>
+                <Text style={styles.addressText}>Sebenikoro, Bamako</Text>
+                <Text style={styles.addressText}>Mali</Text>
+              </View>
+            </View>
+
+            {/* Espace Administrateur */}
+            <View style={styles.section}>
+              <TouchableOpacity 
+                style={styles.adminCard} 
+                onPress={handleAdminLogin}
+                activeOpacity={0.8}
+              >
+                <IconSymbol 
+                  ios_icon_name="lock.shield.fill" 
+                  android_material_icon_name="admin-panel-settings" 
+                  size={32} 
+                  color={colors.textSecondary} 
+                />
+                <View style={styles.adminTextContainer}>
+                  <Text style={styles.adminText}>Espace Administrateur</Text>
+                  <Text style={styles.adminSubtext}>Mot de passe requis</Text>
+                </View>
                 <IconSymbol 
                   ios_icon_name="chevron.right" 
                   android_material_icon_name="chevron-right" 
                   size={20} 
-                  color={colors.primary} 
+                  color={colors.textSecondary} 
                 />
               </TouchableOpacity>
             </View>
-          </View>
 
-          {/* Contributions */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+            <View style={styles.bottomSpacer} />
+          </Animated.View>
+        </ScrollView>
+
+        {/* Floating AI Button */}
+        <Animated.View style={[styles.fabContainer, { transform: [{ scale: fabScale }] }]}>
+          <TouchableOpacity 
+            style={styles.fab}
+            onPress={handleAIChat}
+            activeOpacity={0.9}
+          >
+            <View style={styles.fabGradient}>
               <IconSymbol 
-                ios_icon_name="heart.fill" 
-                android_material_icon_name="favorite" 
-                size={24} 
-                color={colors.accent} 
+                ios_icon_name="sparkles" 
+                android_material_icon_name="auto-awesome" 
+                size={28} 
+                color="#FFFFFF" 
               />
-              <Text style={styles.sectionTitle}>Soutenez-nous</Text>
+              <Text style={styles.fabText}>IA</Text>
             </View>
-            <View style={styles.card}>
-              <Text style={styles.donationText}>Votre contribution régulière aide à construire un Mali meilleur</Text>
-              <View style={styles.contributionInfo}>
-                <View style={styles.contributionOption}>
-                  <IconSymbol 
-                    ios_icon_name="calendar" 
-                    android_material_icon_name="event" 
-                    size={20} 
-                    color={colors.primary} 
-                  />
-                  <Text style={styles.contributionOptionText}>Contribution mensuelle</Text>
-                </View>
-                <View style={styles.contributionOption}>
-                  <IconSymbol 
-                    ios_icon_name="calendar.badge.clock" 
-                    android_material_icon_name="date-range" 
-                    size={20} 
-                    color={colors.primary} 
-                  />
-                  <Text style={styles.contributionOptionText}>Contribution annuelle</Text>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.contributionButton}
-                onPress={() => handleDonation(0)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.contributionButtonText}>Faire une contribution</Text>
-                <IconSymbol 
-                  ios_icon_name="arrow.right" 
-                  android_material_icon_name="arrow-forward" 
-                  size={20} 
-                  color={colors.background} 
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Actualités */}
-          {news.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="newspaper.fill" 
-                  android_material_icon_name="article" 
-                  size={24} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.sectionTitle}>Actualités</Text>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {news.slice(0, 5).map((item) => (
-                  <TouchableOpacity key={item.id} style={styles.newsCard} activeOpacity={0.9}>
-                    {item.imageUrl && (
-                      <Image 
-                        source={resolveImageSource(item.imageUrl)}
-                        style={styles.newsImage}
-                        resizeMode="cover"
-                      />
-                    )}
-                    <View style={styles.newsContent}>
-                      <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
-                      <Text style={styles.newsExcerpt} numberOfLines={3}>{item.content}</Text>
-                      <Text style={styles.newsDate}>
-                        {new Date(item.publishedAt).toLocaleDateString('fr-FR')}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Événements */}
-          {events.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="calendar.badge.clock" 
-                  android_material_icon_name="event" 
-                  size={24} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.sectionTitle}>Événements à venir</Text>
-              </View>
-              {events.slice(0, 3).map((item) => (
-                <TouchableOpacity key={item.id} style={styles.eventCard} activeOpacity={0.9}>
-                  <View style={styles.eventDate}>
-                    <Text style={styles.eventDay}>
-                      {new Date(item.date).getDate()}
-                    </Text>
-                    <Text style={styles.eventMonth}>
-                      {new Date(item.date).toLocaleDateString('fr-FR', { month: 'short' })}
-                    </Text>
-                  </View>
-                  <View style={styles.eventInfo}>
-                    <Text style={styles.eventTitle}>{item.title}</Text>
-                    <Text style={styles.eventDescription} numberOfLines={2}>
-                      {item.description}
-                    </Text>
-                    <View style={styles.eventLocation}>
-                      <IconSymbol 
-                        ios_icon_name="location.fill" 
-                        android_material_icon_name="place" 
-                        size={14} 
-                        color={colors.textSecondary} 
-                      />
-                      <Text style={styles.eventLocationText}>{item.location}</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Actions rapides */}
-          <View style={styles.section}>
-            <View style={styles.quickActions}>
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleJoinParty}
-                activeOpacity={0.8}
-              >
-                <IconSymbol 
-                  ios_icon_name="person.badge.plus" 
-                  android_material_icon_name="person-add" 
-                  size={32} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.actionTitle}>Adhérer</Text>
-                <Text style={styles.actionSubtitle}>Sans mot de passe</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleMemberCard}
-                activeOpacity={0.8}
-              >
-                <IconSymbol 
-                  ios_icon_name="person.text.rectangle" 
-                  android_material_icon_name="badge" 
-                  size={32} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.actionTitle}>Ma Carte</Text>
-                <Text style={styles.actionSubtitle}>Accès libre</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleSettings}
-                activeOpacity={0.8}
-              >
-                <IconSymbol 
-                  ios_icon_name="gear" 
-                  android_material_icon_name="settings" 
-                  size={32} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.actionTitle}>Paramètres</Text>
-                <Text style={styles.actionSubtitle}>Langue & Devise</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleContact}
-                activeOpacity={0.8}
-              >
-                <IconSymbol 
-                  ios_icon_name="envelope.fill" 
-                  android_material_icon_name="email" 
-                  size={32} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.actionTitle}>Contact</Text>
-                <Text style={styles.actionSubtitle}>Écrivez-nous</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleChat}
-                activeOpacity={0.8}
-              >
-                <IconSymbol 
-                  ios_icon_name="bubble.left.and.bubble.right.fill" 
-                  android_material_icon_name="chat" 
-                  size={32} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.actionTitle}>Chat Public</Text>
-                <Text style={styles.actionSubtitle}>Discutez</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Direction du parti */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="person.3.fill" 
-                android_material_icon_name="group" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.sectionTitle}>Direction du Parti</Text>
-            </View>
-            <View style={styles.card}>
-              {leadership.length > 0 ? (
-                leadership.map((leader) => (
-                  <LeaderCard 
-                    key={leader.id}
-                    name={leader.name}
-                    position={leader.position}
-                    location={leader.location}
-                    phone={leader.phone}
-                  />
-                ))
-              ) : (
-                <>
-                  <LeaderCard 
-                    name="Lassine Diakité"
-                    position="Président"
-                    location="Yuncos, Toledo, Espagne"
-                    phone="0034632607101"
-                  />
-                  <LeaderCard 
-                    name="Dadou Sangare"
-                    position="Premier Vice-Président"
-                    location="Milan, Italie"
-                  />
-                  <LeaderCard 
-                    name="Oumar Keita"
-                    position="Deuxième Vice-Président"
-                    location="Koutiala, Mali"
-                    phone="0022376304869"
-                  />
-                  <LeaderCard 
-                    name="Karifa Keita"
-                    position="Secrétaire Général"
-                    location="Bamako, Mali"
-                  />
-                  <LeaderCard 
-                    name="Modibo Keita"
-                    position="Secrétaire Administratif"
-                    location="Bamako Sebenikoro, Mali"
-                  />
-                  <LeaderCard 
-                    name="Sokona Keita"
-                    position="Trésorière"
-                    location="Bamako Sebenikoro, Mali"
-                    phone="0022375179920"
-                  />
-                </>
-              )}
-            </View>
-          </View>
-
-          {/* Siège du parti */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="building.2.fill" 
-                android_material_icon_name="location-city" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.sectionTitle}>Siège du Parti</Text>
-            </View>
-            <View style={styles.card}>
-              <Text style={styles.addressText}>Rue 530, Porte 245</Text>
-              <Text style={styles.addressText}>Sebenikoro, Bamako</Text>
-              <Text style={styles.addressText}>Mali</Text>
-            </View>
-          </View>
-
-          {/* Espace Administrateur */}
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.adminCard} 
-              onPress={handleAdminLogin}
-              activeOpacity={0.8}
-            >
-              <IconSymbol 
-                ios_icon_name="lock.shield.fill" 
-                android_material_icon_name="admin-panel-settings" 
-                size={32} 
-                color={colors.textSecondary} 
-              />
-              <View style={styles.adminTextContainer}>
-                <Text style={styles.adminText}>Espace Administrateur</Text>
-                <Text style={styles.adminSubtext}>Mot de passe requis</Text>
-              </View>
-              <IconSymbol 
-                ios_icon_name="chevron.right" 
-                android_material_icon_name="chevron-right" 
-                size={20} 
-                color={colors.textSecondary} 
-              />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.bottomSpacer} />
+          </TouchableOpacity>
         </Animated.View>
-      </ScrollView>
-
-      {/* Floating AI Button */}
-      <Animated.View style={[styles.fabContainer, { transform: [{ scale: fabScale }] }]}>
-        <TouchableOpacity 
-          style={styles.fab}
-          onPress={handleAIChat}
-          activeOpacity={0.9}
-        >
-          <View style={styles.fabGradient}>
-            <IconSymbol 
-              ios_icon_name="sparkles" 
-              android_material_icon_name="auto-awesome" 
-              size={28} 
-              color="#FFFFFF" 
-            />
-            <Text style={styles.fabText}>IA</Text>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
+      </View>
+    </>
   );
 }
 
@@ -661,6 +707,34 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: colors.textSecondary,
+  },
+  errorContainer: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 12,
+    padding: 16,
+    margin: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    marginLeft: 12,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background,
   },
   header: {
     alignItems: 'center',

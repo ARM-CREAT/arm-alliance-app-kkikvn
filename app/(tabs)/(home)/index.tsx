@@ -60,25 +60,51 @@ export default function HomeScreen() {
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fadeAnim = useState(new Animated.Value(0))[0];
   const fabScale = useState(new Animated.Value(1))[0];
 
   const loadAllData = useCallback(async () => {
     console.log('[HomeScreen] Loading all data (PUBLIC - no authentication required)');
+    setError(null);
     
     try {
-      // Load all data in parallel
-      const [newsRes, eventsRes, leadershipRes] = await Promise.all([
+      // Load all data in parallel with individual error handling
+      const results = await Promise.allSettled([
         apiGet<NewsItem[]>('/api/news'),
         apiGet<EventItem[]>('/api/events'),
         apiGet<LeadershipMember[]>('/api/leadership'),
       ]);
 
-      if (Array.isArray(newsRes)) setNews(newsRes);
-      if (Array.isArray(eventsRes)) setEvents(eventsRes);
-      if (Array.isArray(leadershipRes)) setLeadership(leadershipRes);
-    } catch (error) {
+      // Handle news
+      if (results[0].status === 'fulfilled' && Array.isArray(results[0].value)) {
+        setNews(results[0].value);
+      } else {
+        console.error('[HomeScreen] Failed to load news:', results[0]);
+      }
+
+      // Handle events
+      if (results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
+        setEvents(results[1].value);
+      } else {
+        console.error('[HomeScreen] Failed to load events:', results[1]);
+      }
+
+      // Handle leadership
+      if (results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
+        setLeadership(results[2].value);
+      } else {
+        console.error('[HomeScreen] Failed to load leadership:', results[2]);
+      }
+
+      // Check if all failed
+      const allFailed = results.every(r => r.status === 'rejected');
+      if (allFailed) {
+        setError('Impossible de charger les données. Vérifiez votre connexion.');
+      }
+    } catch (error: any) {
       console.error('[HomeScreen] Error loading data:', error);
+      setError(error.message || 'Une erreur est survenue');
     } finally {
       setLoading(false);
       
@@ -219,6 +245,22 @@ export default function HomeScreen() {
         }
       >
         <Animated.View style={{ opacity: fadeAnim }}>
+          {/* Error message */}
+          {error && (
+            <View style={styles.errorContainer}>
+              <IconSymbol 
+                ios_icon_name="exclamationmark.triangle.fill" 
+                android_material_icon_name="warning" 
+                size={24} 
+                color={colors.warning} 
+              />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity onPress={loadAllData} style={styles.retryButton}>
+                <Text style={styles.retryButtonText}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Header avec logo */}
           <View style={styles.header}>
             <Image 
@@ -681,6 +723,34 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: colors.textSecondary,
+  },
+  errorContainer: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 12,
+    padding: 16,
+    margin: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    marginLeft: 12,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background,
   },
   header: {
     alignItems: 'center',

@@ -107,6 +107,37 @@ export const clearAdminCredentials = async (): Promise<void> => {
 };
 
 /**
+ * Fetch with timeout
+ * @param url - URL to fetch
+ * @param options - Fetch options
+ * @param timeoutMs - Timeout in milliseconds (default: 15000ms = 15 seconds)
+ * @returns Response
+ */
+const fetchWithTimeout = async (
+  url: string,
+  options?: RequestInit,
+  timeoutMs: number = 15000
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('La requête a pris trop de temps. Veuillez réessayer.');
+    }
+    throw error;
+  }
+};
+
+/**
  * Generic API call helper with error handling and retry logic
  *
  * @param endpoint - API endpoint path (e.g., '/users', '/auth/login')
@@ -156,7 +187,8 @@ export const apiCall = async <T = any>(
         };
       }
 
-      const response = await fetch(url, fetchOptions);
+      // Use fetchWithTimeout instead of regular fetch
+      const response = await fetchWithTimeout(url, fetchOptions, 15000);
 
       if (!response.ok) {
         let errorText = '';
@@ -191,6 +223,11 @@ export const apiCall = async <T = any>(
       
       // Don't retry on authentication errors (401, 403)
       if (error.message?.includes('401') || error.message?.includes('403') || error.message?.includes('Unauthorized')) {
+        throw error;
+      }
+      
+      // Don't retry on timeout errors - just fail fast
+      if (error.message?.includes('trop de temps')) {
         throw error;
       }
       
