@@ -11,11 +11,11 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
-import { colors } from '@/styles/commonStyles';
-import * as Haptics from 'expo-haptics';
-import { adminGet } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
+import { colors } from '@/styles/commonStyles';
+import { adminGet } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 
 interface Analytics {
   totalMembers: number;
@@ -26,13 +26,13 @@ interface Analytics {
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const checkAdminAuth = useCallback(async () => {
     console.log('[AdminDashboard] Checking admin authentication');
@@ -40,7 +40,6 @@ export default function AdminDashboardScreen() {
       const password = await AsyncStorage.getItem('admin_password');
       const secretCode = await AsyncStorage.getItem('admin_secret_code');
       
-      // Also check localStorage for web
       const webPassword = Platform.OS === 'web' ? localStorage.getItem('admin_password') : null;
       const webSecretCode = Platform.OS === 'web' ? localStorage.getItem('admin_secret_code') : null;
       
@@ -51,7 +50,7 @@ export default function AdminDashboardScreen() {
         setIsAuthenticated(true);
         return true;
       } else {
-        console.log('[AdminDashboard] No admin credentials, redirecting to login');
+        console.log('[AdminDashboard] No admin credentials found, redirecting to login');
         router.replace('/admin/login');
         return false;
       }
@@ -64,13 +63,18 @@ export default function AdminDashboardScreen() {
 
   const loadAnalytics = useCallback(async () => {
     console.log('[AdminDashboard] Loading analytics');
+    setLoading(true);
+
     try {
-      const response = await adminGet<Analytics>('/api/admin/analytics');
-      
-      setAnalytics(response);
-      console.log('[AdminDashboard] Analytics loaded:', response);
-    } catch (error) {
+      const data = await adminGet('/api/admin/analytics');
+      console.log('[AdminDashboard] Analytics loaded:', data);
+      setAnalytics(data);
+    } catch (error: any) {
       console.error('[AdminDashboard] Error loading analytics:', error);
+      setModalTitle('Erreur');
+      setModalMessage(error?.message || 'Impossible de charger les statistiques');
+      setModalType('error');
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
@@ -78,23 +82,30 @@ export default function AdminDashboardScreen() {
 
   useEffect(() => {
     const initDashboard = async () => {
+      console.log('[AdminDashboard] Admin authenticated, loading analytics');
       const authenticated = await checkAdminAuth();
       if (authenticated) {
-        console.log('[AdminDashboard] Admin authenticated, loading analytics');
-        loadAnalytics();
+        await loadAnalytics();
       }
     };
-    
+
     initDashboard();
   }, [checkAdminAuth, loadAnalytics]);
 
   const handleLogout = async () => {
-    console.log('Admin logout requested');
+    console.log('[AdminDashboard] User tapped Logout');
+    
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    
-    // Clear admin credentials
+
+    setModalTitle('Déconnexion');
+    setModalMessage('Voulez-vous vraiment vous déconnecter ?');
+    setModalType('confirm');
+    setModalVisible(true);
+  };
+
+  const confirmLogout = async () => {
     try {
       await AsyncStorage.removeItem('admin_password');
       await AsyncStorage.removeItem('admin_secret_code');
@@ -104,98 +115,93 @@ export default function AdminDashboardScreen() {
         localStorage.removeItem('admin_secret_code');
       }
       
-      console.log('[AdminDashboard] Admin credentials cleared');
+      console.log('[AdminDashboard] Admin logged out successfully');
+      router.replace('/admin/login');
     } catch (error) {
-      console.error('[AdminDashboard] Error clearing credentials:', error);
+      console.error('[AdminDashboard] Error during logout:', error);
     }
-    
-    router.replace('/admin/login');
   };
 
   if (!isAuthenticated || loading) {
     return (
       <View style={styles.loadingContainer}>
+        <Stack.Screen
+          options={{
+            title: 'Tableau de Bord',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+          }}
+        />
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Chargement...</Text>
       </View>
     );
   }
 
+  const totalMembersDisplay = analytics?.totalMembers?.toString() || '0';
+  const totalDonationsDisplay = analytics?.totalDonations || '0 XOF';
+  const totalMessagesDisplay = analytics?.totalMessages?.toString() || '0';
+
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Tableau de Bord',
+          title: 'Tableau de Bord Admin',
           headerShown: true,
           headerBackTitle: 'Retour',
         }}
       />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {/* Analytics Cards */}
-        <View style={styles.analyticsGrid}>
-          <View style={styles.analyticsCard}>
+        {/* Statistics Cards */}
+        <View style={styles.statsSection}>
+          <View style={styles.statCard}>
             <IconSymbol
               ios_icon_name="person.3.fill"
               android_material_icon_name="group"
               size={32}
               color={colors.primary}
             />
-            <Text style={styles.analyticsValue}>{analytics?.totalMembers || 0}</Text>
-            <Text style={styles.analyticsLabel}>Membres</Text>
+            <Text style={styles.statValue}>{totalMembersDisplay}</Text>
+            <Text style={styles.statLabel}>Membres Totaux</Text>
           </View>
 
-          <View style={styles.analyticsCard}>
+          <View style={styles.statCard}>
             <IconSymbol
               ios_icon_name="dollarsign.circle.fill"
-              android_material_icon_name="attach-money"
+              android_material_icon_name="payments"
               size={32}
-              color={colors.accent}
+              color={colors.success}
             />
-            <Text style={styles.analyticsValue}>{analytics?.totalDonations || '0 €'}</Text>
-            <Text style={styles.analyticsLabel}>Contributions</Text>
+            <Text style={styles.statValue}>{totalDonationsDisplay}</Text>
+            <Text style={styles.statLabel}>Dons Totaux</Text>
           </View>
 
-          <View style={styles.analyticsCard}>
+          <View style={styles.statCard}>
             <IconSymbol
               ios_icon_name="envelope.fill"
               android_material_icon_name="email"
               size={32}
-              color={colors.secondary}
+              color={colors.warning}
             />
-            <Text style={styles.analyticsValue}>{analytics?.totalMessages || 0}</Text>
-            <Text style={styles.analyticsLabel}>Messages</Text>
+            <Text style={styles.statValue}>{totalMessagesDisplay}</Text>
+            <Text style={styles.statLabel}>Messages</Text>
           </View>
         </View>
 
-        {/* Management Options */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Gestion</Text>
+        {/* Management Sections */}
+        <View style={styles.managementSection}>
+          <Text style={styles.sectionTitle}>Gestion du Contenu</Text>
 
           <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/member-registry')}
-            activeOpacity={0.7}
-          >
-            <IconSymbol
-              ios_icon_name="doc.text.fill"
-              android_material_icon_name="description"
-              size={24}
-              color={colors.primary}
-            />
-            <Text style={styles.menuItemText}>Registre des Inscriptions</Text>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/manage-news-full')}
-            activeOpacity={0.7}
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/manage-news-full');
+            }}
+            activeOpacity={0.8}
           >
             <IconSymbol
               ios_icon_name="newspaper.fill"
@@ -203,7 +209,7 @@ export default function AdminDashboardScreen() {
               size={24}
               color={colors.primary}
             />
-            <Text style={styles.menuItemText}>Gérer les Actualités</Text>
+            <Text style={styles.managementButtonText}>Gérer les Actualités</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -213,9 +219,14 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/manage-events')}
-            activeOpacity={0.7}
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/manage-events');
+            }}
+            activeOpacity={0.8}
           >
             <IconSymbol
               ios_icon_name="calendar"
@@ -223,7 +234,7 @@ export default function AdminDashboardScreen() {
               size={24}
               color={colors.primary}
             />
-            <Text style={styles.menuItemText}>Gérer les Événements</Text>
+            <Text style={styles.managementButtonText}>Gérer les Événements</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -233,17 +244,47 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/manage-members')}
-            activeOpacity={0.7}
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/manage-leadership');
+            }}
+            activeOpacity={0.8}
           >
             <IconSymbol
-              ios_icon_name="person.3.fill"
+              ios_icon_name="person.badge.key.fill"
+              android_material_icon_name="admin-panel-settings"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.managementButtonText}>Gérer les Dirigeants</Text>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={20}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/manage-members');
+            }}
+            activeOpacity={0.8}
+          >
+            <IconSymbol
+              ios_icon_name="person.3"
               android_material_icon_name="group"
               size={24}
               color={colors.primary}
             />
-            <Text style={styles.menuItemText}>Gérer les Membres</Text>
+            <Text style={styles.managementButtonText}>Gérer les Membres</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -253,17 +294,22 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/manage-leadership')}
-            activeOpacity={0.7}
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/member-registry');
+            }}
+            activeOpacity={0.8}
           >
             <IconSymbol
-              ios_icon_name="star.fill"
-              android_material_icon_name="star"
+              ios_icon_name="list.bullet.rectangle"
+              android_material_icon_name="list-alt"
               size={24}
               color={colors.primary}
             />
-            <Text style={styles.menuItemText}>Gérer la Direction</Text>
+            <Text style={styles.managementButtonText}>Registre des Membres</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -273,29 +319,14 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/send-message')}
-            activeOpacity={0.7}
-          >
-            <IconSymbol
-              ios_icon_name="paperplane.fill"
-              android_material_icon_name="send"
-              size={24}
-              color={colors.primary}
-            />
-            <Text style={styles.menuItemText}>Envoyer un Message</Text>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/election-verification')}
-            activeOpacity={0.7}
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/election-verification');
+            }}
+            activeOpacity={0.8}
           >
             <IconSymbol
               ios_icon_name="checkmark.seal.fill"
@@ -303,7 +334,7 @@ export default function AdminDashboardScreen() {
               size={24}
               color={colors.primary}
             />
-            <Text style={styles.menuItemText}>Vérification Électorale</Text>
+            <Text style={styles.managementButtonText}>Vérification Électorale</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -313,9 +344,14 @@ export default function AdminDashboardScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/admin/media-upload')}
-            activeOpacity={0.7}
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/media-upload');
+            }}
+            activeOpacity={0.8}
           >
             <IconSymbol
               ios_icon_name="photo.fill"
@@ -323,7 +359,32 @@ export default function AdminDashboardScreen() {
               size={24}
               color={colors.primary}
             />
-            <Text style={styles.menuItemText}>Médias</Text>
+            <Text style={styles.managementButtonText}>Photos, Vidéos et Documents</Text>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={20}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.managementButton}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+              router.push('/admin/send-message');
+            }}
+            activeOpacity={0.8}
+          >
+            <IconSymbol
+              ios_icon_name="paperplane.fill"
+              android_material_icon_name="send"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.managementButtonText}>Envoyer un Message</Text>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
@@ -334,21 +395,19 @@ export default function AdminDashboardScreen() {
         </View>
 
         {/* Logout Button */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            activeOpacity={0.8}
-          >
-            <IconSymbol
-              ios_icon_name="rectangle.portrait.and.arrow.right"
-              android_material_icon_name="logout"
-              size={20}
-              color={colors.error}
-            />
-            <Text style={styles.logoutButtonText}>Déconnexion</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+        >
+          <IconSymbol
+            ios_icon_name="arrow.right.square.fill"
+            android_material_icon_name="logout"
+            size={24}
+            color={colors.error}
+          />
+          <Text style={styles.logoutButtonText}>Se Déconnecter</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <Modal
@@ -357,6 +416,7 @@ export default function AdminDashboardScreen() {
         message={modalMessage}
         type={modalType}
         onClose={() => setModalVisible(false)}
+        onConfirm={modalType === 'confirm' ? confirmLogout : undefined}
       />
     </View>
   );
@@ -385,39 +445,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
-  analyticsGrid: {
+  statsSection: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    padding: 20,
+    padding: 16,
+    gap: 12,
   },
-  analyticsCard: {
-    width: '48%',
+  statCard: {
+    flex: 1,
+    minWidth: 100,
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
-    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  analyticsValue: {
-    fontSize: 28,
+  statValue: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
     marginTop: 12,
   },
-  analyticsLabel: {
-    fontSize: 14,
+  statLabel: {
+    fontSize: 13,
     color: colors.textSecondary,
     marginTop: 4,
+    textAlign: 'center',
   },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 8,
+  managementSection: {
+    padding: 16,
   },
   sectionTitle: {
     fontSize: 20,
@@ -425,7 +485,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
   },
-  menuItem: {
+  managementButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
@@ -438,12 +498,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  menuItemText: {
+  managementButtonText: {
     flex: 1,
     fontSize: 16,
     color: colors.text,
-    marginLeft: 12,
     fontWeight: '500',
+    marginLeft: 12,
   },
   logoutButton: {
     flexDirection: 'row',
@@ -452,14 +512,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
-    marginTop: 16,
-    borderWidth: 1,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderWidth: 2,
     borderColor: colors.error,
   },
   logoutButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: 'bold',
     color: colors.error,
-    marginLeft: 8,
+    marginLeft: 12,
   },
 });
