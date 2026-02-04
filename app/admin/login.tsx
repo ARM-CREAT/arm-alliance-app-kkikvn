@@ -17,7 +17,7 @@ import { Modal } from '@/components/ui/Modal';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { adminGet, BACKEND_URL, isBackendConfigured } from '@/utils/api';
+import { adminGet, BACKEND_URL, isBackendConfigured, setAdminCredentials, clearAdminCredentials } from '@/utils/api';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -117,13 +117,7 @@ export default function AdminLoginScreen() {
     try {
       // Store the admin credentials for authenticated requests
       // Using the same password for both fields to simplify
-      await AsyncStorage.setItem('admin_password', trimmedPassword);
-      await AsyncStorage.setItem('admin_secret_code', trimmedPassword);
-      
-      if (Platform.OS === 'web') {
-        localStorage.setItem('admin_password', trimmedPassword);
-        localStorage.setItem('admin_secret_code', trimmedPassword);
-      }
+      await setAdminCredentials(trimmedPassword, trimmedPassword);
 
       console.log('Admin credentials stored, verifying with backend...');
       setConnectionStatus('Vérification des identifiants...');
@@ -142,12 +136,7 @@ export default function AdminLoginScreen() {
         });
         
         // Clear invalid credentials
-        await AsyncStorage.removeItem('admin_password');
-        await AsyncStorage.removeItem('admin_secret_code');
-        if (Platform.OS === 'web') {
-          localStorage.removeItem('admin_password');
-          localStorage.removeItem('admin_secret_code');
-        }
+        await clearAdminCredentials();
         
         // Provide specific error message
         const errorMsg = error?.message || 'Erreur de connexion';

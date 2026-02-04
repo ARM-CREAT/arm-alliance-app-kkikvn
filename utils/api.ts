@@ -39,6 +39,28 @@ export const getBearerToken = async (): Promise<string | null> => {
 };
 
 /**
+ * Set admin credentials in storage
+ * @param password - Admin password
+ * @param secretCode - Admin secret code
+ */
+export const setAdminCredentials = async (password: string, secretCode: string): Promise<void> => {
+  try {
+    console.log('[API] Storing admin credentials...');
+    if (Platform.OS === "web") {
+      localStorage.setItem('admin_password', password);
+      localStorage.setItem('admin_secret_code', secretCode);
+    } else {
+      await AsyncStorage.setItem('admin_password', password);
+      await AsyncStorage.setItem('admin_secret_code', secretCode);
+    }
+    console.log('[API] Admin credentials stored successfully');
+  } catch (error) {
+    console.error("[API] Error storing admin credentials:", error);
+    throw error;
+  }
+};
+
+/**
  * Get admin credentials from storage
  * @returns Object with password and secretCode, or null if not found
  */
@@ -62,6 +84,25 @@ export const getAdminCredentials = async (): Promise<{ password: string; secretC
   } catch (error) {
     console.error("[API] Error retrieving admin credentials:", error);
     return null;
+  }
+};
+
+/**
+ * Clear admin credentials from storage
+ */
+export const clearAdminCredentials = async (): Promise<void> => {
+  try {
+    console.log('[API] Clearing admin credentials...');
+    if (Platform.OS === "web") {
+      localStorage.removeItem('admin_password');
+      localStorage.removeItem('admin_secret_code');
+    } else {
+      await AsyncStorage.removeItem('admin_password');
+      await AsyncStorage.removeItem('admin_secret_code');
+    }
+    console.log('[API] Admin credentials cleared');
+  } catch (error) {
+    console.error("[API] Error clearing admin credentials:", error);
   }
 };
 

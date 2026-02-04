@@ -13,7 +13,7 @@ import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
-import { adminGet } from '@/utils/api';
+import { adminGet, getAdminCredentials, clearAdminCredentials } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
@@ -37,15 +37,9 @@ export default function AdminDashboardScreen() {
   const checkAdminAuth = useCallback(async () => {
     console.log('[AdminDashboard] Checking admin authentication');
     try {
-      const password = await AsyncStorage.getItem('admin_password');
-      const secretCode = await AsyncStorage.getItem('admin_secret_code');
+      const credentials = await getAdminCredentials();
       
-      const webPassword = Platform.OS === 'web' ? localStorage.getItem('admin_password') : null;
-      const webSecretCode = Platform.OS === 'web' ? localStorage.getItem('admin_secret_code') : null;
-      
-      const hasCredentials = (password && secretCode) || (webPassword && webSecretCode);
-      
-      if (hasCredentials) {
+      if (credentials) {
         console.log('[AdminDashboard] Admin credentials found');
         setIsAuthenticated(true);
         return true;
@@ -107,14 +101,7 @@ export default function AdminDashboardScreen() {
 
   const confirmLogout = async () => {
     try {
-      await AsyncStorage.removeItem('admin_password');
-      await AsyncStorage.removeItem('admin_secret_code');
-      
-      if (Platform.OS === 'web') {
-        localStorage.removeItem('admin_password');
-        localStorage.removeItem('admin_secret_code');
-      }
-      
+      await clearAdminCredentials();
       console.log('[AdminDashboard] Admin logged out successfully');
       router.replace('/admin/login');
     } catch (error) {
