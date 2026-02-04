@@ -42,7 +42,7 @@ export default function AdminLoginScreen() {
   };
 
   const handleLogin = async () => {
-    console.log('Admin login attempt');
+    console.log('Admin login attempt with password:', password ? '***' : '(empty)');
     
     const trimmedPassword = password.trim();
     
@@ -72,10 +72,16 @@ export default function AdminLoginScreen() {
       
       // Verify credentials by making a test API call
       try {
-        await adminGet('/api/admin/analytics');
-        console.log('Admin credentials verified successfully');
-      } catch (error) {
+        const result = await adminGet('/api/admin/analytics');
+        console.log('Admin credentials verified successfully:', result);
+      } catch (error: any) {
         console.error('Admin verification failed:', error);
+        console.error('Error details:', {
+          message: error?.message,
+          name: error?.name,
+          stack: error?.stack
+        });
+        
         // Clear invalid credentials
         await AsyncStorage.removeItem('admin_password');
         await AsyncStorage.removeItem('admin_secret_code');
@@ -83,7 +89,16 @@ export default function AdminLoginScreen() {
           localStorage.removeItem('admin_password');
           localStorage.removeItem('admin_secret_code');
         }
-        throw new Error('Mot de passe incorrect');
+        
+        // Provide specific error message
+        const errorMsg = error?.message || 'Erreur de connexion';
+        if (errorMsg.includes('403') || errorMsg.includes('Invalid') || errorMsg.includes('Missing')) {
+          throw new Error('Mot de passe incorrect. Le mot de passe par défaut est: admin123');
+        } else if (errorMsg.includes('connexion') || errorMsg.includes('Network') || errorMsg.includes('fetch')) {
+          throw new Error('Impossible de se connecter au serveur. Vérifiez votre connexion internet.');
+        } else {
+          throw new Error(errorMsg);
+        }
       }
       
       if (Platform.OS === 'ios') {
@@ -165,7 +180,7 @@ export default function AdminLoginScreen() {
             />
             <Text style={styles.infoText}>
               Un seul mot de passe pour accéder à l&apos;espace administrateur.{'\n'}
-              Mot de passe par défaut: admin123
+              <Text style={styles.infoTextBold}>Mot de passe par défaut: admin123</Text>
             </Text>
           </View>
 
@@ -320,6 +335,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginLeft: 12,
     lineHeight: 18,
+  },
+  infoTextBold: {
+    fontWeight: 'bold',
+    color: colors.primary,
   },
   form: {
     width: '100%',

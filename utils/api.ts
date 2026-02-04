@@ -93,7 +93,7 @@ export const apiCall = async <T = any>(
       },
     };
 
-    console.log("[API] Fetch options:", fetchOptions);
+    console.log("[API] Fetch options:", JSON.stringify(fetchOptions, null, 2));
 
     // Always send the token if we have it (needed for cross-domain/iframe support)
     const token = await getBearerToken();
@@ -107,16 +107,38 @@ export const apiCall = async <T = any>(
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
-      const text = await response.text();
-      console.error("[API] Error response:", response.status, text);
-      throw new Error(`API error: ${response.status} - ${text}`);
+      let errorText = '';
+      try {
+        errorText = await response.text();
+      } catch (e) {
+        errorText = 'Unable to read error response';
+      }
+      console.error("[API] Error response:", response.status, errorText);
+      
+      // Parse error message if it's JSON
+      let errorMessage = `Erreur ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.error || errorJson.message || errorMessage;
+      } catch (e) {
+        // Not JSON, use the text
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
     console.log("[API] Success:", data);
     return data;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[API] Request failed:", error);
+    // Re-throw with a more user-friendly message if it's a network error
+    if (error.message === 'Failed to fetch' || error.message === 'Network request failed') {
+      throw new Error("Erreur de connexion au serveur. Vérifiez votre connexion internet.");
+    }
     throw error;
   }
 };
