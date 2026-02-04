@@ -39,12 +39,12 @@ interface ConfirmCotisationBody {
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
-  // POST /api/members/register - Register new member (protected - requires authentication)
+  // POST /api/members/register - Register new member (PUBLIC - no authentication required)
   fastify.post<{ Body: RegisterMemberBody }>(
     '/api/members/register',
     {
       schema: {
-        description: 'Register as a new member (protected - requires authentication)',
+        description: 'Register as a new member (public - anyone can register)',
         tags: ['members'],
         body: {
           type: 'object',
@@ -71,27 +71,24 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest<{ Body: RegisterMemberBody }>, reply: FastifyReply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
-
       const { fullName, nina, commune, profession, phone, email } = request.body;
-      app.logger.info({ userId: session.user.id, fullName, phone }, 'New member registration');
+      app.logger.info({ fullName, phone }, 'New member registration (public)');
 
       try {
-        // Check if user already has a member profile
-        const existingProfile = await app.db
+        // Check for duplicate registration by phone number
+        const existingByPhone = await app.db
           .select()
           .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.userId, session.user.id));
+          .where(eq(schema.memberProfiles.phone, phone));
 
-        if (existingProfile.length > 0) {
+        if (existingByPhone.length > 0) {
           app.logger.warn(
-            { userId: session.user.id, memberId: existingProfile[0].id },
-            'User attempted to register again but already has a member profile'
+            { phone, memberId: existingByPhone[0].id },
+            'Duplicate registration attempt - phone number already registered'
           );
           return reply.status(409).send({
-            error: 'You already have a member profile',
-            membershipNumber: existingProfile[0].membershipNumber,
+            error: 'This phone number is already registered',
+            membershipNumber: existingByPhone[0].membershipNumber,
           });
         }
 
@@ -108,7 +105,6 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await app.db
           .insert(schema.memberProfiles)
           .values({
-            userId: session.user.id,
             fullName,
             nina,
             commune,
@@ -123,8 +119,8 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         app.logger.info(
-          { userId: session.user.id, memberId: result[0].id, membershipNumber },
-          'Member registered successfully and linked to user account'
+          { memberId: result[0].id, membershipNumber, phone },
+          'Member registered successfully'
         );
 
         return {
@@ -134,7 +130,7 @@ export function register(app: App, fastify: FastifyInstance) {
         };
       } catch (error) {
         app.logger.error(
-          { err: error, userId: session.user.id, fullName, phone },
+          { err: error, fullName, phone },
           'Failed to register member'
         );
         throw error;
@@ -200,108 +196,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/members/me - Get current user's member profile (protected)
-  fastify.get(
-    '/api/members/me',
-    {
-      schema: {
-        description: 'Get current user\'s member profile (protected)',
-        tags: ['members'],
-        response: {
-          200: { type: 'object' },
-        },
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
-
-      app.logger.info({ userId: session.user.id }, 'Fetching user member profile');
-
-      try {
-        const result = await app.db
-          .select()
-          .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.userId, session.user.id));
-
-        if (result.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
-        }
-
-        app.logger.info(
-          { userId: session.user.id },
-          'Member profile fetched successfully'
-        );
-        return result[0];
-      } catch (error) {
-        app.logger.error(
-          { err: error, userId: session.user.id },
-          'Failed to fetch member profile'
-        );
-        throw error;
-      }
-    }
-  );
-
-  // PUT /api/members/me - Update current user's member profile (protected)
-  fastify.put<{ Body: UpdateMemberBody }>(
-    '/api/members/me',
-    {
-      schema: {
-        description: 'Update current user\'s member profile (protected)',
-        tags: ['members'],
-        body: {
-          type: 'object',
-          properties: {
-            fullName: { type: 'string' },
-            commune: { type: 'string' },
-            profession: { type: 'string' },
-            phone: { type: 'string' },
-            email: { type: 'string' },
-          },
-        },
-        response: {
-          200: { type: 'object' },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Body: UpdateMemberBody }>, reply: FastifyReply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
-
-      const updates = request.body;
-      app.logger.info({ userId: session.user.id }, 'Updating member profile');
-
-      try {
-        const result = await app.db
-          .update(schema.memberProfiles)
-          .set({
-            ...updates,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.memberProfiles.userId, session.user.id))
-          .returning();
-
-        if (result.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
-        }
-
-        app.logger.info(
-          { userId: session.user.id },
-          'Member profile updated successfully'
-        );
-        return result[0];
-      } catch (error) {
-        app.logger.error(
-          { err: error, userId: session.user.id },
-          'Failed to update member profile'
-        );
-        throw error;
-      }
-    }
-  );
-
-  // POST /api/cotisations/initiate - Initiate payment (protected)
+// POST /api/cotisations/initiate - Initiate payment (protected)
   fastify.post<{ Body: InitiateCotisationBody }>(
     '/api/cotisations/initiate',
     {
