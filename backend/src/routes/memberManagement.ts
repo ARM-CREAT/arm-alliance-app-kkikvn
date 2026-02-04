@@ -483,4 +483,101 @@ export function register(app: App, fastify: FastifyInstance) {
       }
     }
   );
+
+  // GET /api/members/card/download/:membershipNumber - Download member card (public)
+  fastify.get<{ Params: { membershipNumber: string } }>(
+    '/api/members/card/download/:membershipNumber',
+    {
+      schema: {
+        description: 'Download member card as image (public)',
+        tags: ['members'],
+        params: {
+          type: 'object',
+          properties: {
+            membershipNumber: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'string' },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { membershipNumber: string } }>,
+      reply: FastifyReply
+    ) => {
+      const { membershipNumber } = request.params;
+      app.logger.info({ membershipNumber }, 'Downloading member card');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.membershipNumber, membershipNumber));
+
+        if (result.length === 0) {
+          return reply.status(404).send({ error: 'Member not found' });
+        }
+
+        const member = result[0];
+        const qrCodeData = member.qrCode;
+
+        // Set response headers for image download
+        reply.header('Content-Type', 'image/png');
+        reply.header('Content-Disposition', `attachment; filename="card-${membershipNumber}.png"`);
+
+        app.logger.info({ membershipNumber }, 'Member card downloaded successfully');
+
+        // Return the QR code data URL as PNG
+        return qrCodeData;
+      } catch (error) {
+        app.logger.error(
+          { err: error, membershipNumber },
+          'Failed to download member card'
+        );
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/members/all-members - Get all members with cards (public - for admin view)
+  fastify.get(
+    '/api/members/all-members',
+    {
+      schema: {
+        description: 'Get all members with their cards (public)',
+        tags: ['members'],
+        response: {
+          200: { type: 'array' },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      app.logger.info({}, 'Fetching all members');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .orderBy(desc(schema.memberProfiles.createdAt));
+
+        app.logger.info({ count: result.length }, 'All members fetched successfully');
+
+        return result.map(member => ({
+          id: member.id,
+          fullName: member.fullName,
+          membershipNumber: member.membershipNumber,
+          commune: member.commune,
+          phone: member.phone,
+          status: member.status,
+          role: member.role,
+          qrCode: member.qrCode,
+          createdAt: member.createdAt,
+        }));
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch all members');
+        throw error;
+      }
+    }
+  );
 }
