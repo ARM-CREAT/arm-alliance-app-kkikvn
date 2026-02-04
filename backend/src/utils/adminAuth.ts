@@ -2,8 +2,9 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { App } from '../index.js';
 
 /**
- * Simplified admin authentication:
- * Single password verification via X-Admin-Password header
+ * Admin authentication:
+ * Requires both x-admin-password and x-admin-secret headers
+ * Both headers must match ADMIN_PASSWORD for successful authentication
  */
 
 // Admin password from environment
@@ -15,19 +16,45 @@ export async function verifyAdminAuth(
   app: App
 ): Promise<{ userId: string; username: string } | null> {
   try {
-    // Get admin password from request header
-    const authHeader = request.headers['x-admin-password'];
+    // Get admin credentials from request headers
+    const passwordHeader = request.headers['x-admin-password'];
+    const secretHeader = request.headers['x-admin-secret'];
 
-    if (!authHeader) {
-      app.logger.warn({}, 'Admin auth failed: Missing admin password header');
-      reply.status(403).send({ error: 'Missing admin password' });
+    // Log the authentication attempt
+    app.logger.info(
+      {
+        hasPasswordHeader: !!passwordHeader,
+        hasSecretHeader: !!secretHeader,
+      },
+      'Admin authentication attempt'
+    );
+
+    // Check if both headers are present
+    if (!passwordHeader || !secretHeader) {
+      app.logger.warn(
+        {
+          hasPasswordHeader: !!passwordHeader,
+          hasSecretHeader: !!secretHeader,
+        },
+        'Admin auth failed: Missing required headers'
+      );
+      reply.status(403).send({
+        error: 'Missing admin credentials. Please provide both x-admin-password and x-admin-secret headers.',
+      });
       return null;
     }
 
-    // Verify admin password
-    if (authHeader !== ADMIN_PASSWORD) {
+    // Verify admin password header
+    if (passwordHeader !== ADMIN_PASSWORD) {
       app.logger.warn({}, 'Admin auth failed: Invalid admin password');
       reply.status(403).send({ error: 'Invalid admin password' });
+      return null;
+    }
+
+    // Verify admin secret header
+    if (secretHeader !== ADMIN_PASSWORD) {
+      app.logger.warn({}, 'Admin auth failed: Invalid admin secret');
+      reply.status(403).send({ error: 'Invalid admin secret' });
       return null;
     }
 
@@ -48,8 +75,11 @@ export async function verifyAdminAuth(
 }
 
 /**
- * Validate admin credentials from request body
+ * Validate admin credentials (both password and secret)
  */
-export async function validateAdminCredentials(password: string): Promise<boolean> {
-  return password === ADMIN_PASSWORD;
+export async function validateAdminCredentials(
+  password: string,
+  secret: string
+): Promise<boolean> {
+  return password === ADMIN_PASSWORD && secret === ADMIN_PASSWORD;
 }
