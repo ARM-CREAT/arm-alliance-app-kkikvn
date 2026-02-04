@@ -23,6 +23,7 @@ import * as electionsRoutes from './routes/elections.js';
 import * as internalMessagingRoutes from './routes/internalMessaging.js';
 import * as adminMembersRoutes from './routes/adminMembers.js';
 import * as initGeographyRoutes from './routes/initGeography.js';
+import * as healthRoutes from './routes/health.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -42,6 +43,7 @@ await initializeData(app);
 
 // Register all route modules
 // IMPORTANT: Always use registration functions to avoid circular dependency issues
+healthRoutes.register(app, app.fastify);
 membershipRoutes.register(app, app.fastify);
 leadershipRoutes.register(app, app.fastify);
 donationRoutes.register(app, app.fastify);
