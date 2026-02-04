@@ -64,7 +64,7 @@ export default function HomeScreen() {
   const fabScale = useState(new Animated.Value(1))[0];
 
   const loadAllData = useCallback(async () => {
-    console.log('[HomeScreen] Loading all data');
+    console.log('[HomeScreen] Loading all data (PUBLIC - no authentication required)');
     
     try {
       // Load all data in parallel
@@ -117,7 +117,7 @@ export default function HomeScreen() {
   };
 
   const handleJoinParty = () => {
-    console.log('User tapped Join Party button');
+    console.log('User tapped Join Party button (PUBLIC - no login required)');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -125,7 +125,7 @@ export default function HomeScreen() {
   };
 
   const handleMemberCard = () => {
-    console.log('User tapped Member Card button');
+    console.log('User tapped Member Card button (PUBLIC - no login required)');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -180,7 +180,7 @@ export default function HomeScreen() {
   };
 
   const handleAdminLogin = () => {
-    console.log('User tapped Admin Login button');
+    console.log('User tapped Admin Login button (PASSWORD REQUIRED - Admin only)');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }
@@ -437,7 +437,7 @@ export default function HomeScreen() {
                   color={colors.primary} 
                 />
                 <Text style={styles.actionTitle}>Adhérer</Text>
-                <Text style={styles.actionSubtitle}>Rejoignez-nous</Text>
+                <Text style={styles.actionSubtitle}>Sans mot de passe</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -452,7 +452,7 @@ export default function HomeScreen() {
                   color={colors.primary} 
                 />
                 <Text style={styles.actionTitle}>Ma Carte</Text>
-                <Text style={styles.actionSubtitle}>Carte membre</Text>
+                <Text style={styles.actionSubtitle}>Accès libre</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
@@ -595,7 +595,10 @@ export default function HomeScreen() {
                 size={32} 
                 color={colors.textSecondary} 
               />
-              <Text style={styles.adminText}>Espace Administrateur</Text>
+              <View style={styles.adminTextContainer}>
+                <Text style={styles.adminText}>Espace Administrateur</Text>
+                <Text style={styles.adminSubtext}>Mot de passe requis</Text>
+              </View>
               <IconSymbol 
                 ios_icon_name="chevron.right" 
                 android_material_icon_name="chevron-right" 
@@ -868,8 +871,9 @@ const styles = StyleSheet.create({
   },
   actionSubtitle: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.success,
     marginTop: 2,
+    fontWeight: '600',
   },
   leaderCard: {
     flexDirection: 'row',
@@ -1047,11 +1051,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  adminText: {
+  adminTextContainer: {
     flex: 1,
+    marginLeft: 12,
+  },
+  adminText: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginLeft: 12,
+  },
+  adminSubtext: {
+    fontSize: 12,
+    color: colors.warning,
+    marginTop: 2,
+    fontWeight: '600',
   },
 });

@@ -17,6 +17,7 @@ import { Modal } from '@/components/ui/Modal';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { adminGet } from '@/utils/api';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -67,7 +68,23 @@ export default function AdminLoginScreen() {
         localStorage.setItem('admin_secret_code', trimmedPassword);
       }
 
-      console.log('Admin credentials stored, navigating to dashboard');
+      console.log('Admin credentials stored, verifying with backend...');
+      
+      // Verify credentials by making a test API call
+      try {
+        await adminGet('/api/admin/analytics');
+        console.log('Admin credentials verified successfully');
+      } catch (error) {
+        console.error('Admin verification failed:', error);
+        // Clear invalid credentials
+        await AsyncStorage.removeItem('admin_password');
+        await AsyncStorage.removeItem('admin_secret_code');
+        if (Platform.OS === 'web') {
+          localStorage.removeItem('admin_password');
+          localStorage.removeItem('admin_secret_code');
+        }
+        throw new Error('Mot de passe incorrect');
+      }
       
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -83,12 +100,13 @@ export default function AdminLoginScreen() {
       setTimeout(() => {
         router.replace('/admin/dashboard');
       }, 1000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Admin login error:', error);
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      showModal('Erreur', 'Erreur lors de la connexion. Veuillez réessayer.', 'error');
+      const errorMessage = error?.message || 'Erreur lors de la connexion. Veuillez réessayer.';
+      showModal('Erreur', errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -121,6 +139,22 @@ export default function AdminLoginScreen() {
 
           <Text style={styles.title}>Espace Administrateur</Text>
           <Text style={styles.subtitle}>A.R.M - Alliance pour le Rassemblement Malien</Text>
+
+          <View style={styles.warningBox}>
+            <IconSymbol
+              ios_icon_name="exclamationmark.shield.fill"
+              android_material_icon_name="admin-panel-settings"
+              size={24}
+              color={colors.warning}
+            />
+            <View style={styles.warningTextContainer}>
+              <Text style={styles.warningTitle}>Accès Réservé</Text>
+              <Text style={styles.warningText}>
+                Cette page est réservée UNIQUEMENT aux administrateurs.{'\n'}
+                Les militants n&apos;ont PAS besoin de mot de passe.
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.infoBox}>
             <IconSymbol
@@ -179,6 +213,21 @@ export default function AdminLoginScreen() {
             </TouchableOpacity>
           </View>
 
+          <View style={styles.publicAccessBox}>
+            <IconSymbol
+              ios_icon_name="person.2.fill"
+              android_material_icon_name="group"
+              size={20}
+              color={colors.success}
+            />
+            <View style={styles.publicAccessTextContainer}>
+              <Text style={styles.publicAccessTitle}>Pour les Militants</Text>
+              <Text style={styles.publicAccessText}>
+                Vous pouvez adhérer, accéder à votre carte de membre, et utiliser toutes les fonctionnalités SANS mot de passe depuis la page d&apos;accueil.
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.footer}>
             <Text style={styles.footerText}>
               Fraternité • Liberté • Égalité
@@ -210,25 +259,50 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: colors.text,
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
+  },
+  warningBox: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF3CD',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: colors.warning,
+    alignItems: 'flex-start',
+  },
+  warningTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  warningTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#856404',
+    marginBottom: 4,
+  },
+  warningText: {
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 18,
   },
   infoBox: {
     flexDirection: 'row',
@@ -242,10 +316,10 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.text,
     marginLeft: 12,
-    lineHeight: 20,
+    lineHeight: 18,
   },
   form: {
     width: '100%',
@@ -253,7 +327,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   label: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
     marginBottom: 8,
@@ -295,8 +369,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  publicAccessBox: {
+    flexDirection: 'row',
+    backgroundColor: '#D4EDDA',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: colors.success,
+    alignItems: 'flex-start',
+  },
+  publicAccessTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  publicAccessTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#155724',
+    marginBottom: 4,
+  },
+  publicAccessText: {
+    fontSize: 13,
+    color: '#155724',
+    lineHeight: 18,
+  },
   footer: {
-    marginTop: 48,
+    marginTop: 32,
     alignItems: 'center',
   },
   footerText: {
