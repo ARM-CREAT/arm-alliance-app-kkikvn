@@ -41,12 +41,20 @@ export default function AdminLoginScreen() {
     console.log('[AdminLogin] Backend configured:', isBackendConfigured());
     
     if (!isBackendConfigured()) {
+      console.error('[AdminLogin] Backend URL not configured');
       setBackendStatus('offline');
       return;
     }
 
     try {
-      const response = await fetch(`${BACKEND_URL}/health`, { method: 'GET' });
+      console.log('[AdminLogin] Fetching health endpoint:', `${BACKEND_URL}/health`);
+      const response = await fetch(`${BACKEND_URL}/health`, { 
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      console.log('[AdminLogin] Health check response status:', response.status);
       if (response.ok) {
         console.log('[AdminLogin] Backend is online');
         setBackendStatus('online');
@@ -61,6 +69,7 @@ export default function AdminLoginScreen() {
   };
 
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
+    console.log('[AdminLogin] Showing modal:', { title, message, type });
     setModalTitle(title);
     setModalMessage(message);
     setModalType(type);
@@ -68,15 +77,19 @@ export default function AdminLoginScreen() {
   };
 
   const togglePasswordVisibility = () => {
-    console.log('User toggled password visibility');
+    console.log('[AdminLogin] User toggled password visibility');
     setShowPassword(!showPassword);
   };
 
   const handleLogin = async () => {
-    console.log('Admin login attempt with password:', password ? '***' : '(empty)');
+    console.log('[AdminLogin] ========== LOGIN ATTEMPT STARTED ==========');
+    console.log('[AdminLogin] Password entered:', password ? '***' : '(empty)');
+    console.log('[AdminLogin] Backend status:', backendStatus);
+    console.log('[AdminLogin] Backend URL:', BACKEND_URL);
     
     // Check backend status first
     if (backendStatus === 'offline') {
+      console.warn('[AdminLogin] Cannot login - backend is offline');
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
@@ -89,6 +102,7 @@ export default function AdminLoginScreen() {
     }
 
     if (backendStatus === 'checking') {
+      console.warn('[AdminLogin] Cannot login - still checking backend status');
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
@@ -103,6 +117,7 @@ export default function AdminLoginScreen() {
     const trimmedPassword = password.trim();
     
     if (!trimmedPassword) {
+      console.warn('[AdminLogin] Password is empty');
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
@@ -112,18 +127,27 @@ export default function AdminLoginScreen() {
 
     setLoading(true);
     setConnectionStatus('Connexion au serveur...');
-    console.log('Verifying admin credentials...');
+    console.log('[AdminLogin] Starting authentication process...');
 
     try {
       // Store the admin credentials first
+      console.log('[AdminLogin] Storing admin credentials...');
       await setAdminCredentials(trimmedPassword, trimmedPassword);
+      console.log('[AdminLogin] Admin credentials stored successfully');
 
-      console.log('Admin credentials stored, verifying with backend...');
       setConnectionStatus('Vérification des identifiants...');
+      console.log('[AdminLogin] Calling /api/admin/verify endpoint...');
       
       // Verify credentials by calling the verify endpoint with admin headers
       try {
-        const verifyResult = await apiCall('/api/admin/verify', {
+        const verifyEndpoint = '/api/admin/verify';
+        console.log('[AdminLogin] Full URL:', `${BACKEND_URL}${verifyEndpoint}`);
+        console.log('[AdminLogin] Headers:', {
+          'x-admin-password': '***',
+          'x-admin-secret': '***',
+        });
+        
+        const verifyResult = await apiCall(verifyEndpoint, {
           method: 'POST',
           headers: {
             'x-admin-password': trimmedPassword,
@@ -132,7 +156,7 @@ export default function AdminLoginScreen() {
           body: JSON.stringify({}),
         });
         
-        console.log('Admin credentials verified successfully:', verifyResult);
+        console.log('[AdminLogin] Verification successful:', verifyResult);
         setConnectionStatus('Connexion réussie !');
         
         if (Platform.OS === 'ios') {
@@ -145,42 +169,61 @@ export default function AdminLoginScreen() {
           'success'
         );
         
+        console.log('[AdminLogin] Navigating to dashboard...');
         // Navigate after a short delay to show success message
         setTimeout(() => {
+          console.log('[AdminLogin] Redirecting to /admin/dashboard');
           router.replace('/admin/dashboard');
         }, 1000);
       } catch (error: any) {
-        console.error('Admin verification failed:', error);
-        console.error('Error details:', {
-          message: error?.message,
-          name: error?.name,
-          stack: error?.stack
-        });
+        console.error('[AdminLogin] ========== VERIFICATION FAILED ==========');
+        console.error('[AdminLogin] Error object:', error);
+        console.error('[AdminLogin] Error message:', error?.message);
+        console.error('[AdminLogin] Error name:', error?.name);
+        console.error('[AdminLogin] Error stack:', error?.stack);
         
         // Clear invalid credentials
+        console.log('[AdminLogin] Clearing invalid credentials...');
         await clearAdminCredentials();
         
         // Provide specific error message
         const errorMsg = error?.message || 'Erreur de connexion';
+        console.log('[AdminLogin] Error message to analyze:', errorMsg);
+        
+        let userFriendlyMessage = '';
+        
         if (errorMsg.includes('403') || errorMsg.includes('Invalid') || errorMsg.includes('Missing') || errorMsg.includes('Unauthorized') || errorMsg.includes('401')) {
-          throw new Error('Mot de passe incorrect. Le mot de passe par défaut est: admin123');
-        } else if (errorMsg.includes('connexion') || errorMsg.includes('Network') || errorMsg.includes('fetch') || errorMsg.includes('Impossible') || errorMsg.includes('CORS')) {
-          throw new Error('Impossible de se connecter au serveur. Le serveur est peut-être en cours de redémarrage. Veuillez patienter 30 secondes et réessayer.');
+          console.log('[AdminLogin] Authentication failed - invalid credentials');
+          userFriendlyMessage = 'Mot de passe incorrect. Le mot de passe par défaut est: admin123';
+        } else if (errorMsg.includes('connexion') || errorMsg.includes('Network') || errorMsg.includes('fetch') || errorMsg.includes('Impossible') || errorMsg.includes('CORS') || errorMsg.includes('Failed to fetch')) {
+          console.log('[AdminLogin] Network error detected');
+          userFriendlyMessage = 'Impossible de se connecter au serveur. Le serveur est peut-être en cours de redémarrage. Veuillez patienter 30 secondes et réessayer.';
         } else {
-          throw new Error(errorMsg);
+          console.log('[AdminLogin] Unknown error type');
+          userFriendlyMessage = errorMsg;
         }
+        
+        throw new Error(userFriendlyMessage);
       }
     } catch (error: any) {
-      console.error('Admin login error:', error);
+      console.error('[AdminLogin] ========== LOGIN ERROR ==========');
+      console.error('[AdminLogin] Final error:', error);
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
       const errorMessage = error?.message || 'Erreur lors de la connexion. Veuillez réessayer.';
+      console.log('[AdminLogin] Showing error to user:', errorMessage);
       showModal('Erreur', errorMessage, 'error');
     } finally {
       setLoading(false);
       setConnectionStatus('');
+      console.log('[AdminLogin] ========== LOGIN ATTEMPT ENDED ==========');
     }
+  };
+
+  const handleModalClose = () => {
+    console.log('[AdminLogin] Modal closed');
+    setModalVisible(false);
   };
 
   return (
@@ -360,7 +403,7 @@ export default function AdminLoginScreen() {
         title={modalTitle}
         message={modalMessage}
         type={modalType}
-        onClose={() => setModalVisible(false)}
+        onClose={handleModalClose}
       />
     </>
   );
