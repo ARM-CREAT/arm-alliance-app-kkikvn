@@ -10,7 +10,6 @@ import {
   Platform,
   ActivityIndicator,
   Dimensions,
-  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -19,9 +18,8 @@ import * as Haptics from 'expo-haptics';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedGet } from '@/utils/api';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 
 interface MemberData {
   id: string;
@@ -37,7 +35,7 @@ interface MemberData {
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - 40;
-const CARD_HEIGHT = (CARD_WIDTH * 638) / 1013; // Aspect ratio from the image
+const CARD_HEIGHT = (CARD_WIDTH * 638) / 1013;
 
 export default function MemberCardScreen() {
   const router = useRouter();
@@ -49,45 +47,58 @@ export default function MemberCardScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
-  const showModal = (title: string, message: string) => {
+  const showModal = useCallback((title: string, message: string) => {
     setModalTitle(title);
     setModalMessage(message);
     setModalVisible(true);
-  };
+  }, []);
 
   const loadMemberCard = useCallback(async () => {
     console.log('[MemberCard] Loading member card data');
+    console.log('[MemberCard] User authenticated:', !!user);
+    
     setLoading(true);
 
     try {
-      if (user) {
-        const response = await authenticatedGet<MemberData>('/api/members/me');
-        
-        if (response) {
-          setMemberData(response);
-          console.log('[MemberCard] Member data loaded:', response);
-        } else {
-          showModal(
-            'Aucune Carte',
-            'Vous n\'avez pas encore de carte de membre. Veuillez vous inscrire d\'abord.'
-          );
-        }
-      } else {
-        showModal(
-          'Inscription Requise',
-          'Veuillez vous inscrire pour obtenir votre carte de membre.'
-        );
+      if (!user) {
+        console.log('[MemberCard] No authenticated user found');
+        setLoading(false);
+        return;
       }
+
+      console.log('[MemberCard] Fetching member data from /api/members/me');
+      const response = await authenticatedGet<MemberData>('/api/members/me');
+      
+      console.log('[MemberCard] Member data received:', response);
+      setMemberData(response);
     } catch (error: any) {
       console.error('[MemberCard] Error loading member card:', error);
-      showModal(
-        'Erreur',
-        'Impossible de charger votre carte de membre. Veuillez vous inscrire si vous n\'êtes pas encore membre.'
-      );
+      
+      const errorMessage = error?.message || '';
+      
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        console.log('[MemberCard] Member profile not found - user needs to register');
+        showModal(
+          'Inscription Requise',
+          'Vous devez d\'abord vous inscrire comme militant pour obtenir votre carte de membre.'
+        );
+      } else if (errorMessage.includes('401') || errorMessage.includes('Authentication')) {
+        console.log('[MemberCard] Authentication error');
+        showModal(
+          'Connexion Requise',
+          'Veuillez vous connecter pour accéder à votre carte de membre.'
+        );
+      } else {
+        console.log('[MemberCard] Unknown error:', errorMessage);
+        showModal(
+          'Erreur',
+          'Impossible de charger votre carte de membre. Veuillez réessayer.'
+        );
+      }
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, showModal]);
 
   useEffect(() => {
     loadMemberCard();
@@ -108,10 +119,9 @@ export default function MemberCardScreen() {
     setDownloading(true);
 
     try {
-      // Request permissions
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const permissionStatus = await MediaLibrary.requestPermissionsAsync();
       
-      if (status !== 'granted') {
+      if (permissionStatus.status !== 'granted') {
         showModal(
           'Permission Requise',
           'Veuillez autoriser l\'accès à la galerie pour télécharger votre carte.'
@@ -120,15 +130,11 @@ export default function MemberCardScreen() {
         return;
       }
 
-      // For now, we'll share the card image URL
-      // In a production app, you would generate a custom card image with the member's data
       const cardImageUrl = require('@/assets/images/0be5c379-285b-4791-9ed0-c19c441eb117.png');
       
-      // Check if sharing is available
       const isAvailable = await Sharing.isAvailableAsync();
       
       if (isAvailable) {
-        // Share the card
         await Sharing.shareAsync(cardImageUrl, {
           mimeType: 'image/png',
           dialogTitle: 'Télécharger votre carte de membre',
@@ -208,8 +214,63 @@ export default function MemberCardScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
+        <Stack.Screen
+          options={{
+            title: 'Carte de Membre',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+          }}
+        />
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Chargement de votre carte...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            title: 'Carte de Membre',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+          }}
+        />
+
+        <View style={styles.emptyState}>
+          <IconSymbol
+            ios_icon_name="person.crop.circle.badge.xmark"
+            android_material_icon_name="badge"
+            size={80}
+            color={colors.textSecondary}
+          />
+          <Text style={styles.emptyStateTitle}>Connexion Requise</Text>
+          <Text style={styles.emptyStateText}>
+            Vous devez vous connecter pour accéder à votre carte de membre.
+          </Text>
+          <TouchableOpacity
+            style={styles.registerButton}
+            onPress={() => router.push('/auth')}
+            activeOpacity={0.8}
+          >
+            <IconSymbol
+              ios_icon_name="person.circle"
+              android_material_icon_name="login"
+              size={20}
+              color={colors.background}
+            />
+            <Text style={styles.registerButtonText}>Se Connecter</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Modal
+          visible={modalVisible}
+          title={modalTitle}
+          message={modalMessage}
+          type="info"
+          onClose={() => setModalVisible(false)}
+        />
       </View>
     );
   }
@@ -234,7 +295,7 @@ export default function MemberCardScreen() {
           />
           <Text style={styles.emptyStateTitle}>Aucune Carte de Membre</Text>
           <Text style={styles.emptyStateText}>
-            Vous devez d&apos;abord vous inscrire pour obtenir votre carte de membre.
+            Vous devez d&apos;abord vous inscrire comme militant pour obtenir votre carte de membre.
           </Text>
           <TouchableOpacity
             style={styles.registerButton}
@@ -256,10 +317,7 @@ export default function MemberCardScreen() {
           title={modalTitle}
           message={modalMessage}
           type="info"
-          onClose={() => {
-            setModalVisible(false);
-            router.back();
-          }}
+          onClose={() => setModalVisible(false)}
         />
       </View>
     );
@@ -269,7 +327,6 @@ export default function MemberCardScreen() {
   const statusText = getStatusText(memberData.status);
   const formattedDate = formatDate(memberData.createdAt);
 
-  // Split full name into first name and last name
   const nameParts = memberData.fullName.split(' ');
   const lastName = nameParts[0] || '';
   const firstName = nameParts.slice(1).join(' ') || '';
@@ -285,7 +342,6 @@ export default function MemberCardScreen() {
       />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-        {/* Member Card with Background Image */}
         <View style={styles.cardContainer}>
           <View style={styles.memberCard}>
             <Image
@@ -294,9 +350,7 @@ export default function MemberCardScreen() {
               resizeMode="cover"
             />
             
-            {/* Overlay with member data */}
             <View style={styles.cardOverlay}>
-              {/* Name fields */}
               <View style={styles.nameContainer}>
                 <Text style={styles.cardDataText}>{lastName}</Text>
               </View>
@@ -305,19 +359,16 @@ export default function MemberCardScreen() {
                 <Text style={styles.cardDataText}>{firstName}</Text>
               </View>
               
-              {/* Membership number */}
               <View style={styles.membershipNumberContainer}>
                 <Text style={styles.cardDataText}>{memberData.membershipNumber}</Text>
               </View>
               
-              {/* Date */}
               <View style={styles.dateContainer}>
                 <Text style={styles.cardDataText}>{formattedDate}</Text>
               </View>
             </View>
           </View>
 
-          {/* Download Button */}
           <TouchableOpacity
             style={[styles.downloadButton, downloading && styles.downloadButtonDisabled]}
             onPress={handleDownloadCard}
@@ -339,7 +390,6 @@ export default function MemberCardScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Status Badge */}
           <View style={styles.statusContainer}>
             <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
               <Text style={styles.statusText}>Statut: {statusText}</Text>
@@ -347,7 +397,6 @@ export default function MemberCardScreen() {
           </View>
         </View>
 
-        {/* Quick Actions */}
         <View style={styles.actionsSection}>
           <TouchableOpacity
             style={styles.actionButton}

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,9 +16,12 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
+import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedPost } from '@/utils/api';
 
 export default function MemberRegisterScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -34,6 +37,18 @@ export default function MemberRegisterScreen() {
     email: '',
   });
 
+  useEffect(() => {
+    console.log('[MemberRegister] User authenticated:', !!user);
+    if (!user) {
+      console.log('[MemberRegister] No authenticated user, showing login prompt');
+      showModal(
+        'Connexion Requise',
+        'Vous devez vous connecter avant de vous inscrire comme militant.',
+        'info'
+      );
+    }
+  }, [user]);
+
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
     setModalTitle(title);
     setModalMessage(message);
@@ -42,9 +57,17 @@ export default function MemberRegisterScreen() {
   };
 
   const handleSubmit = async () => {
-    console.log('User tapped Register Member button');
+    console.log('[MemberRegister] User tapped Register Member button');
     
-    // Validation
+    if (!user) {
+      showModal(
+        'Connexion Requise',
+        'Vous devez vous connecter avant de vous inscrire comme militant.',
+        'error'
+      );
+      return;
+    }
+    
     if (!formData.fullName.trim()) {
       showModal('Erreur', 'Veuillez entrer votre nom complet', 'error');
       return;
@@ -69,11 +92,9 @@ export default function MemberRegisterScreen() {
     setLoading(true);
 
     try {
-      const { apiPost } = await import('@/utils/api');
-      
       console.log('[MemberRegister] Submitting member registration:', formData);
       
-      const response = await apiPost('/api/members/register', {
+      const response = await authenticatedPost('/api/members/register', {
         fullName: formData.fullName,
         nina: formData.nina || undefined,
         commune: formData.commune,
@@ -84,28 +105,94 @@ export default function MemberRegisterScreen() {
       
       console.log('[MemberRegister] Registration successful:', response);
       
+      const membershipNumber = response.membershipNumber || 'N/A';
+      
       showModal(
         'Inscription Réussie',
-        `Votre inscription a été enregistrée avec succès!\n\nNuméro de membre: ${response.membershipNumber}\n\nVous pouvez maintenant accéder à votre carte de membre.`,
+        `Votre inscription a été enregistrée avec succès!\n\nNuméro de membre: ${membershipNumber}\n\nVous pouvez maintenant accéder à votre carte de membre.`,
         'success'
       );
       
-      // Navigate to member card after success
       setTimeout(() => {
         router.push('/member/card');
       }, 2000);
       
     } catch (error: any) {
       console.error('[MemberRegister] Registration error:', error);
-      showModal(
-        'Erreur',
-        error?.message || 'Une erreur est survenue lors de l\'inscription. Veuillez réessayer.',
-        'error'
-      );
+      
+      const errorMessage = error?.message || '';
+      
+      if (errorMessage.includes('already have')) {
+        showModal(
+          'Déjà Inscrit',
+          'Vous avez déjà un profil de militant. Vous pouvez accéder à votre carte de membre.',
+          'info'
+        );
+        setTimeout(() => {
+          router.push('/member/card');
+        }, 2000);
+      } else {
+        showModal(
+          'Erreur',
+          errorMessage || 'Une erreur est survenue lors de l\'inscription. Veuillez réessayer.',
+          'error'
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            title: 'Inscription Militant',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+          }}
+        />
+
+        <View style={styles.emptyState}>
+          <IconSymbol
+            ios_icon_name="person.crop.circle.badge.xmark"
+            android_material_icon_name="login"
+            size={80}
+            color={colors.textSecondary}
+          />
+          <Text style={styles.emptyStateTitle}>Connexion Requise</Text>
+          <Text style={styles.emptyStateText}>
+            Vous devez vous connecter avant de vous inscrire comme militant.
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => router.push('/auth')}
+            activeOpacity={0.8}
+          >
+            <IconSymbol
+              ios_icon_name="person.circle"
+              android_material_icon_name="login"
+              size={20}
+              color={colors.background}
+            />
+            <Text style={styles.loginButtonText}>Se Connecter</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Modal
+          visible={modalVisible}
+          title={modalTitle}
+          message={modalMessage}
+          type={modalType}
+          onClose={() => {
+            setModalVisible(false);
+            router.push('/auth');
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -274,6 +361,47 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingTop: Platform.OS === 'android' ? 16 : 0,
     paddingBottom: 40,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingVertical: 60,
+  },
+  emptyStateTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 24,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 12,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  loginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 32,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.background,
+    marginLeft: 8,
   },
   header: {
     alignItems: 'center',
