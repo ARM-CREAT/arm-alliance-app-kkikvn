@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,11 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
-import { useAuth } from '@/contexts/AuthContext';
-import { authenticatedPost } from '@/utils/api';
+import { apiPost } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function MemberRegisterScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -37,18 +36,6 @@ export default function MemberRegisterScreen() {
     email: '',
   });
 
-  useEffect(() => {
-    console.log('[MemberRegister] User authenticated:', !!user);
-    if (!user) {
-      console.log('[MemberRegister] No authenticated user, showing login prompt');
-      showModal(
-        'Connexion Requise',
-        'Vous devez vous connecter avant de vous inscrire comme militant.',
-        'info'
-      );
-    }
-  }, [user]);
-
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
     setModalTitle(title);
     setModalMessage(message);
@@ -58,15 +45,6 @@ export default function MemberRegisterScreen() {
 
   const handleSubmit = async () => {
     console.log('[MemberRegister] User tapped Register Member button');
-    
-    if (!user) {
-      showModal(
-        'Connexion Requise',
-        'Vous devez vous connecter avant de vous inscrire comme militant.',
-        'error'
-      );
-      return;
-    }
     
     if (!formData.fullName.trim()) {
       showModal('Erreur', 'Veuillez entrer votre nom complet', 'error');
@@ -92,9 +70,9 @@ export default function MemberRegisterScreen() {
     setLoading(true);
 
     try {
-      console.log('[MemberRegister] Submitting member registration:', formData);
+      console.log('[MemberRegister] Submitting member registration (PUBLIC - no auth required):', formData);
       
-      const response = await authenticatedPost('/api/members/register', {
+      const response = await apiPost('/api/members/register', {
         fullName: formData.fullName,
         nina: formData.nina || undefined,
         commune: formData.commune,
@@ -106,6 +84,9 @@ export default function MemberRegisterScreen() {
       console.log('[MemberRegister] Registration successful:', response);
       
       const membershipNumber = response.membershipNumber || 'N/A';
+      
+      // Store membership number locally so user can access their card
+      await AsyncStorage.setItem('membershipNumber', membershipNumber);
       
       showModal(
         'Inscription Réussie',
@@ -122,15 +103,12 @@ export default function MemberRegisterScreen() {
       
       const errorMessage = error?.message || '';
       
-      if (errorMessage.includes('already have')) {
+      if (errorMessage.includes('already registered') || errorMessage.includes('duplicate')) {
         showModal(
           'Déjà Inscrit',
-          'Vous avez déjà un profil de militant. Vous pouvez accéder à votre carte de membre.',
+          'Ce numéro de téléphone est déjà enregistré. Si vous avez perdu votre numéro de membre, veuillez contacter l\'administrateur.',
           'info'
         );
-        setTimeout(() => {
-          router.push('/member/card');
-        }, 2000);
       } else {
         showModal(
           'Erreur',
@@ -142,57 +120,6 @@ export default function MemberRegisterScreen() {
       setLoading(false);
     }
   };
-
-  if (!user) {
-    return (
-      <View style={styles.container}>
-        <Stack.Screen
-          options={{
-            title: 'Inscription Militant',
-            headerShown: true,
-            headerBackTitle: 'Retour',
-          }}
-        />
-
-        <View style={styles.emptyState}>
-          <IconSymbol
-            ios_icon_name="person.crop.circle.badge.xmark"
-            android_material_icon_name="login"
-            size={80}
-            color={colors.textSecondary}
-          />
-          <Text style={styles.emptyStateTitle}>Connexion Requise</Text>
-          <Text style={styles.emptyStateText}>
-            Vous devez vous connecter avant de vous inscrire comme militant.
-          </Text>
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={() => router.push('/auth')}
-            activeOpacity={0.8}
-          >
-            <IconSymbol
-              ios_icon_name="person.circle"
-              android_material_icon_name="login"
-              size={20}
-              color={colors.background}
-            />
-            <Text style={styles.loginButtonText}>Se Connecter</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Modal
-          visible={modalVisible}
-          title={modalTitle}
-          message={modalMessage}
-          type={modalType}
-          onClose={() => {
-            setModalVisible(false);
-            router.push('/auth');
-          }}
-        />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>

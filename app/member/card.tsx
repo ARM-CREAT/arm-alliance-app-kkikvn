@@ -10,16 +10,17 @@ import {
   Platform,
   ActivityIndicator,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
 import { Modal } from '@/components/ui/Modal';
-import { useAuth } from '@/contexts/AuthContext';
-import { authenticatedGet } from '@/utils/api';
+import { apiGet } from '@/utils/api';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface MemberData {
   id: string;
@@ -39,13 +40,15 @@ const CARD_HEIGHT = (CARD_WIDTH * 638) / 1013;
 
 export default function MemberCardScreen() {
   const router = useRouter();
-  const { user } = useAuth();
   const [memberData, setMemberData] = useState<MemberData | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
+  const [membershipNumber, setMembershipNumber] = useState('');
+  const [showInput, setShowInput] = useState(false);
+  const [inputValue, setInputValue] = useState('');
 
   const showModal = useCallback((title: string, message: string) => {
     setModalTitle(title);
@@ -53,41 +56,47 @@ export default function MemberCardScreen() {
     setModalVisible(true);
   }, []);
 
-  const loadMemberCard = useCallback(async () => {
+  const loadMemberCard = useCallback(async (memberNumber?: string) => {
     console.log('[MemberCard] Loading member card data');
-    console.log('[MemberCard] User authenticated:', !!user);
     
     setLoading(true);
 
     try {
-      if (!user) {
-        console.log('[MemberCard] No authenticated user found');
+      // Try to get membership number from storage or parameter
+      let storedNumber = memberNumber;
+      if (!storedNumber) {
+        storedNumber = await AsyncStorage.getItem('membershipNumber') || '';
+      }
+      
+      if (!storedNumber) {
+        console.log('[MemberCard] No membership number found - showing input');
+        setShowInput(true);
         setLoading(false);
         return;
       }
 
-      console.log('[MemberCard] Fetching member data from /api/members/me');
-      const response = await authenticatedGet<MemberData>('/api/members/me');
+      console.log('[MemberCard] Fetching member data for:', storedNumber);
+      const response = await apiGet<MemberData>(`/api/members/card/${storedNumber}`);
       
       console.log('[MemberCard] Member data received:', response);
       setMemberData(response);
+      setMembershipNumber(storedNumber);
+      setShowInput(false);
+      
+      // Store for future use
+      await AsyncStorage.setItem('membershipNumber', storedNumber);
     } catch (error: any) {
       console.error('[MemberCard] Error loading member card:', error);
       
       const errorMessage = error?.message || '';
       
       if (errorMessage.includes('404') || errorMessage.includes('not found')) {
-        console.log('[MemberCard] Member profile not found - user needs to register');
+        console.log('[MemberCard] Member not found');
         showModal(
-          'Inscription Requise',
-          'Vous devez d\'abord vous inscrire comme militant pour obtenir votre carte de membre.'
+          'Membre Non Trouvé',
+          'Aucun membre trouvé avec ce numéro. Veuillez vérifier votre numéro de membre ou vous inscrire.'
         );
-      } else if (errorMessage.includes('401') || errorMessage.includes('Authentication')) {
-        console.log('[MemberCard] Authentication error');
-        showModal(
-          'Connexion Requise',
-          'Veuillez vous connecter pour accéder à votre carte de membre.'
-        );
+        setShowInput(true);
       } else {
         console.log('[MemberCard] Unknown error:', errorMessage);
         showModal(
@@ -98,11 +107,23 @@ export default function MemberCardScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user, showModal]);
+  }, [showModal]);
 
   useEffect(() => {
     loadMemberCard();
   }, [loadMemberCard]);
+
+  const handleLookupCard = () => {
+    console.log('[MemberCard] User looking up card with number:', inputValue);
+    if (!inputValue.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre numéro de membre');
+      return;
+    }
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    loadMemberCard(inputValue.trim());
+  };
 
   const handleDownloadCard = async () => {
     console.log('[MemberCard] User tapped Download Card');
@@ -227,7 +248,7 @@ export default function MemberCardScreen() {
     );
   }
 
-  if (!user) {
+  if (showInput || !memberData) {
     return (
       <View style={styles.container}>
         <Stack.Screen
@@ -238,79 +259,65 @@ export default function MemberCardScreen() {
           }}
         />
 
-        <View style={styles.emptyState}>
-          <IconSymbol
-            ios_icon_name="person.crop.circle.badge.xmark"
-            android_material_icon_name="badge"
-            size={80}
-            color={colors.textSecondary}
-          />
-          <Text style={styles.emptyStateTitle}>Connexion Requise</Text>
-          <Text style={styles.emptyStateText}>
-            Vous devez vous connecter pour accéder à votre carte de membre.
-          </Text>
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPress={() => router.push('/auth')}
-            activeOpacity={0.8}
-          >
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
+          <View style={styles.emptyState}>
             <IconSymbol
-              ios_icon_name="person.circle"
-              android_material_icon_name="login"
-              size={20}
-              color={colors.background}
+              ios_icon_name="person.crop.circle.badge.xmark"
+              android_material_icon_name="badge"
+              size={80}
+              color={colors.textSecondary}
             />
-            <Text style={styles.registerButtonText}>Se Connecter</Text>
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.emptyStateTitle}>Accéder à Ma Carte</Text>
+            <Text style={styles.emptyStateText}>
+              Entrez votre numéro de membre pour accéder à votre carte.
+            </Text>
 
-        <Modal
-          visible={modalVisible}
-          title={modalTitle}
-          message={modalMessage}
-          type="info"
-          onClose={() => setModalVisible(false)}
-        />
-      </View>
-    );
-  }
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Numéro de Membre</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: ARM-2024-001"
+                placeholderTextColor={colors.textSecondary}
+                value={inputValue}
+                onChangeText={setInputValue}
+                autoCapitalize="characters"
+              />
+              <TouchableOpacity
+                style={styles.lookupButton}
+                onPress={handleLookupCard}
+                activeOpacity={0.8}
+              >
+                <IconSymbol
+                  ios_icon_name="magnifyingglass"
+                  android_material_icon_name="search"
+                  size={20}
+                  color={colors.background}
+                />
+                <Text style={styles.lookupButtonText}>Rechercher</Text>
+              </TouchableOpacity>
+            </View>
 
-  if (!memberData) {
-    return (
-      <View style={styles.container}>
-        <Stack.Screen
-          options={{
-            title: 'Carte de Membre',
-            headerShown: true,
-            headerBackTitle: 'Retour',
-          }}
-        />
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OU</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
-        <View style={styles.emptyState}>
-          <IconSymbol
-            ios_icon_name="person.crop.circle.badge.xmark"
-            android_material_icon_name="badge"
-            size={80}
-            color={colors.textSecondary}
-          />
-          <Text style={styles.emptyStateTitle}>Aucune Carte de Membre</Text>
-          <Text style={styles.emptyStateText}>
-            Vous devez d&apos;abord vous inscrire comme militant pour obtenir votre carte de membre.
-          </Text>
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPress={() => router.push('/member/register')}
-            activeOpacity={0.8}
-          >
-            <IconSymbol
-              ios_icon_name="person.badge.plus"
-              android_material_icon_name="person-add"
-              size={20}
-              color={colors.background}
-            />
-            <Text style={styles.registerButtonText}>S&apos;inscrire Maintenant</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={styles.registerButton}
+              onPress={() => router.push('/member/register')}
+              activeOpacity={0.8}
+            >
+              <IconSymbol
+                ios_icon_name="person.badge.plus"
+                android_material_icon_name="person-add"
+                size={20}
+                color={colors.background}
+              />
+              <Text style={styles.registerButtonText}>S&apos;inscrire Maintenant</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
 
         <Modal
           visible={modalVisible}
@@ -534,6 +541,66 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.background,
     marginLeft: 8,
+  },
+  inputContainer: {
+    width: '100%',
+    marginTop: 32,
+    paddingHorizontal: 20,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.text,
+    marginBottom: 16,
+  },
+  lookupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  lookupButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.background,
+    marginLeft: 8,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginHorizontal: 16,
+    fontWeight: '600',
   },
   cardContainer: {
     paddingHorizontal: 20,
