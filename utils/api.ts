@@ -208,24 +208,20 @@ export const authenticatedApiCall = async <T = any>(
 
 /**
  * Admin API call helper
- * Automatically retrieves bearer token AND admin credentials from storage
- * Adds both to headers for admin endpoints
+ * Automatically retrieves admin credentials from storage
+ * Adds admin headers for admin endpoints
+ * Note: Admin authentication is independent of Better Auth bearer tokens
  *
  * @param endpoint - API endpoint path
  * @param options - Fetch options (method, headers, body, etc.)
  * @returns Parsed JSON response
- * @throws Error if token or admin credentials not found or request fails
+ * @throws Error if admin credentials not found or request fails
  */
 export const adminApiCall = async <T = any>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> => {
-  const token = await getBearerToken();
   const adminCreds = await getAdminCredentials();
-
-  if (!token) {
-    throw new Error("Authentication token not found. Please sign in.");
-  }
 
   if (!adminCreds) {
     throw new Error("Admin credentials not found. Please log in as admin.");
@@ -235,7 +231,6 @@ export const adminApiCall = async <T = any>(
     ...options,
     headers: {
       ...options?.headers,
-      Authorization: `Bearer ${token}`,
       'x-admin-password': adminCreds.password,
       'x-admin-secret': adminCreds.secretCode,
     },
