@@ -17,7 +17,7 @@ import { Modal } from '@/components/ui/Modal';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { adminGet, BACKEND_URL, isBackendConfigured, setAdminCredentials, clearAdminCredentials } from '@/utils/api';
+import { BACKEND_URL, isBackendConfigured, setAdminCredentials, clearAdminCredentials, apiCall } from '@/utils/api';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -115,17 +115,24 @@ export default function AdminLoginScreen() {
     console.log('Verifying admin credentials...');
 
     try {
-      // Store the admin credentials for authenticated requests
-      // Using the same password for both fields to simplify
+      // Store the admin credentials first
       await setAdminCredentials(trimmedPassword, trimmedPassword);
 
       console.log('Admin credentials stored, verifying with backend...');
       setConnectionStatus('Vérification des identifiants...');
       
-      // Verify credentials by making a test API call
+      // Verify credentials by calling the verify endpoint with admin headers
       try {
-        const result = await adminGet('/api/admin/analytics');
-        console.log('Admin credentials verified successfully:', result);
+        const verifyResult = await apiCall('/api/admin/verify', {
+          method: 'POST',
+          headers: {
+            'x-admin-password': trimmedPassword,
+            'x-admin-secret': trimmedPassword,
+          },
+          body: JSON.stringify({}),
+        });
+        
+        console.log('Admin credentials verified successfully:', verifyResult);
         setConnectionStatus('Connexion réussie !');
         
         if (Platform.OS === 'ios') {
