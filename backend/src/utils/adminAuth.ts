@@ -18,15 +18,25 @@ export async function verifyAdminAuth(
   app: App
 ): Promise<{ userId: string; username: string } | null> {
   try {
-    // Get admin credentials from request headers
-    const passwordHeader = request.headers['x-admin-password'] as string | undefined;
-    const secretHeader = request.headers['x-admin-secret'] as string | undefined;
+    // Get admin credentials from request headers (handle both string and array headers)
+    const passwordHeaderRaw = request.headers['x-admin-password'];
+    const secretHeaderRaw = request.headers['x-admin-secret'];
+
+    // Normalize headers (Fastify may return arrays for duplicate headers)
+    const passwordHeader = Array.isArray(passwordHeaderRaw)
+      ? passwordHeaderRaw[0]
+      : (passwordHeaderRaw as string | undefined);
+    const secretHeader = Array.isArray(secretHeaderRaw)
+      ? secretHeaderRaw[0]
+      : (secretHeaderRaw as string | undefined);
 
     // Log the authentication attempt
     app.logger.info(
       {
         hasPasswordHeader: !!passwordHeader,
         hasSecretHeader: !!secretHeader,
+        method: request.method,
+        path: request.url,
       },
       'Admin authentication attempt'
     );
@@ -50,10 +60,17 @@ export async function verifyAdminAuth(
     if (passwordHeader) {
       if (passwordHeader !== ADMIN_PASSWORD) {
         app.logger.warn(
-          { receivedLength: passwordHeader.length, expectedLength: ADMIN_PASSWORD.length },
+          {
+            receivedLength: passwordHeader.length,
+            expectedLength: ADMIN_PASSWORD.length,
+            headerType: 'x-admin-password'
+          },
           'Admin auth failed: Invalid admin password'
         );
-        reply.status(403).send({ error: 'Invalid admin password' });
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: 'Invalid x-admin-password header'
+        });
         return null;
       }
     }
@@ -62,21 +79,24 @@ export async function verifyAdminAuth(
     if (secretHeader) {
       if (secretHeader !== ADMIN_PASSWORD) {
         app.logger.warn(
-          { receivedLength: secretHeader.length, expectedLength: ADMIN_PASSWORD.length },
+          {
+            receivedLength: secretHeader.length,
+            expectedLength: ADMIN_PASSWORD.length,
+            headerType: 'x-admin-secret'
+          },
           'Admin auth failed: Invalid admin secret'
         );
-        reply.status(403).send({ error: 'Invalid admin secret' });
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: 'Invalid x-admin-secret header'
+        });
         return null;
       }
     }
 
-    // If only one header is provided, verify it matches
+    // If only secret header is provided without password, use it as password
     if (!passwordHeader && secretHeader) {
-      if (secretHeader !== ADMIN_PASSWORD) {
-        app.logger.warn({}, 'Admin auth failed: Invalid secret (used as password)');
-        reply.status(403).send({ error: 'Invalid admin secret' });
-        return null;
-      }
+      // Already validated above, no need to re-check
     }
 
     app.logger.info({}, 'Admin authentication successful');
