@@ -35,7 +35,126 @@ interface ProgramBody {
   order?: number;
 }
 
+interface AdminLoginBody {
+  password: string;
+  secret?: string;
+}
+
 export function register(app: App, fastify: FastifyInstance) {
+  // POST /api/admin/login - Admin login endpoint
+  fastify.post<{ Body: AdminLoginBody }>(
+    '/api/admin/login',
+    {
+      schema: {
+        description: 'Admin login - authenticate with admin credentials',
+        tags: ['admin', 'auth'],
+        body: {
+          type: 'object',
+          properties: {
+            password: { type: 'string' },
+            secret: { type: 'string' },
+          },
+          required: ['password'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              userId: { type: 'string' },
+              username: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          401: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: AdminLoginBody }>, reply: FastifyReply) => {
+      const { password, secret } = request.body;
+
+      app.logger.info({}, 'Admin login attempt');
+
+      try {
+        // Validate credentials
+        const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+        // Check password
+        if (!password) {
+          app.logger.warn({}, 'Admin login failed: Missing password');
+          return reply.status(401).send({ error: 'Password is required' });
+        }
+
+        if (password !== ADMIN_PASSWORD) {
+          app.logger.warn({}, 'Admin login failed: Invalid password');
+          return reply.status(401).send({ error: 'Invalid admin password' });
+        }
+
+        // If secret is provided, validate it too (optional for backward compatibility)
+        if (secret && secret !== ADMIN_PASSWORD) {
+          app.logger.warn({}, 'Admin login failed: Invalid secret');
+          return reply.status(401).send({ error: 'Invalid admin secret' });
+        }
+
+        app.logger.info({}, 'Admin login successful');
+
+        return reply.status(200).send({
+          success: true,
+          userId: 'admin',
+          username: 'administrator',
+          message: 'Admin authentication successful',
+        });
+      } catch (error) {
+        app.logger.error(
+          { err: error },
+          'Error during admin login'
+        );
+        return reply.status(500).send({ error: 'Authentication error' });
+      }
+    }
+  );
+
+  // POST /api/admin/verify - Verify admin credentials via headers
+  fastify.post(
+    '/api/admin/verify',
+    {
+      schema: {
+        description: 'Verify admin credentials provided in headers',
+        tags: ['admin', 'auth'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+            },
+          },
+          403: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const admin = await verifyAdminAuth(request, reply, app);
+      if (!admin) {
+        return;
+      }
+
+      return reply.status(200).send({
+        success: true,
+        message: 'Admin credentials verified successfully',
+      });
+    }
+  );
   // Admin News Management
 
   // POST /api/admin/news - Create news article

@@ -3,8 +3,10 @@ import type { App } from '../index.js';
 
 /**
  * Admin authentication:
- * Requires both x-admin-password and x-admin-secret headers
- * Both headers must match ADMIN_PASSWORD for successful authentication
+ * Supports multiple authentication methods:
+ * 1. Headers: x-admin-password and x-admin-secret (both optional, either works)
+ * 2. Single password header: x-admin-password only
+ * Both must match ADMIN_PASSWORD for successful authentication
  */
 
 // Admin password from environment
@@ -17,8 +19,8 @@ export async function verifyAdminAuth(
 ): Promise<{ userId: string; username: string } | null> {
   try {
     // Get admin credentials from request headers
-    const passwordHeader = request.headers['x-admin-password'];
-    const secretHeader = request.headers['x-admin-secret'];
+    const passwordHeader = request.headers['x-admin-password'] as string | undefined;
+    const secretHeader = request.headers['x-admin-secret'] as string | undefined;
 
     // Log the authentication attempt
     app.logger.info(
@@ -29,8 +31,8 @@ export async function verifyAdminAuth(
       'Admin authentication attempt'
     );
 
-    // Check if both headers are present
-    if (!passwordHeader || !secretHeader) {
+    // Check if at least one credential header is present
+    if (!passwordHeader && !secretHeader) {
       app.logger.warn(
         {
           hasPasswordHeader: !!passwordHeader,
@@ -39,23 +41,42 @@ export async function verifyAdminAuth(
         'Admin auth failed: Missing required headers'
       );
       reply.status(403).send({
-        error: 'Missing admin credentials. Please provide both x-admin-password and x-admin-secret headers.',
+        error: 'Missing admin credentials. Please provide x-admin-password header.',
       });
       return null;
     }
 
-    // Verify admin password header
-    if (passwordHeader !== ADMIN_PASSWORD) {
-      app.logger.warn({}, 'Admin auth failed: Invalid admin password');
-      reply.status(403).send({ error: 'Invalid admin password' });
-      return null;
+    // Verify admin password header (primary authentication)
+    if (passwordHeader) {
+      if (passwordHeader !== ADMIN_PASSWORD) {
+        app.logger.warn(
+          { receivedLength: passwordHeader.length, expectedLength: ADMIN_PASSWORD.length },
+          'Admin auth failed: Invalid admin password'
+        );
+        reply.status(403).send({ error: 'Invalid admin password' });
+        return null;
+      }
     }
 
-    // Verify admin secret header
-    if (secretHeader !== ADMIN_PASSWORD) {
-      app.logger.warn({}, 'Admin auth failed: Invalid admin secret');
-      reply.status(403).send({ error: 'Invalid admin secret' });
-      return null;
+    // Verify admin secret header (secondary, optional)
+    if (secretHeader) {
+      if (secretHeader !== ADMIN_PASSWORD) {
+        app.logger.warn(
+          { receivedLength: secretHeader.length, expectedLength: ADMIN_PASSWORD.length },
+          'Admin auth failed: Invalid admin secret'
+        );
+        reply.status(403).send({ error: 'Invalid admin secret' });
+        return null;
+      }
+    }
+
+    // If only one header is provided, verify it matches
+    if (!passwordHeader && secretHeader) {
+      if (secretHeader !== ADMIN_PASSWORD) {
+        app.logger.warn({}, 'Admin auth failed: Invalid secret (used as password)');
+        reply.status(403).send({ error: 'Invalid admin secret' });
+        return null;
+      }
     }
 
     app.logger.info({}, 'Admin authentication successful');
@@ -75,11 +96,28 @@ export async function verifyAdminAuth(
 }
 
 /**
- * Validate admin credentials (both password and secret)
+ * Validate admin credentials
+ * Can validate password only, or both password and secret
  */
 export async function validateAdminCredentials(
-  password: string,
-  secret: string
+  password?: string,
+  secret?: string
 ): Promise<boolean> {
-  return password === ADMIN_PASSWORD && secret === ADMIN_PASSWORD;
+  // If both provided, both must match
+  if (password && secret) {
+    return password === ADMIN_PASSWORD && secret === ADMIN_PASSWORD;
+  }
+
+  // If only password provided, validate it
+  if (password) {
+    return password === ADMIN_PASSWORD;
+  }
+
+  // If only secret provided, validate it as password
+  if (secret) {
+    return secret === ADMIN_PASSWORD;
+  }
+
+  // Neither provided
+  return false;
 }
