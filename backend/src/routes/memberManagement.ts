@@ -39,12 +39,12 @@ interface ConfirmCotisationBody {
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
-  // POST /api/members/register - Register new member
+  // POST /api/members/register - Register new member (protected - requires authentication)
   fastify.post<{ Body: RegisterMemberBody }>(
     '/api/members/register',
     {
       schema: {
-        description: 'Register as a new member',
+        description: 'Register as a new member (protected - requires authentication)',
         tags: ['members'],
         body: {
           type: 'object',
@@ -71,23 +71,44 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest<{ Body: RegisterMemberBody }>, reply: FastifyReply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
       const { fullName, nina, commune, profession, phone, email } = request.body;
-      app.logger.info({ fullName, phone }, 'New member registration');
+      app.logger.info({ userId: session.user.id, fullName, phone }, 'New member registration');
 
       try {
+        // Check if user already has a member profile
+        const existingProfile = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.userId, session.user.id));
+
+        if (existingProfile.length > 0) {
+          app.logger.warn(
+            { userId: session.user.id, memberId: existingProfile[0].id },
+            'User attempted to register again but already has a member profile'
+          );
+          return reply.status(409).send({
+            error: 'You already have a member profile',
+            membershipNumber: existingProfile[0].membershipNumber,
+          });
+        }
+
         // Get the next sequence number
-        const existingMembers = await app.db
+        const allMembers = await app.db
           .select()
           .from(schema.memberProfiles)
           .orderBy(desc(schema.memberProfiles.createdAt));
 
-        const sequenceNumber = existingMembers.length + 1;
+        const sequenceNumber = allMembers.length + 1;
         const membershipNumber = generateMembershipNumber(sequenceNumber);
         const qrCode = await generateQRCode(membershipNumber, fullName, 'pending');
 
         const result = await app.db
           .insert(schema.memberProfiles)
           .values({
+            userId: session.user.id,
             fullName,
             nina,
             commune,
@@ -102,8 +123,8 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         app.logger.info(
-          { memberId: result[0].id, membershipNumber },
-          'Member registered successfully'
+          { userId: session.user.id, memberId: result[0].id, membershipNumber },
+          'Member registered successfully and linked to user account'
         );
 
         return {
@@ -113,7 +134,7 @@ export function register(app: App, fastify: FastifyInstance) {
         };
       } catch (error) {
         app.logger.error(
-          { err: error, fullName, phone },
+          { err: error, userId: session.user.id, fullName, phone },
           'Failed to register member'
         );
         throw error;
