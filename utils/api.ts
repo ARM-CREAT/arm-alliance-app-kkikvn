@@ -2,7 +2,6 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BEARER_TOKEN_KEY } from "@/lib/auth";
 
 /**
@@ -35,74 +34,6 @@ export const getBearerToken = async (): Promise<string | null> => {
   } catch (error) {
     console.error("[API] Error retrieving bearer token:", error);
     return null;
-  }
-};
-
-/**
- * Set admin credentials in storage
- * @param password - Admin password
- * @param secretCode - Admin secret code
- */
-export const setAdminCredentials = async (password: string, secretCode: string): Promise<void> => {
-  try {
-    console.log('[API] Storing admin credentials...');
-    if (Platform.OS === "web") {
-      localStorage.setItem('admin_password', password);
-      localStorage.setItem('admin_secret_code', secretCode);
-    } else {
-      await AsyncStorage.setItem('admin_password', password);
-      await AsyncStorage.setItem('admin_secret_code', secretCode);
-    }
-    console.log('[API] Admin credentials stored successfully');
-  } catch (error) {
-    console.error("[API] Error storing admin credentials:", error);
-    throw error;
-  }
-};
-
-/**
- * Get admin credentials from storage
- * @returns Object with password and secretCode, or null if not found
- */
-export const getAdminCredentials = async (): Promise<{ password: string; secretCode: string } | null> => {
-  try {
-    let password: string | null = null;
-    let secretCode: string | null = null;
-
-    if (Platform.OS === "web") {
-      password = localStorage.getItem('admin_password');
-      secretCode = localStorage.getItem('admin_secret_code');
-    } else {
-      password = await AsyncStorage.getItem('admin_password');
-      secretCode = await AsyncStorage.getItem('admin_secret_code');
-    }
-
-    if (password && secretCode) {
-      return { password, secretCode };
-    }
-    return null;
-  } catch (error) {
-    console.error("[API] Error retrieving admin credentials:", error);
-    return null;
-  }
-};
-
-/**
- * Clear admin credentials from storage
- */
-export const clearAdminCredentials = async (): Promise<void> => {
-  try {
-    console.log('[API] Clearing admin credentials...');
-    if (Platform.OS === "web") {
-      localStorage.removeItem('admin_password');
-      localStorage.removeItem('admin_secret_code');
-    } else {
-      await AsyncStorage.removeItem('admin_password');
-      await AsyncStorage.removeItem('admin_secret_code');
-    }
-    console.log('[API] Admin credentials cleared');
-  } catch (error) {
-    console.error("[API] Error clearing admin credentials:", error);
   }
 };
 
@@ -333,37 +264,6 @@ export const authenticatedApiCall = async <T = any>(
 };
 
 /**
- * Admin API call helper
- * Automatically retrieves admin credentials from storage
- * Adds admin headers for admin endpoints
- * Note: Admin authentication is independent of Better Auth bearer tokens
- *
- * @param endpoint - API endpoint path
- * @param options - Fetch options (method, headers, body, etc.)
- * @returns Parsed JSON response
- * @throws Error if admin credentials not found or request fails
- */
-export const adminApiCall = async <T = any>(
-  endpoint: string,
-  options?: RequestInit
-): Promise<T> => {
-  const adminCreds = await getAdminCredentials();
-
-  if (!adminCreds) {
-    throw new Error("Admin credentials not found. Please log in as admin.");
-  }
-
-  return apiCall<T>(endpoint, {
-    ...options,
-    headers: {
-      ...options?.headers,
-      'x-admin-password': adminCreds.password,
-      'x-admin-secret': adminCreds.secretCode,
-    },
-  });
-};
-
-/**
  * Authenticated GET request
  */
 export const authenticatedGet = async <T = any>(endpoint: string): Promise<T> => {
@@ -415,63 +315,6 @@ export const authenticatedPatch = async <T = any>(
  */
 export const authenticatedDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
   return authenticatedApiCall<T>(endpoint, {
-    method: "DELETE",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * Admin GET request
- */
-export const adminGet = async <T = any>(endpoint: string): Promise<T> => {
-  return adminApiCall<T>(endpoint, { method: "GET" });
-};
-
-/**
- * Admin POST request
- */
-export const adminPost = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return adminApiCall<T>(endpoint, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * Admin PUT request
- */
-export const adminPut = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return adminApiCall<T>(endpoint, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * Admin PATCH request
- */
-export const adminPatch = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return adminApiCall<T>(endpoint, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * Admin DELETE request
- * Always sends a body to avoid FST_ERR_CTP_EMPTY_JSON_BODY errors
- */
-export const adminDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
-  return adminApiCall<T>(endpoint, {
     method: "DELETE",
     body: JSON.stringify(data),
   });

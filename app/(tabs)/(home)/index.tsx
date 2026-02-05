@@ -205,14 +205,6 @@ export default function HomeScreen() {
     router.push('/ai-chat');
   };
 
-  const handleAdminLogin = () => {
-    console.log('User tapped Admin Login button (PASSWORD REQUIRED - Admin only)');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
-    router.push('/admin/login');
-  };
-
   const handleSettings = () => {
     console.log('User tapped Settings button');
     if (Platform.OS === 'ios') {
@@ -622,32 +614,6 @@ export default function HomeScreen() {
               <Text style={styles.addressText}>Sebenikoro, Bamako</Text>
               <Text style={styles.addressText}>Mali</Text>
             </View>
-          </View>
-
-          {/* Espace Administrateur */}
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.adminCard} 
-              onPress={handleAdminLogin}
-              activeOpacity={0.8}
-            >
-              <IconSymbol 
-                ios_icon_name="lock.shield.fill" 
-                android_material_icon_name="admin-panel-settings" 
-                size={32} 
-                color={colors.textSecondary} 
-              />
-              <View style={styles.adminTextContainer}>
-                <Text style={styles.adminText}>Espace Administrateur</Text>
-                <Text style={styles.adminSubtext}>Mot de passe requis</Text>
-              </View>
-              <IconSymbol 
-                ios_icon_name="chevron.right" 
-                android_material_icon_name="chevron-right" 
-                size={20} 
-                color={colors.textSecondary} 
-              />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.bottomSpacer} />
@@ -1110,30 +1076,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginTop: 2,
-  },
-  adminCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  adminTextContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  adminText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  adminSubtext: {
-    fontSize: 12,
-    color: colors.warning,
-    marginTop: 2,
-    fontWeight: '600',
   },
 });
