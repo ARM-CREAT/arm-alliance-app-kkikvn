@@ -165,6 +165,54 @@ export default function RootLayout() {
                       headerShown: false,
                     }} 
                   />
+                  <Stack.Screen 
+                    name="admin/login" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="admin/dashboard" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="admin/news" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="admin/events" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="admin/leadership" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="admin/media" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="admin/members" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="admin/program" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
                 </Stack>
                 <StatusBar style="auto" />
                 

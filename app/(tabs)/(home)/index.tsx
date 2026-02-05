@@ -213,6 +213,14 @@ export default function HomeScreen() {
     router.push('/settings');
   };
 
+  const handleAdminAccess = () => {
+    console.log('User tapped Admin Access button');
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    router.push('/admin/login');
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -532,6 +540,21 @@ export default function HomeScreen() {
                 />
                 <Text style={styles.actionTitle}>Chat Public</Text>
                 <Text style={styles.actionSubtitle}>Discutez</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionCard} 
+                onPress={handleAdminAccess}
+                activeOpacity={0.8}
+              >
+                <IconSymbol 
+                  ios_icon_name="lock.shield" 
+                  android_material_icon_name="admin-panel-settings" 
+                  size={32} 
+                  color={colors.accent} 
+                />
+                <Text style={styles.actionTitle}>Admin</Text>
+                <Text style={styles.actionSubtitle}>Accès sécurisé</Text>
               </TouchableOpacity>
             </View>
           </View>
