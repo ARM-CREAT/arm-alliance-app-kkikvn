@@ -324,12 +324,12 @@ export function register(app: App, fastify: FastifyInstance) {
 
   // Admin Events Management
 
-  // POST /api/admin/events - Create event
+  // POST /api/admin/events - Create event (public)
   fastify.post<{ Body: EventBody }>(
     '/api/admin/events',
     {
       schema: {
-        description: 'Create an event (admin only)',
+        description: 'Create an event',
         tags: ['admin', 'events'],
         body: {
           type: 'object',
@@ -348,11 +348,8 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest<{ Body: EventBody }>, reply: FastifyReply) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { title, description, date, location, imageUrl } = request.body;
-      app.logger.info({ title, adminId: admin.userId }, 'Admin creating event');
+      app.logger.info({ title }, 'Creating event');
 
       try {
         const result = await app.db
@@ -363,18 +360,17 @@ export function register(app: App, fastify: FastifyInstance) {
             date: new Date(date),
             location,
             imageUrl,
-            createdBy: admin.username,
           })
           .returning();
 
         app.logger.info(
-          { eventId: result[0].id, adminId: admin.userId },
-          'Event created by admin'
+          { eventId: result[0].id },
+          'Event created successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, title, adminId: admin.userId },
+          { err: error, title },
           'Failed to create event'
         );
         throw error;
@@ -414,16 +410,13 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: Partial<EventBody> }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
       const updates = {
         ...request.body,
         ...(request.body.date && { date: new Date(request.body.date) }),
       };
 
-      app.logger.info({ eventId: id, adminId: admin.userId }, 'Admin updating event');
+      app.logger.info({ eventId: id }, 'Updating event');
 
       try {
         const result = await app.db
@@ -433,13 +426,13 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         app.logger.info(
-          { eventId: id, adminId: admin.userId },
-          'Event updated by admin'
+          { eventId: id },
+          'Event updated successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, eventId: id, adminId: admin.userId },
+          { err: error, eventId: id },
           'Failed to update event'
         );
         throw error;
@@ -447,12 +440,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/admin/events/:id - Delete event
+  // DELETE /api/admin/events/:id - Delete event (public)
   fastify.delete<{ Params: { id: string } }>(
     '/api/admin/events/:id',
     {
       schema: {
-        description: 'Delete an event (admin only)',
+        description: 'Delete an event',
         tags: ['admin', 'events'],
         params: {
           type: 'object',
@@ -469,11 +462,8 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
-      app.logger.info({ eventId: id, adminId: admin.userId }, 'Admin deleting event');
+      app.logger.info({ eventId: id }, 'Deleting event');
 
       try {
         await app.db
@@ -481,13 +471,13 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.events.id, id));
 
         app.logger.info(
-          { eventId: id, adminId: admin.userId },
-          'Event deleted by admin'
+          { eventId: id },
+          'Event deleted successfully'
         );
         return { success: true };
       } catch (error) {
         app.logger.error(
-          { err: error, eventId: id, adminId: admin.userId },
+          { err: error, eventId: id },
           'Failed to delete event'
         );
         throw error;
@@ -497,12 +487,12 @@ export function register(app: App, fastify: FastifyInstance) {
 
   // Admin Leadership Management
 
-  // POST /api/admin/leadership - Create leadership member
+  // POST /api/admin/leadership - Create leadership member (public)
   fastify.post<{ Body: LeadershipBody }>(
     '/api/admin/leadership',
     {
       schema: {
-        description: 'Create a leadership member (admin only)',
+        description: 'Create a leadership member',
         tags: ['admin', 'leadership'],
         body: {
           type: 'object',
@@ -522,11 +512,8 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest<{ Body: LeadershipBody }>, reply: FastifyReply) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { name, position, phone, address, location, order } = request.body;
-      app.logger.info({ position, adminId: admin.userId }, 'Admin creating leadership');
+      app.logger.info({ position }, 'Creating leadership member');
 
       try {
         const result = await app.db
@@ -538,18 +525,17 @@ export function register(app: App, fastify: FastifyInstance) {
             address,
             location,
             order: order || 0,
-            createdBy: admin.username,
           })
           .returning();
 
         app.logger.info(
-          { leaderId: result[0].id, adminId: admin.userId },
-          'Leadership member created by admin'
+          { leaderId: result[0].id },
+          'Leadership member created successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, position, adminId: admin.userId },
+          { err: error, position },
           'Failed to create leadership member'
         );
         throw error;
@@ -557,12 +543,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PUT /api/admin/leadership/:id - Update leadership member
+  // PUT /api/admin/leadership/:id - Update leadership member (public)
   fastify.put<{ Params: { id: string }; Body: Partial<LeadershipBody> }>(
     '/api/admin/leadership/:id',
     {
       schema: {
-        description: 'Update a leadership member (admin only)',
+        description: 'Update a leadership member',
         tags: ['admin', 'leadership'],
         params: {
           type: 'object',
@@ -590,12 +576,9 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: Partial<LeadershipBody> }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
       const updates = request.body;
-      app.logger.info({ leaderId: id, adminId: admin.userId }, 'Admin updating leadership');
+      app.logger.info({ leaderId: id }, 'Updating leadership member');
 
       try {
         const result = await app.db
@@ -605,13 +588,13 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         app.logger.info(
-          { leaderId: id, adminId: admin.userId },
-          'Leadership member updated by admin'
+          { leaderId: id },
+          'Leadership member updated successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, leaderId: id, adminId: admin.userId },
+          { err: error, leaderId: id },
           'Failed to update leadership member'
         );
         throw error;
@@ -619,12 +602,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/admin/leadership/:id - Delete leadership member
+  // DELETE /api/admin/leadership/:id - Delete leadership member (public)
   fastify.delete<{ Params: { id: string } }>(
     '/api/admin/leadership/:id',
     {
       schema: {
-        description: 'Delete a leadership member (admin only)',
+        description: 'Delete a leadership member',
         tags: ['admin', 'leadership'],
         params: {
           type: 'object',
@@ -641,11 +624,8 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
-      app.logger.info({ leaderId: id, adminId: admin.userId }, 'Admin deleting leadership');
+      app.logger.info({ leaderId: id }, 'Deleting leadership member');
 
       try {
         await app.db
@@ -653,13 +633,13 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.leadership.id, id));
 
         app.logger.info(
-          { leaderId: id, adminId: admin.userId },
-          'Leadership member deleted by admin'
+          { leaderId: id },
+          'Leadership member deleted successfully'
         );
         return { success: true };
       } catch (error) {
         app.logger.error(
-          { err: error, leaderId: id, adminId: admin.userId },
+          { err: error, leaderId: id },
           'Failed to delete leadership member'
         );
         throw error;
@@ -669,12 +649,12 @@ export function register(app: App, fastify: FastifyInstance) {
 
   // Admin Program Management
 
-  // POST /api/admin/program - Create program item
+  // POST /api/admin/program - Create program item (public)
   fastify.post<{ Body: ProgramBody }>(
     '/api/admin/program',
     {
       schema: {
-        description: 'Create a program item (admin only)',
+        description: 'Create a program item',
         tags: ['admin', 'program'],
         body: {
           type: 'object',
@@ -692,11 +672,8 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest<{ Body: ProgramBody }>, reply: FastifyReply) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { category, title, description, order } = request.body;
-      app.logger.info({ category, adminId: admin.userId }, 'Admin creating program');
+      app.logger.info({ category }, 'Creating program item');
 
       try {
         const result = await app.db
@@ -706,18 +683,17 @@ export function register(app: App, fastify: FastifyInstance) {
             title,
             description,
             order: order || 0,
-            createdBy: admin.username,
           })
           .returning();
 
         app.logger.info(
-          { programId: result[0].id, adminId: admin.userId },
-          'Program item created by admin'
+          { programId: result[0].id },
+          'Program item created successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, category, adminId: admin.userId },
+          { err: error, category },
           'Failed to create program item'
         );
         throw error;
@@ -725,12 +701,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PUT /api/admin/program/:id - Update program item
+  // PUT /api/admin/program/:id - Update program item (public)
   fastify.put<{ Params: { id: string }; Body: Partial<ProgramBody> }>(
     '/api/admin/program/:id',
     {
       schema: {
-        description: 'Update a program item (admin only)',
+        description: 'Update a program item',
         tags: ['admin', 'program'],
         params: {
           type: 'object',
@@ -756,12 +732,9 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: Partial<ProgramBody> }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
       const updates = request.body;
-      app.logger.info({ programId: id, adminId: admin.userId }, 'Admin updating program');
+      app.logger.info({ programId: id }, 'Updating program item');
 
       try {
         const result = await app.db
@@ -771,13 +744,13 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         app.logger.info(
-          { programId: id, adminId: admin.userId },
-          'Program item updated by admin'
+          { programId: id },
+          'Program item updated successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, programId: id, adminId: admin.userId },
+          { err: error, programId: id },
           'Failed to update program item'
         );
         throw error;
@@ -785,12 +758,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/admin/program/:id - Delete program item
+  // DELETE /api/admin/program/:id - Delete program item (public)
   fastify.delete<{ Params: { id: string } }>(
     '/api/admin/program/:id',
     {
       schema: {
-        description: 'Delete a program item (admin only)',
+        description: 'Delete a program item',
         tags: ['admin', 'program'],
         params: {
           type: 'object',
@@ -807,11 +780,8 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
-      app.logger.info({ programId: id, adminId: admin.userId }, 'Admin deleting program');
+      app.logger.info({ programId: id }, 'Deleting program item');
 
       try {
         await app.db
@@ -819,13 +789,13 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.politicalProgram.id, id));
 
         app.logger.info(
-          { programId: id, adminId: admin.userId },
-          'Program item deleted by admin'
+          { programId: id },
+          'Program item deleted successfully'
         );
         return { success: true };
       } catch (error) {
         app.logger.error(
-          { err: error, programId: id, adminId: admin.userId },
+          { err: error, programId: id },
           'Failed to delete program item'
         );
         throw error;
