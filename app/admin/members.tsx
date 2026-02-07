@@ -1,11 +1,8 @@
 
 import { Stack, useRouter } from 'expo-router';
 import { Modal } from '@/components/ui/Modal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
-import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api';
 import {
   View,
   Text,
@@ -16,6 +13,8 @@ import {
   RefreshControl,
   TextInput,
 } from 'react-native';
+import { IconSymbol } from '@/components/IconSymbol';
+import { apiGet, apiPost } from '@/utils/api';
 import { colors } from '@/styles/commonStyles';
 
 interface Member {
@@ -244,26 +243,9 @@ export default function AdminMembersScreen() {
   const [modalMessage, setModalMessage] = useState('');
   const [modalCallback, setModalCallback] = useState<(() => void) | null>(null);
 
-  const checkAuthAndLoad = useCallback(async () => {
-    console.log('[AdminMembers] Checking authentication and loading members');
-    try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        console.log('[AdminMembers] No credentials found, redirecting to login');
-        router.replace('/admin/login');
-        return;
-      }
-
-      await loadMembers();
-    } catch (error) {
-      console.error('[AdminMembers] Error checking auth:', error);
-      showModalFunc('Erreur', 'Erreur lors de la vérification de l\'authentification.', 'error');
-    }
-  }, [router]);
-
   useEffect(() => {
-    checkAuthAndLoad();
-  }, [checkAuthAndLoad]);
+    loadMembers();
+  }, []);
 
   useEffect(() => {
     filterMembers();
@@ -272,25 +254,7 @@ export default function AdminMembersScreen() {
   const loadMembers = async () => {
     console.log('[AdminMembers] Loading members');
     try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        router.replace('/admin/login');
-        return;
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/admin/members`, {
-        method: 'GET',
-        headers: {
-          'x-admin-password': credentials,
-          'x-admin-secret': credentials,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await apiGet<Member[]>('/api/membership');
       console.log('[AdminMembers] Members loaded:', data);
       setMembers(data);
     } catch (error: any) {
@@ -347,32 +311,13 @@ export default function AdminMembersScreen() {
       async () => {
         console.log(`[AdminMembers] Updating member status to ${newStatus}:`, memberId);
         try {
-          const credentials = await AsyncStorage.getItem('admin_credentials');
-          if (!credentials) {
-            router.replace('/admin/login');
-            return;
-          }
-
-          const response = await fetch(`${BACKEND_URL}/api/admin/members/${memberId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-admin-password': credentials,
-              'x-admin-secret': credentials,
-            },
-            body: JSON.stringify({ status: newStatus }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Erreur ${response.status}`);
-          }
-
+          await apiPut(`/api/membership/${memberId}/status`, { status: newStatus === 'active' ? 'approved' : 'rejected' });
           console.log('[AdminMembers] Member status updated successfully');
           showModalFunc('Succès', `Membre ${actionText === 'activer' ? 'activé' : 'suspendu'} avec succès!`, 'success');
           await loadMembers();
         } catch (error: any) {
           console.error('[AdminMembers] Error updating member status:', error);
-          showModalFunc('Erreur', 'Impossible de mettre à jour le statut du membre.', 'error');
+          showModalFunc('Erreur', error.message || 'Impossible de mettre à jour le statut du membre.', 'error');
         }
       }
     );

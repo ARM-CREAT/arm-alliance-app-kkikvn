@@ -1,11 +1,10 @@
 
 import { Stack, useRouter } from 'expo-router';
 import { Modal } from '@/components/ui/Modal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api';
 import {
   View,
   Text,
@@ -231,49 +230,14 @@ export default function AdminProgramScreen() {
   const [formOrder, setFormOrder] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const checkAuthAndLoad = useCallback(async () => {
-    console.log('[AdminProgram] Checking authentication and loading programs');
-    try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        console.log('[AdminProgram] No credentials found, redirecting to login');
-        router.replace('/admin/login');
-        return;
-      }
-
-      await loadPrograms();
-    } catch (error) {
-      console.error('[AdminProgram] Error checking auth:', error);
-      showModalFunc('Erreur', 'Erreur lors de la vérification de l\'authentification.', 'error');
-    }
-  }, [router]);
-
   useEffect(() => {
-    checkAuthAndLoad();
-  }, [checkAuthAndLoad]);
+    loadPrograms();
+  }, []);
 
   const loadPrograms = async () => {
     console.log('[AdminProgram] Loading programs');
     try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        router.replace('/admin/login');
-        return;
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/admin/program`, {
-        method: 'GET',
-        headers: {
-          'x-admin-password': credentials,
-          'x-admin-secret': credentials,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await apiGet<ProgramItem[]>('/api/program');
       console.log('[AdminProgram] Programs loaded:', data);
       setPrograms(data);
     } catch (error: any) {
@@ -339,12 +303,6 @@ export default function AdminProgramScreen() {
     setSubmitting(true);
 
     try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        router.replace('/admin/login');
-        return;
-      }
-
       const programData = {
         category: formCategory.trim(),
         title: formTitle.trim(),
@@ -352,22 +310,10 @@ export default function AdminProgramScreen() {
         order: formOrder.trim() ? parseInt(formOrder.trim()) : undefined,
       };
 
-      const url = editingProgram
-        ? `${BACKEND_URL}/api/admin/program/${editingProgram.id}`
-        : `${BACKEND_URL}/api/admin/program`;
-
-      const response = await fetch(url, {
-        method: editingProgram ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': credentials,
-          'x-admin-secret': credentials,
-        },
-        body: JSON.stringify(programData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
+      if (editingProgram) {
+        await apiPut(`/api/program/${editingProgram.id}`, programData);
+      } else {
+        await apiPost('/api/program', programData);
       }
 
       const successMessage = editingProgram ? 'Programme modifié avec succès!' : 'Programme ajouté avec succès!';
@@ -379,7 +325,7 @@ export default function AdminProgramScreen() {
       await loadPrograms();
     } catch (error: any) {
       console.error('[AdminProgram] Error submitting program:', error);
-      showModalFunc('Erreur', 'Impossible de sauvegarder le programme.', 'error');
+      showModalFunc('Erreur', error.message || 'Impossible de sauvegarder le programme.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -396,32 +342,13 @@ export default function AdminProgramScreen() {
       async () => {
         console.log('[AdminProgram] Deleting program:', id);
         try {
-          const credentials = await AsyncStorage.getItem('admin_credentials');
-          if (!credentials) {
-            router.replace('/admin/login');
-            return;
-          }
-
-          const response = await fetch(`${BACKEND_URL}/api/admin/program/${id}`, {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-admin-password': credentials,
-              'x-admin-secret': credentials,
-            },
-            body: JSON.stringify({}),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Erreur ${response.status}`);
-          }
-
+          await apiDelete(`/api/program/${id}`);
           console.log('[AdminProgram] Program deleted successfully');
           showModalFunc('Succès', 'Programme supprimé avec succès!', 'success');
           await loadPrograms();
         } catch (error: any) {
           console.error('[AdminProgram] Error deleting program:', error);
-          showModalFunc('Erreur', 'Impossible de supprimer le programme.', 'error');
+          showModalFunc('Erreur', error.message || 'Impossible de supprimer le programme.', 'error');
         }
       }
     );

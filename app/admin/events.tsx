@@ -1,11 +1,10 @@
 
 import { Stack, useRouter } from 'expo-router';
 import { Modal } from '@/components/ui/Modal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api';
 import {
   View,
   Text,
@@ -230,49 +229,14 @@ export default function AdminEventsScreen() {
   const [formImageUrl, setFormImageUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const checkAuthAndLoad = useCallback(async () => {
-    console.log('[AdminEvents] Checking authentication and loading events');
-    try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        console.log('[AdminEvents] No credentials found, redirecting to login');
-        router.replace('/admin/login');
-        return;
-      }
-
-      await loadEvents();
-    } catch (error) {
-      console.error('[AdminEvents] Error checking auth:', error);
-      showModalFunc('Erreur', 'Erreur lors de la vérification de l\'authentification.', 'error');
-    }
-  }, [router]);
-
   useEffect(() => {
-    checkAuthAndLoad();
-  }, [checkAuthAndLoad]);
+    loadEvents();
+  }, []);
 
   const loadEvents = async () => {
     console.log('[AdminEvents] Loading events');
     try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        router.replace('/admin/login');
-        return;
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/admin/events`, {
-        method: 'GET',
-        headers: {
-          'x-admin-password': credentials,
-          'x-admin-secret': credentials,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await apiGet<EventItem[]>('/api/events');
       console.log('[AdminEvents] Events loaded:', data);
       setEvents(data);
     } catch (error: any) {
@@ -340,12 +304,6 @@ export default function AdminEventsScreen() {
     setSubmitting(true);
 
     try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        router.replace('/admin/login');
-        return;
-      }
-
       const eventData = {
         title: formTitle.trim(),
         description: formDescription.trim(),
@@ -354,22 +312,10 @@ export default function AdminEventsScreen() {
         imageUrl: formImageUrl.trim() || undefined,
       };
 
-      const url = editingEvent
-        ? `${BACKEND_URL}/api/admin/events/${editingEvent.id}`
-        : `${BACKEND_URL}/api/admin/events`;
-
-      const response = await fetch(url, {
-        method: editingEvent ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': credentials,
-          'x-admin-secret': credentials,
-        },
-        body: JSON.stringify(eventData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
+      if (editingEvent) {
+        await apiPut(`/api/events/${editingEvent.id}`, eventData);
+      } else {
+        await apiPost('/api/events', eventData);
       }
 
       const successMessage = editingEvent ? 'Événement modifié avec succès!' : 'Événement ajouté avec succès!';
@@ -381,7 +327,7 @@ export default function AdminEventsScreen() {
       await loadEvents();
     } catch (error: any) {
       console.error('[AdminEvents] Error submitting event:', error);
-      showModalFunc('Erreur', 'Impossible de sauvegarder l\'événement.', 'error');
+      showModalFunc('Erreur', error.message || 'Impossible de sauvegarder l\'événement.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -398,32 +344,13 @@ export default function AdminEventsScreen() {
       async () => {
         console.log('[AdminEvents] Deleting event:', id);
         try {
-          const credentials = await AsyncStorage.getItem('admin_credentials');
-          if (!credentials) {
-            router.replace('/admin/login');
-            return;
-          }
-
-          const response = await fetch(`${BACKEND_URL}/api/admin/events/${id}`, {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-admin-password': credentials,
-              'x-admin-secret': credentials,
-            },
-            body: JSON.stringify({}),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Erreur ${response.status}`);
-          }
-
+          await apiDelete(`/api/events/${id}`);
           console.log('[AdminEvents] Event deleted successfully');
           showModalFunc('Succès', 'Événement supprimé avec succès!', 'success');
           await loadEvents();
         } catch (error: any) {
           console.error('[AdminEvents] Error deleting event:', error);
-          showModalFunc('Erreur', 'Impossible de supprimer l\'événement.', 'error');
+          showModalFunc('Erreur', error.message || 'Impossible de supprimer l\'événement.', 'error');
         }
       }
     );

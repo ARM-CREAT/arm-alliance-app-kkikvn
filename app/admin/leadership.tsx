@@ -1,11 +1,10 @@
 
 import { Stack, useRouter } from 'expo-router';
 import { Modal } from '@/components/ui/Modal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api';
 import {
   View,
   Text,
@@ -229,49 +228,14 @@ export default function AdminLeadershipScreen() {
   const [formOrder, setFormOrder] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const checkAuthAndLoad = useCallback(async () => {
-    console.log('[AdminLeadership] Checking authentication and loading members');
-    try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        console.log('[AdminLeadership] No credentials found, redirecting to login');
-        router.replace('/admin/login');
-        return;
-      }
-
-      await loadMembers();
-    } catch (error) {
-      console.error('[AdminLeadership] Error checking auth:', error);
-      showModalFunc('Erreur', 'Erreur lors de la vérification de l\'authentification.', 'error');
-    }
-  }, [router]);
-
   useEffect(() => {
-    checkAuthAndLoad();
-  }, [checkAuthAndLoad]);
+    loadMembers();
+  }, []);
 
   const loadMembers = async () => {
     console.log('[AdminLeadership] Loading leadership members');
     try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        router.replace('/admin/login');
-        return;
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/admin/leadership`, {
-        method: 'GET',
-        headers: {
-          'x-admin-password': credentials,
-          'x-admin-secret': credentials,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = await apiGet<LeadershipMember[]>('/api/leadership');
       console.log('[AdminLeadership] Members loaded:', data);
       setMembers(data);
     } catch (error: any) {
@@ -341,12 +305,6 @@ export default function AdminLeadershipScreen() {
     setSubmitting(true);
 
     try {
-      const credentials = await AsyncStorage.getItem('admin_credentials');
-      if (!credentials) {
-        router.replace('/admin/login');
-        return;
-      }
-
       const memberData = {
         name: formName.trim(),
         position: formPosition.trim(),
@@ -356,22 +314,10 @@ export default function AdminLeadershipScreen() {
         order: formOrder.trim() ? parseInt(formOrder.trim()) : undefined,
       };
 
-      const url = editingMember
-        ? `${BACKEND_URL}/api/admin/leadership/${editingMember.id}`
-        : `${BACKEND_URL}/api/admin/leadership`;
-
-      const response = await fetch(url, {
-        method: editingMember ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': credentials,
-          'x-admin-secret': credentials,
-        },
-        body: JSON.stringify(memberData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erreur ${response.status}`);
+      if (editingMember) {
+        await apiPut(`/api/leadership/${editingMember.id}`, memberData);
+      } else {
+        await apiPost('/api/leadership', memberData);
       }
 
       const successMessage = editingMember ? 'Membre modifié avec succès!' : 'Membre ajouté avec succès!';
@@ -383,7 +329,7 @@ export default function AdminLeadershipScreen() {
       await loadMembers();
     } catch (error: any) {
       console.error('[AdminLeadership] Error submitting member:', error);
-      showModalFunc('Erreur', 'Impossible de sauvegarder le membre.', 'error');
+      showModalFunc('Erreur', error.message || 'Impossible de sauvegarder le membre.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -400,32 +346,13 @@ export default function AdminLeadershipScreen() {
       async () => {
         console.log('[AdminLeadership] Deleting member:', id);
         try {
-          const credentials = await AsyncStorage.getItem('admin_credentials');
-          if (!credentials) {
-            router.replace('/admin/login');
-            return;
-          }
-
-          const response = await fetch(`${BACKEND_URL}/api/admin/leadership/${id}`, {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-admin-password': credentials,
-              'x-admin-secret': credentials,
-            },
-            body: JSON.stringify({}),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Erreur ${response.status}`);
-          }
-
+          await apiDelete(`/api/leadership/${id}`);
           console.log('[AdminLeadership] Member deleted successfully');
           showModalFunc('Succès', 'Membre supprimé avec succès!', 'success');
           await loadMembers();
         } catch (error: any) {
           console.error('[AdminLeadership] Error deleting member:', error);
-          showModalFunc('Erreur', 'Impossible de supprimer le membre.', 'error');
+          showModalFunc('Erreur', error.message || 'Impossible de supprimer le membre.', 'error');
         }
       }
     );
