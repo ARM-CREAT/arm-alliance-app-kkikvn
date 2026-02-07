@@ -61,8 +61,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const fabScale = useState(new Animated.Value(1))[0];
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [fabScale] = useState(new Animated.Value(1));
 
   const loadAllData = useCallback(async () => {
     console.log('[HomeScreen] Loading all data (PUBLIC - no authentication required)');
@@ -78,35 +78,40 @@ export default function HomeScreen() {
 
       // Handle news
       if (results[0].status === 'fulfilled' && Array.isArray(results[0].value)) {
+        console.log('[HomeScreen] News loaded successfully:', results[0].value.length, 'items');
         setNews(results[0].value);
       } else {
-        console.error('[HomeScreen] Failed to load news:', results[0]);
+        console.warn('[HomeScreen] Failed to load news:', results[0]);
       }
 
       // Handle events
       if (results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
+        console.log('[HomeScreen] Events loaded successfully:', results[1].value.length, 'items');
         setEvents(results[1].value);
       } else {
-        console.error('[HomeScreen] Failed to load events:', results[1]);
+        console.warn('[HomeScreen] Failed to load events:', results[1]);
       }
 
       // Handle leadership
       if (results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
+        console.log('[HomeScreen] Leadership loaded successfully:', results[2].value.length, 'items');
         setLeadership(results[2].value);
       } else {
-        console.error('[HomeScreen] Failed to load leadership:', results[2]);
+        console.warn('[HomeScreen] Failed to load leadership:', results[2]);
       }
 
       // Check if all failed
       const allFailed = results.every(r => r.status === 'rejected');
       if (allFailed) {
-        setError('Impossible de charger les données. Vérifiez votre connexion.');
+        console.warn('[HomeScreen] All API calls failed - showing default content');
+        setError('Impossible de charger les données. Affichage du contenu par défaut.');
       }
     } catch (error: any) {
       console.error('[HomeScreen] Error loading data:', error);
-      setError(error.message || 'Une erreur est survenue');
+      setError('Une erreur est survenue. Affichage du contenu par défaut.');
     } finally {
       setLoading(false);
+      console.log('[HomeScreen] Data loading complete');
       
       // Fade in animation
       Animated.timing(fadeAnim, {
@@ -119,8 +124,27 @@ export default function HomeScreen() {
 
   useEffect(() => {
     console.log('[HomeScreen] Component mounted, loading data');
+    
+    // Set a maximum loading time of 3 seconds
+    const loadingTimeout = setTimeout(() => {
+      if (loading) {
+        console.warn('[HomeScreen] Loading timeout - showing content anyway');
+        setLoading(false);
+        setError('Chargement lent. Affichage du contenu par défaut.');
+        
+        // Fade in animation
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }
+    }, 3000);
+    
     loadAllData();
-  }, [loadAllData]);
+    
+    return () => clearTimeout(loadingTimeout);
+  }, [loadAllData, loading, fadeAnim]);
 
   const onRefresh = useCallback(async () => {
     console.log('User pulled to refresh');
@@ -224,8 +248,13 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
+        <Image 
+          source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
+          style={styles.loadingLogo}
+          resizeMode="contain"
+        />
+        <ActivityIndicator size="large" color={colors.primary} style={styles.loadingSpinner} />
+        <Text style={styles.loadingText}>Chargement de A.R.M...</Text>
       </View>
     );
   }
@@ -707,11 +736,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingLogo: {
+    width: 120,
+    height: 120,
+    marginBottom: 24,
+    borderRadius: 60,
+  },
+  loadingSpinner: {
+    marginVertical: 16,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: colors.textSecondary,
+    textAlign: 'center',
   },
   errorContainer: {
     backgroundColor: colors.backgroundAlt,
