@@ -1,4 +1,6 @@
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // Currency conversion utilities
 
 export type Currency = 'XOF' | 'EUR' | 'USD' | 'GBP';
@@ -111,8 +113,6 @@ export const getCurrencyName = (currency: Currency, language: string): string =>
 };
 
 // Load saved currency preference
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 export const loadCurrencyPreference = async (): Promise<Currency> => {
   try {
     const savedCurrency = await AsyncStorage.getItem('app_currency');

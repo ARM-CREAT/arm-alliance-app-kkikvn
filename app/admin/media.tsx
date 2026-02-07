@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   Image,
-  Alert,
   Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
@@ -160,27 +159,7 @@ export default function AdminMediaScreen() {
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
 
-  useEffect(() => {
-    checkAuthAndLoad();
-  }, []);
-
-  const checkAuthAndLoad = async () => {
-    console.log('Admin Media - Checking authentication');
-    try {
-      const adminPassword = await AsyncStorage.getItem('admin_password');
-      if (!adminPassword) {
-        console.log('Admin Media - No admin password found, redirecting to login');
-        router.replace('/admin/login');
-        return;
-      }
-      await loadMedia();
-    } catch (error) {
-      console.error('Admin Media - Auth check error:', error);
-      router.replace('/admin/login');
-    }
-  };
-
-  const loadMedia = async () => {
+  const loadMedia = useCallback(async () => {
     console.log('Admin Media - Loading media files');
     try {
       const response = await fetch(`${BACKEND_URL}/api/media`);
@@ -196,7 +175,27 @@ export default function AdminMediaScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const checkAuthAndLoad = useCallback(async () => {
+    console.log('Admin Media - Checking authentication');
+    try {
+      const adminPassword = await AsyncStorage.getItem('admin_password');
+      if (!adminPassword) {
+        console.log('Admin Media - No admin password found, redirecting to login');
+        router.replace('/admin/login');
+        return;
+      }
+      await loadMedia();
+    } catch (error) {
+      console.error('Admin Media - Auth check error:', error);
+      router.replace('/admin/login');
+    }
+  }, [router, loadMedia]);
+
+  useEffect(() => {
+    checkAuthAndLoad();
+  }, [checkAuthAndLoad]);
 
   const onRefresh = async () => {
     setRefreshing(true);

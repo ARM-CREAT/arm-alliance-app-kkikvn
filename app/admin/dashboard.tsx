@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -168,11 +168,7 @@ export default function AdminDashboardScreen() {
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     console.log('Admin Dashboard - Checking authentication');
     try {
       const adminPassword = await AsyncStorage.getItem('admin_password');
@@ -188,7 +184,11 @@ export default function AdminDashboardScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   const onRefresh = async () => {
     setRefreshing(true);

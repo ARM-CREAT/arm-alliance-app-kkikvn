@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -214,27 +214,7 @@ export default function AdminNewsScreen() {
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  useEffect(() => {
-    checkAuthAndLoad();
-  }, []);
-
-  const checkAuthAndLoad = async () => {
-    console.log('Admin News - Checking authentication');
-    try {
-      const adminPassword = await AsyncStorage.getItem('admin_password');
-      if (!adminPassword) {
-        console.log('Admin News - No admin password found, redirecting to login');
-        router.replace('/admin/login');
-        return;
-      }
-      await loadNews();
-    } catch (error) {
-      console.error('Admin News - Auth check error:', error);
-      router.replace('/admin/login');
-    }
-  };
-
-  const loadNews = async () => {
+  const loadNews = useCallback(async () => {
     console.log('Admin News - Loading news');
     try {
       const response = await fetch(`${BACKEND_URL}/api/news`);
@@ -250,7 +230,27 @@ export default function AdminNewsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const checkAuthAndLoad = useCallback(async () => {
+    console.log('Admin News - Checking authentication');
+    try {
+      const adminPassword = await AsyncStorage.getItem('admin_password');
+      if (!adminPassword) {
+        console.log('Admin News - No admin password found, redirecting to login');
+        router.replace('/admin/login');
+        return;
+      }
+      await loadNews();
+    } catch (error) {
+      console.error('Admin News - Auth check error:', error);
+      router.replace('/admin/login');
+    }
+  }, [router, loadNews]);
+
+  useEffect(() => {
+    checkAuthAndLoad();
+  }, [checkAuthAndLoad]);
 
   const onRefresh = async () => {
     setRefreshing(true);
