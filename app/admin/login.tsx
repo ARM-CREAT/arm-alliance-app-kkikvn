@@ -15,7 +15,7 @@ import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
-import { apiPost } from '@/utils/api';
+import { apiPost, BACKEND_URL, isBackendConfigured } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
@@ -92,6 +92,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderRadius: 12,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  secondaryButtonText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
   warningBox: {
     backgroundColor: '#FFF3CD',
     borderRadius: 12,
@@ -111,6 +126,42 @@ const styles = StyleSheet.create({
     color: '#856404',
     lineHeight: 20,
   },
+  debugBox: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  helpText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 20,
+    lineHeight: 18,
+  },
+  diagnosticLink: {
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  diagnosticLinkText: {
+    fontSize: 14,
+    color: colors.primary,
+    textDecorationLine: 'underline',
+  },
 });
 
 export default function AdminLoginScreen() {
@@ -123,6 +174,9 @@ export default function AdminLoginScreen() {
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
 
+  const backendConfigured = isBackendConfigured();
+  const backendUrlDisplay = BACKEND_URL || 'Non configuré';
+
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info') => {
     console.log('Admin Login - Showing modal:', title, message);
     setModalTitle(title);
@@ -133,7 +187,20 @@ export default function AdminLoginScreen() {
 
   const handleLogin = async () => {
     console.log('Admin Login - Login button pressed');
+    console.log('Admin Login - Backend URL:', BACKEND_URL);
+    console.log('Admin Login - Backend configured:', backendConfigured);
     
+    if (!backendConfigured) {
+      console.error('Admin Login - Backend not configured');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showModal(
+        'Erreur de configuration',
+        'Le backend n\'est pas configuré. Veuillez reconstruire l\'application.',
+        'error'
+      );
+      return;
+    }
+
     if (!password.trim()) {
       console.log('Admin Login - Empty password');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -143,15 +210,20 @@ export default function AdminLoginScreen() {
 
     setLoading(true);
     console.log('Admin Login - Attempting login...');
+    console.log('Admin Login - Password length:', password.trim().length);
 
     try {
+      const trimmedPassword = password.trim();
+      console.log('Admin Login - Calling /api/admin/login endpoint');
+      console.log('Admin Login - Password length being sent:', trimmedPassword.length);
+      
       const response = await apiPost('/api/admin/login', {
-        password: password.trim(),
+        password: trimmedPassword,
       });
 
       console.log('Admin Login - Login successful:', response);
 
-      await AsyncStorage.setItem('admin_password', password.trim());
+      await AsyncStorage.setItem('admin_password', trimmedPassword);
       console.log('Admin Login - Password stored in AsyncStorage');
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -163,12 +235,39 @@ export default function AdminLoginScreen() {
       }, 1000);
     } catch (error: any) {
       console.error('Admin Login - Login failed:', error);
+      console.error('Admin Login - Error message:', error.message);
+      console.error('Admin Login - Error stack:', error.stack);
+      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showModal(
-        'Erreur de connexion',
-        error.message || 'Mot de passe administrateur incorrect. Veuillez réessayer.',
-        'error'
-      );
+      
+      let errorTitle = 'Erreur de connexion';
+      const errorMessageText = error.message || 'Mot de passe administrateur incorrect.';
+      let detailedMessage = errorMessageText;
+      
+      // Handle new specific error messages from the improved backend
+      if (errorMessageText.includes('Le mot de passe est requis') || errorMessageText.includes('requis')) {
+        errorTitle = 'Mot de passe requis';
+        detailedMessage = 'Le mot de passe est requis. Veuillez entrer votre mot de passe administrateur.';
+      } else if (
+        errorMessageText.includes('Mot de passe administrateur incorrect') ||
+        errorMessageText.includes('401') ||
+        errorMessageText.includes('Invalid admin password') ||
+        errorMessageText.includes('incorrect')
+      ) {
+        errorTitle = 'Mot de passe incorrect';
+        // Extract hint about expected password length if provided in the error details
+        const lengthMatch = errorMessageText.match(/(\d+)\s*caract/i);
+        const lengthHint = lengthMatch ? `\n\nLongueur attendue: ${lengthMatch[1]} caractères.` : '';
+        detailedMessage = `Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.${lengthHint}\n\nSi le problème persiste après la publication sur Google Play Store, utilisez l'outil de diagnostic pour vérifier la configuration du serveur.`;
+      } else if (errorMessageText.includes('connexion') || errorMessageText.includes('Network') || errorMessageText.includes('Failed to fetch') || errorMessageText.includes('Impossible de se connecter')) {
+        errorTitle = 'Erreur de connexion';
+        detailedMessage = `Impossible de se connecter au serveur.\n\nURL du backend: ${BACKEND_URL}\n\nVérifiez votre connexion internet et réessayez.`;
+      } else if (errorMessageText.includes('timeout') || errorMessageText.includes('trop de temps')) {
+        errorTitle = 'Délai d\'attente dépassé';
+        detailedMessage = 'Le serveur met trop de temps à répondre. Vérifiez votre connexion internet et réessayez.';
+      }
+      
+      showModal(errorTitle, detailedMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -176,6 +275,11 @@ export default function AdminLoginScreen() {
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
+  };
+
+  const handleGoToDiagnostic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/admin/diagnostic');
   };
 
   return (
@@ -217,6 +321,18 @@ export default function AdminLoginScreen() {
               </Text>
             </View>
 
+            {__DEV__ && (
+              <View style={styles.debugBox}>
+                <Text style={styles.debugTitle}>ℹ️ Informations de diagnostic</Text>
+                <Text style={styles.debugText}>
+                  Backend: {backendConfigured ? '✓ Configuré' : '✗ Non configuré'}
+                  {'\n'}URL: {backendUrlDisplay}
+                  {'\n'}Plateforme: {Platform.OS}
+                  {'\n'}Version: {Platform.Version}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Mot de passe administrateur</Text>
               <View style={styles.inputWrapper}>
@@ -247,9 +363,9 @@ export default function AdminLoginScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.button, (loading || !password.trim()) && styles.buttonDisabled]}
+              style={[styles.button, (loading || !password.trim() || !backendConfigured) && styles.buttonDisabled]}
               onPress={handleLogin}
-              disabled={loading || !password.trim()}
+              disabled={loading || !password.trim() || !backendConfigured}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -257,6 +373,18 @@ export default function AdminLoginScreen() {
                 <Text style={styles.buttonText}>Se connecter</Text>
               )}
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleGoToDiagnostic}
+            >
+              <Text style={styles.secondaryButtonText}>🔍 Diagnostic de configuration</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.helpText}>
+              En cas de problème de connexion après publication sur Google Play Store, 
+              utilisez l'outil de diagnostic pour vérifier la configuration du serveur.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
