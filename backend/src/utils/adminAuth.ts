@@ -12,6 +12,18 @@ import type { App } from '../index.js';
 // Admin password from environment
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
+/**
+ * Create a masked password hint showing first 3 and last 3 characters with *** in between
+ */
+function getMaskedPasswordHint(password: string): string {
+  if (password.length <= 6) {
+    return password.replace(/./g, '*');
+  }
+  const first3 = password.substring(0, 3);
+  const last3 = password.substring(password.length - 3);
+  return `${first3}***${last3}`;
+}
+
 export async function verifyAdminAuth(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -30,15 +42,17 @@ export async function verifyAdminAuth(
       ? secretHeaderRaw[0]
       : (secretHeaderRaw as string | undefined);
 
-    // Log the authentication attempt
+    // Log the authentication attempt with detailed context
     app.logger.info(
       {
         hasPasswordHeader: !!passwordHeader,
         hasSecretHeader: !!secretHeader,
         method: request.method,
         path: request.url,
+        passwordLength: passwordHeader?.length,
+        secretLength: secretHeader?.length,
       },
-      'Admin authentication attempt'
+      'Admin header authentication attempt'
     );
 
     // Check if at least one credential header is present
@@ -47,8 +61,10 @@ export async function verifyAdminAuth(
         {
           hasPasswordHeader: !!passwordHeader,
           hasSecretHeader: !!secretHeader,
+          method: request.method,
+          path: request.url,
         },
-        'Admin auth failed: Missing required headers'
+        'Header auth failed: No credentials provided'
       );
       reply.status(403).send({
         error: 'Missing admin credentials. Please provide x-admin-password header.',
@@ -58,14 +74,33 @@ export async function verifyAdminAuth(
 
     // Verify admin password header (primary authentication)
     if (passwordHeader) {
+      if (passwordHeader.length !== ADMIN_PASSWORD.length) {
+        app.logger.warn(
+          {
+            step: 'password_length_check',
+            receivedLength: passwordHeader.length,
+            expectedLength: ADMIN_PASSWORD.length,
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
+            headerType: 'x-admin-password'
+          },
+          'Header auth failed: Password length mismatch'
+        );
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: `Invalid x-admin-password: length mismatch (expected ${ADMIN_PASSWORD.length} chars)`
+        });
+        return null;
+      }
+
       if (passwordHeader !== ADMIN_PASSWORD) {
         app.logger.warn(
           {
-            receivedLength: passwordHeader.length,
-            expectedLength: ADMIN_PASSWORD.length,
+            step: 'password_value_check',
+            receivedHint: getMaskedPasswordHint(passwordHeader),
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
             headerType: 'x-admin-password'
           },
-          'Admin auth failed: Invalid admin password'
+          'Header auth failed: Password value mismatch'
         );
         reply.status(403).send({
           error: 'Unauthorized',
@@ -73,18 +108,39 @@ export async function verifyAdminAuth(
         });
         return null;
       }
+
+      app.logger.debug({}, 'Header auth step: Password header validated');
     }
 
     // Verify admin secret header (secondary, optional)
     if (secretHeader) {
+      if (secretHeader.length !== ADMIN_PASSWORD.length) {
+        app.logger.warn(
+          {
+            step: 'secret_length_check',
+            receivedLength: secretHeader.length,
+            expectedLength: ADMIN_PASSWORD.length,
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
+            headerType: 'x-admin-secret'
+          },
+          'Header auth failed: Secret length mismatch'
+        );
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: `Invalid x-admin-secret: length mismatch (expected ${ADMIN_PASSWORD.length} chars)`
+        });
+        return null;
+      }
+
       if (secretHeader !== ADMIN_PASSWORD) {
         app.logger.warn(
           {
-            receivedLength: secretHeader.length,
-            expectedLength: ADMIN_PASSWORD.length,
+            step: 'secret_value_check',
+            receivedHint: getMaskedPasswordHint(secretHeader),
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
             headerType: 'x-admin-secret'
           },
-          'Admin auth failed: Invalid admin secret'
+          'Header auth failed: Secret value mismatch'
         );
         reply.status(403).send({
           error: 'Unauthorized',
@@ -92,14 +148,11 @@ export async function verifyAdminAuth(
         });
         return null;
       }
+
+      app.logger.debug({}, 'Header auth step: Secret header validated');
     }
 
-    // If only secret header is provided without password, use it as password
-    if (!passwordHeader && secretHeader) {
-      // Already validated above, no need to re-check
-    }
-
-    app.logger.info({}, 'Admin authentication successful');
+    app.logger.info({}, 'Header authentication successful - all credentials validated');
 
     return {
       userId: 'admin',

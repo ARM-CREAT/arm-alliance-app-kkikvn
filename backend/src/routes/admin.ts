@@ -40,7 +40,61 @@ interface AdminLoginBody {
   secret?: string;
 }
 
+/**
+ * Create a masked password hint showing first 3 and last 3 characters with *** in between
+ * Example: "admin123" -> "adm***123"
+ */
+function getMaskedPasswordHint(password: string): string {
+  if (password.length <= 6) {
+    return password.replace(/./g, '*');
+  }
+  const first3 = password.substring(0, 3);
+  const last3 = password.substring(password.length - 3);
+  return `${first3}***${last3}`;
+}
+
 export function register(app: App, fastify: FastifyInstance) {
+  // GET /api/admin/config-info - Public endpoint for password configuration info
+  fastify.get(
+    '/api/admin/config-info',
+    {
+      schema: {
+        description: 'Get admin password configuration info (public, for diagnostics)',
+        tags: ['admin', 'auth'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              passwordConfigured: { type: 'boolean' },
+              passwordLength: { type: 'number' },
+              passwordHint: { type: 'string' },
+              environment: { type: 'string' },
+              isDefault: { type: 'boolean' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+      const isDefaultPassword = !process.env.ADMIN_PASSWORD;
+      const environment = process.env.NODE_ENV || 'development';
+
+      app.logger.info(
+        { environment, isDefault: isDefaultPassword },
+        'Config info endpoint accessed'
+      );
+
+      return reply.status(200).send({
+        passwordConfigured: !!process.env.ADMIN_PASSWORD,
+        passwordLength: ADMIN_PASSWORD.length,
+        passwordHint: getMaskedPasswordHint(ADMIN_PASSWORD),
+        environment,
+        isDefault: isDefaultPassword,
+      });
+    }
+  );
+
   // POST /api/admin/login - Admin login endpoint
   fastify.post<{ Body: AdminLoginBody }>(
     '/api/admin/login',
@@ -70,6 +124,7 @@ export function register(app: App, fastify: FastifyInstance) {
             type: 'object',
             properties: {
               error: { type: 'string' },
+              details: { type: 'string' },
             },
           },
         },
@@ -77,31 +132,108 @@ export function register(app: App, fastify: FastifyInstance) {
     },
     async (request: FastifyRequest<{ Body: AdminLoginBody }>, reply: FastifyReply) => {
       const { password, secret } = request.body;
+      const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
-      app.logger.info({}, 'Admin login attempt');
+      app.logger.info(
+        { hasPassword: !!password, hasSecret: !!secret },
+        'Admin login attempt started'
+      );
 
       try {
-        // Validate credentials
-        const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-
-        // Check password
+        // Step 1: Validate password presence
         if (!password) {
-          app.logger.warn({}, 'Admin login failed: Missing password');
-          return reply.status(401).send({ error: 'Password is required' });
+          app.logger.warn(
+            {},
+            'Login step 1 failed: Password field is missing'
+          );
+          return reply.status(401).send({
+            error: 'Authentication failed',
+            details: 'Password field is required',
+          });
         }
 
+        app.logger.debug(
+          { receivedLength: password.length },
+          'Login step 1 passed: Password field present'
+        );
+
+        // Step 2: Validate password length matches
+        if (password.length !== ADMIN_PASSWORD.length) {
+          const hint = getMaskedPasswordHint(ADMIN_PASSWORD);
+          app.logger.warn(
+            {
+              receivedLength: password.length,
+              expectedLength: ADMIN_PASSWORD.length,
+              expectedHint: hint,
+            },
+            'Login step 2 failed: Password length mismatch'
+          );
+          return reply.status(401).send({
+            error: 'Authentication failed',
+            details: `Password length mismatch. Expected ${ADMIN_PASSWORD.length} characters, got ${password.length}. Expected format: ${hint}`,
+          });
+        }
+
+        app.logger.debug(
+          { passwordLength: password.length },
+          'Login step 2 passed: Password length correct'
+        );
+
+        // Step 3: Validate password value
         if (password !== ADMIN_PASSWORD) {
-          app.logger.warn({}, 'Admin login failed: Invalid password');
-          return reply.status(401).send({ error: 'Invalid admin password' });
+          const hint = getMaskedPasswordHint(ADMIN_PASSWORD);
+          app.logger.warn(
+            {
+              receivedHint: getMaskedPasswordHint(password),
+              expectedHint: hint,
+            },
+            'Login step 3 failed: Password value mismatch'
+          );
+          return reply.status(401).send({
+            error: 'Authentication failed',
+            details: `Password incorrect. Expected format: ${hint}`,
+          });
         }
 
-        // If secret is provided, validate it too (optional for backward compatibility)
-        if (secret && secret !== ADMIN_PASSWORD) {
-          app.logger.warn({}, 'Admin login failed: Invalid secret');
-          return reply.status(401).send({ error: 'Invalid admin secret' });
+        app.logger.debug({}, 'Login step 3 passed: Password value correct');
+
+        // Step 4: Validate optional secret if provided
+        if (secret !== undefined) {
+          if (secret.length !== ADMIN_PASSWORD.length) {
+            app.logger.warn(
+              {
+                secretReceivedLength: secret.length,
+                secretExpectedLength: ADMIN_PASSWORD.length,
+              },
+              'Login step 4 failed: Secret length mismatch'
+            );
+            return reply.status(401).send({
+              error: 'Authentication failed',
+              details: `Secret length mismatch. Expected ${ADMIN_PASSWORD.length} characters, got ${secret.length}`,
+            });
+          }
+
+          if (secret !== ADMIN_PASSWORD) {
+            const hint = getMaskedPasswordHint(ADMIN_PASSWORD);
+            app.logger.warn(
+              {
+                secretHint: getMaskedPasswordHint(secret),
+                expectedHint: hint,
+              },
+              'Login step 4 failed: Secret value mismatch'
+            );
+            return reply.status(401).send({
+              error: 'Authentication failed',
+              details: `Secret incorrect. Expected format: ${hint}`,
+            });
+          }
+
+          app.logger.debug({}, 'Login step 4 passed: Secret value correct');
+        } else {
+          app.logger.debug({}, 'Login step 4 skipped: No secret provided');
         }
 
-        app.logger.info({}, 'Admin login successful');
+        app.logger.info({}, 'Admin login successful - all authentication steps passed');
 
         return reply.status(200).send({
           success: true,
@@ -114,7 +246,10 @@ export function register(app: App, fastify: FastifyInstance) {
           { err: error },
           'Error during admin login'
         );
-        return reply.status(500).send({ error: 'Authentication error' });
+        return reply.status(500).send({
+          error: 'Authentication error',
+          details: 'An unexpected error occurred during authentication',
+        });
       }
     }
   );
