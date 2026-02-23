@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "378929993694",
+    "project_id": "arm-71e1b",
+    "storage_bucket": "arm-71e1b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:378929993694:android:f540a206baa3d16b67ef4f",
+        "android_client_info": {
+          "package_name": "com.armmali.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQxeOihyAjOGi6uPw9bQqIkuN5UCOvfFo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
