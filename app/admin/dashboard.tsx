@@ -37,6 +37,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
+  infoBox: {
+    backgroundColor: '#D1ECF1',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#BEE5EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoIcon: {
+    marginRight: 12,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0C5460',
+    lineHeight: 20,
+  },
   grid: {
     gap: 16,
   },
@@ -83,6 +102,37 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  utilityCard: {
+    backgroundColor: '#17A2B8',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  utilityCardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  utilityCardDescription: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  utilityButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  utilityButtonText: {
+    color: '#17A2B8',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -167,6 +217,7 @@ export default function AdminDashboardScreen() {
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [offlineAccessEnabled, setOfflineAccessEnabled] = useState(false);
 
   const checkAuth = useCallback(async () => {
     console.log('Admin Dashboard - Checking authentication');
@@ -177,6 +228,11 @@ export default function AdminDashboardScreen() {
         router.replace('/admin/login');
         return;
       }
+      
+      // Vérifier si l'accès hors ligne est activé
+      const offlineEnabled = await AsyncStorage.getItem('admin_offline_access_enabled');
+      setOfflineAccessEnabled(offlineEnabled === 'true');
+      
       console.log('Admin Dashboard - Authentication verified');
     } catch (error) {
       console.error('Admin Dashboard - Auth check error:', error);
@@ -209,6 +265,18 @@ export default function AdminDashboardScreen() {
     router.push(route as any);
   };
 
+  const handleOfflineAccess = () => {
+    console.log('Admin Dashboard - Navigating to offline access');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/admin/offline-access');
+  };
+
+  const handleDiagnostic = () => {
+    console.log('Admin Dashboard - Navigating to diagnostic');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/admin/diagnostic');
+  };
+
   const handleLogout = async () => {
     console.log('Admin Dashboard - Logout initiated');
     setShowLogoutConfirm(false);
@@ -235,6 +303,8 @@ export default function AdminDashboardScreen() {
       </View>
     );
   }
+
+  const offlineStatusText = offlineAccessEnabled ? 'Activé ✓' : 'Non activé';
 
   return (
     <>
@@ -265,6 +335,32 @@ export default function AdminDashboardScreen() {
           </Text>
         </View>
 
+        <View style={styles.infoBox}>
+          <IconSymbol
+            ios_icon_name="info.circle.fill"
+            android_material_icon_name="info"
+            size={24}
+            color="#0C5460"
+            style={styles.infoIcon}
+          />
+          <Text style={styles.infoText}>
+            Accès hors ligne: {offlineStatusText}
+          </Text>
+        </View>
+
+        <View style={styles.utilityCard}>
+          <Text style={styles.utilityCardTitle}>🔌 Mode Hors Ligne</Text>
+          <Text style={styles.utilityCardDescription}>
+            Configurez l'accès hors ligne pour utiliser le tableau de bord même si le backend est temporairement arrêté ou si l'abonnement est suspendu.
+          </Text>
+          <TouchableOpacity
+            style={styles.utilityButton}
+            onPress={handleOfflineAccess}
+          >
+            <Text style={styles.utilityButtonText}>Configurer l'accès hors ligne</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.grid}>
           {dashboardCards.map((card) => (
             <View key={card.id} style={styles.card}>
@@ -288,6 +384,29 @@ export default function AdminDashboardScreen() {
               </TouchableOpacity>
             </View>
           ))}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.iconContainer}>
+              <IconSymbol
+                ios_icon_name="wrench.and.screwdriver"
+                android_material_icon_name="settings"
+                size={24}
+                color={colors.primary}
+              />
+            </View>
+            <Text style={styles.cardTitle}>Diagnostic</Text>
+          </View>
+          <Text style={styles.cardDescription}>
+            Vérifiez la configuration du serveur et diagnostiquez les problèmes de connexion
+          </Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={handleDiagnostic}
+          >
+            <Text style={styles.buttonText}>Ouvrir le diagnostic</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity

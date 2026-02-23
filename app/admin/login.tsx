@@ -126,6 +126,25 @@ const styles = StyleSheet.create({
     color: '#856404',
     lineHeight: 20,
   },
+  errorBox: {
+    backgroundColor: '#F8D7DA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#F5C6CB',
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#721C24',
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#721C24',
+    lineHeight: 20,
+  },
   debugBox: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -162,7 +181,23 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textDecorationLine: 'underline',
   },
+  offlineButton: {
+    backgroundColor: '#17A2B8',
+    borderRadius: 12,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  offlineButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
+
+const OFFLINE_PASSWORD_KEY = 'admin_offline_password';
+const OFFLINE_ACCESS_ENABLED_KEY = 'admin_offline_access_enabled';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
@@ -185,19 +220,75 @@ export default function AdminLoginScreen() {
     setModalVisible(true);
   };
 
+  const handleOfflineLogin = async () => {
+    console.log('Admin Login - Attempting offline login');
+    
+    if (!password.trim()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showModal('Erreur', 'Veuillez entrer le mot de passe administrateur.', 'error');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const trimmedPassword = password.trim();
+      
+      // Vérifier si l'accès hors ligne est activé
+      const offlineEnabled = await AsyncStorage.getItem(OFFLINE_ACCESS_ENABLED_KEY);
+      const savedPassword = await AsyncStorage.getItem(OFFLINE_PASSWORD_KEY);
+      
+      console.log('Admin Login - Offline access status:', { enabled: offlineEnabled === 'true', hasSavedPassword: !!savedPassword });
+      
+      if (offlineEnabled === 'true' && savedPassword) {
+        // Vérifier le mot de passe avec le mot de passe sauvegardé
+        if (trimmedPassword === savedPassword) {
+          console.log('Admin Login - Offline login successful');
+          
+          await AsyncStorage.setItem('admin_password', trimmedPassword);
+          
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          showModal('Succès', 'Connexion administrateur réussie (mode hors ligne)!', 'success');
+          
+          setTimeout(() => {
+            console.log('Admin Login - Navigating to dashboard');
+            router.replace('/admin/dashboard');
+          }, 1000);
+        } else {
+          console.log('Admin Login - Offline login failed: incorrect password');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          showModal(
+            'Mot de passe incorrect',
+            'Le mot de passe ne correspond pas au mot de passe sauvegardé pour l\'accès hors ligne.',
+            'error'
+          );
+        }
+      } else {
+        console.log('Admin Login - Offline access not enabled');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        showModal(
+          'Accès hors ligne non activé',
+          'L\'accès hors ligne n\'est pas activé. Veuillez d\'abord activer l\'accès hors ligne ou vous connecter en ligne.',
+          'warning'
+        );
+      }
+    } catch (error: any) {
+      console.error('Admin Login - Offline login error:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showModal('Erreur', 'Une erreur est survenue lors de la connexion hors ligne.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async () => {
     console.log('Admin Login - Login button pressed');
     console.log('Admin Login - Backend URL:', BACKEND_URL);
     console.log('Admin Login - Backend configured:', backendConfigured);
     
     if (!backendConfigured) {
-      console.error('Admin Login - Backend not configured');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showModal(
-        'Erreur de configuration',
-        'Le backend n\'est pas configuré. Veuillez reconstruire l\'application.',
-        'error'
-      );
+      console.error('Admin Login - Backend not configured, trying offline login');
+      await handleOfflineLogin();
       return;
     }
 
@@ -209,7 +300,7 @@ export default function AdminLoginScreen() {
     }
 
     setLoading(true);
-    console.log('Admin Login - Attempting login...');
+    console.log('Admin Login - Attempting online login...');
     console.log('Admin Login - Password length:', password.trim().length);
 
     try {
@@ -234,40 +325,51 @@ export default function AdminLoginScreen() {
         router.replace('/admin/dashboard');
       }, 1000);
     } catch (error: any) {
-      console.error('Admin Login - Login failed:', error);
+      console.error('Admin Login - Online login failed:', error);
       console.error('Admin Login - Error message:', error.message);
-      console.error('Admin Login - Error stack:', error.stack);
       
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Si la connexion en ligne échoue, essayer la connexion hors ligne
+      console.log('Admin Login - Online login failed, trying offline login as fallback');
       
-      let errorTitle = 'Erreur de connexion';
-      const errorMessageText = error.message || 'Mot de passe administrateur incorrect.';
-      let detailedMessage = errorMessageText;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       
-      // Handle new specific error messages from the improved backend
-      if (errorMessageText.includes('Le mot de passe est requis') || errorMessageText.includes('requis')) {
-        errorTitle = 'Mot de passe requis';
-        detailedMessage = 'Le mot de passe est requis. Veuillez entrer votre mot de passe administrateur.';
-      } else if (
-        errorMessageText.includes('Mot de passe administrateur incorrect') ||
-        errorMessageText.includes('401') ||
-        errorMessageText.includes('Invalid admin password') ||
-        errorMessageText.includes('incorrect')
+      const errorMessageText = error.message || '';
+      
+      if (
+        errorMessageText.includes('connexion') || 
+        errorMessageText.includes('Network') || 
+        errorMessageText.includes('Failed to fetch') || 
+        errorMessageText.includes('Impossible de se connecter') ||
+        errorMessageText.includes('timeout')
       ) {
-        errorTitle = 'Mot de passe incorrect';
-        // Extract hint about expected password length if provided in the error details
-        const lengthMatch = errorMessageText.match(/(\d+)\s*caract/i);
-        const lengthHint = lengthMatch ? `\n\nLongueur attendue: ${lengthMatch[1]} caractères.` : '';
-        detailedMessage = `Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.${lengthHint}\n\nSi le problème persiste après la publication sur Google Play Store, utilisez l'outil de diagnostic pour vérifier la configuration du serveur.`;
-      } else if (errorMessageText.includes('connexion') || errorMessageText.includes('Network') || errorMessageText.includes('Failed to fetch') || errorMessageText.includes('Impossible de se connecter')) {
-        errorTitle = 'Erreur de connexion';
-        detailedMessage = `Impossible de se connecter au serveur.\n\nURL du backend: ${BACKEND_URL}\n\nVérifiez votre connexion internet et réessayez.`;
-      } else if (errorMessageText.includes('timeout') || errorMessageText.includes('trop de temps')) {
-        errorTitle = 'Délai d\'attente dépassé';
-        detailedMessage = 'Le serveur met trop de temps à répondre. Vérifiez votre connexion internet et réessayez.';
+        // Problème de connexion - proposer le mode hors ligne
+        showModal(
+          'Connexion impossible',
+          'Impossible de se connecter au serveur. Voulez-vous essayer le mode hors ligne?\n\nAppuyez sur "Connexion hors ligne" ci-dessous.',
+          'warning'
+        );
+      } else {
+        // Autre erreur (mot de passe incorrect, etc.)
+        let errorTitle = 'Erreur de connexion';
+        let detailedMessage = errorMessageText;
+        
+        if (errorMessageText.includes('Le mot de passe est requis') || errorMessageText.includes('requis')) {
+          errorTitle = 'Mot de passe requis';
+          detailedMessage = 'Le mot de passe est requis. Veuillez entrer votre mot de passe administrateur.';
+        } else if (
+          errorMessageText.includes('Mot de passe administrateur incorrect') ||
+          errorMessageText.includes('401') ||
+          errorMessageText.includes('Invalid admin password') ||
+          errorMessageText.includes('incorrect')
+        ) {
+          errorTitle = 'Mot de passe incorrect';
+          const lengthMatch = errorMessageText.match(/(\d+)\s*caract/i);
+          const lengthHint = lengthMatch ? `\n\nLongueur attendue: ${lengthMatch[1]} caractères.` : '';
+          detailedMessage = `Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.${lengthHint}\n\nSi le problème persiste, utilisez l'outil de diagnostic ou activez l'accès hors ligne.`;
+        }
+        
+        showModal(errorTitle, detailedMessage, 'error');
       }
-      
-      showModal(errorTitle, detailedMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -280,6 +382,11 @@ export default function AdminLoginScreen() {
   const handleGoToDiagnostic = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/admin/diagnostic');
+  };
+
+  const handleGoToOfflineAccess = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/admin/offline-access');
   };
 
   return (
@@ -320,6 +427,15 @@ export default function AdminLoginScreen() {
                 Seul le mot de passe secret permet d'accéder au tableau de bord administrateur.
               </Text>
             </View>
+
+            {!backendConfigured && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorTitle}>⚠️ Backend non configuré</Text>
+                <Text style={styles.errorText}>
+                  Le backend n'est pas configuré. Vous pouvez utiliser le mode hors ligne pour accéder au tableau de bord.
+                </Text>
+              </View>
+            )}
 
             {__DEV__ && (
               <View style={styles.debugBox}>
@@ -363,27 +479,49 @@ export default function AdminLoginScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.button, (loading || !password.trim() || !backendConfigured) && styles.buttonDisabled]}
+              style={[styles.button, (loading || !password.trim()) && styles.buttonDisabled]}
               onPress={handleLogin}
-              disabled={loading || !password.trim() || !backendConfigured}
+              disabled={loading || !password.trim()}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.buttonText}>Se connecter</Text>
+                <Text style={styles.buttonText}>
+                  {backendConfigured ? 'Se connecter' : 'Connexion hors ligne'}
+                </Text>
               )}
             </TouchableOpacity>
 
+            {backendConfigured && (
+              <TouchableOpacity
+                style={styles.offlineButton}
+                onPress={handleOfflineLogin}
+                disabled={loading || !password.trim()}
+              >
+                <Text style={styles.offlineButtonText}>🔌 Connexion hors ligne</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.secondaryButton}
-              onPress={handleGoToDiagnostic}
+              onPress={handleGoToOfflineAccess}
             >
-              <Text style={styles.secondaryButtonText}>🔍 Diagnostic de configuration</Text>
+              <Text style={styles.secondaryButtonText}>⚙️ Configurer l'accès hors ligne</Text>
             </TouchableOpacity>
 
+            {backendConfigured && (
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleGoToDiagnostic}
+              >
+                <Text style={styles.secondaryButtonText}>🔍 Diagnostic de configuration</Text>
+              </TouchableOpacity>
+            )}
+
             <Text style={styles.helpText}>
-              En cas de problème de connexion après publication sur Google Play Store, 
-              utilisez l'outil de diagnostic pour vérifier la configuration du serveur.
+              💡 Si le backend est temporairement arrêté ou si l'abonnement est suspendu, utilisez le mode hors ligne pour accéder au tableau de bord.
+              {'\n\n'}
+              Mot de passe par défaut: admin123
             </Text>
           </View>
         </ScrollView>
