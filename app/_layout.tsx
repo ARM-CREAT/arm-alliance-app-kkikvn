@@ -142,6 +142,12 @@ export default function RootLayout() {
                     }} 
                   />
                   <Stack.Screen 
+                    name="program" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
                     name="ai-chat" 
                     options={{ 
                       headerShown: false,

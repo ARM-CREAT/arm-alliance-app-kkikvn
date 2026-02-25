@@ -206,6 +206,14 @@ export default function HomeScreen() {
     router.push('/ideology');
   };
 
+  const handleProgram = () => {
+    console.log('User tapped View Complete Program button');
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    router.push('/program');
+  };
+
   const handleAIChat = () => {
     console.log('User tapped AI Assistant button');
     if (Platform.OS === 'ios') {
@@ -355,7 +363,11 @@ export default function HomeScreen() {
               <Text style={styles.programText}>
                 L&apos;A.R.M s&apos;engage pour le développement du Mali à travers des programmes concrets dans tous les secteurs : éducation, santé, économie, agriculture, et infrastructure.
               </Text>
-              <TouchableOpacity style={styles.linkButton} activeOpacity={0.7}>
+              <TouchableOpacity 
+                style={styles.linkButton} 
+                onPress={handleProgram}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.linkButtonText}>Voir le programme complet</Text>
                 <IconSymbol 
                   ios_icon_name="chevron.right" 
