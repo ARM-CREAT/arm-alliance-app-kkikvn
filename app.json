@@ -1,14 +1,14 @@
 {
   "expo": {
     "name": "Alliance ARM",
-    "slug": "arm-alliance-app-kkikvn",
+    "slug": "Alliance ARM",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/natively-dark.png",
+    "icon": "./assets/images/SAVE_20251219_163224.jpg",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/natively-dark.png",
+      "image": "./assets/images/SAVE_20251219_163224.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -21,7 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/natively-dark.png",
+        "foregroundImage": "./assets/images/SAVE_20251219_163224.jpg",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
