@@ -18,6 +18,36 @@ export const isBackendConfigured = (): boolean => {
 };
 
 /**
+ * Check if backend is reachable
+ * @returns true if backend responds, false otherwise
+ */
+export const checkBackendHealth = async (): Promise<boolean> => {
+  if (!isBackendConfigured()) {
+    console.log('[API] Backend not configured');
+    return false;
+  }
+
+  try {
+    console.log('[API] Checking backend health:', BACKEND_URL);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+    const response = await fetch(`${BACKEND_URL}/api/health`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const isHealthy = response.ok;
+    console.log('[API] Backend health check:', isHealthy ? 'OK' : 'FAILED');
+    return isHealthy;
+  } catch (error: any) {
+    console.error('[API] Backend health check failed:', error.message);
+    return false;
+  }
+};
+
+/**
  * Get bearer token from platform-specific storage
  * Web: localStorage
  * Native: SecureStore
@@ -41,13 +71,13 @@ export const getBearerToken = async (): Promise<string | null> => {
  * Fetch with timeout
  * @param url - URL to fetch
  * @param options - Fetch options
- * @param timeoutMs - Timeout in milliseconds (default: 15000ms = 15 seconds)
+ * @param timeoutMs - Timeout in milliseconds (default: 10000ms = 10 seconds)
  * @returns Response
  */
 const fetchWithTimeout = async (
   url: string,
   options?: RequestInit,
-  timeoutMs: number = 15000
+  timeoutMs: number = 10000
 ): Promise<Response> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -62,7 +92,7 @@ const fetchWithTimeout = async (
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error('La requête a pris trop de temps. Veuillez réessayer.');
+      throw new Error('Le serveur ne répond pas. Veuillez vérifier votre connexion internet ou réessayer plus tard.');
     }
     throw error;
   }
@@ -73,17 +103,17 @@ const fetchWithTimeout = async (
  *
  * @param endpoint - API endpoint path (e.g., '/users', '/auth/login')
  * @param options - Fetch options (method, headers, body, etc.)
- * @param retryCount - Number of retries (default: 2)
+ * @param retryCount - Number of retries (default: 1)
  * @returns Parsed JSON response
  * @throws Error if backend is not configured or request fails
  */
 export const apiCall = async <T = any>(
   endpoint: string,
   options?: RequestInit,
-  retryCount: number = 2
+  retryCount: number = 1
 ): Promise<T> => {
   if (!isBackendConfigured()) {
-    throw new Error("Backend URL not configured. Please rebuild the app.");
+    throw new Error("Le serveur n'est pas configuré. Veuillez utiliser le mode hors ligne.");
   }
 
   const url = `${BACKEND_URL}${endpoint}`;
@@ -119,14 +149,14 @@ export const apiCall = async <T = any>(
       }
 
       // Use fetchWithTimeout instead of regular fetch
-      const response = await fetchWithTimeout(url, fetchOptions, 15000);
+      const response = await fetchWithTimeout(url, fetchOptions, 10000);
 
       if (!response.ok) {
         let errorText = '';
         try {
           errorText = await response.text();
         } catch (e) {
-          errorText = 'Unable to read error response';
+          errorText = 'Impossible de lire la réponse du serveur';
         }
         console.error("[API] Error response:", response.status, errorText);
         
@@ -158,7 +188,7 @@ export const apiCall = async <T = any>(
       }
       
       // Don't retry on timeout errors - just fail fast
-      if (error.message?.includes('trop de temps')) {
+      if (error.message?.includes('ne répond pas')) {
         throw error;
       }
       
@@ -173,7 +203,7 @@ export const apiCall = async <T = any>(
   console.error("[API] All retry attempts failed");
   // Re-throw with a more user-friendly message if it's a network error
   if (lastError?.message === 'Failed to fetch' || lastError?.message === 'Network request failed' || lastError?.name === 'TypeError') {
-    throw new Error("Impossible de se connecter au serveur. Vérifiez votre connexion internet ou réessayez plus tard.");
+    throw new Error("Le serveur n'est pas disponible. Veuillez utiliser le mode hors ligne ou réessayer plus tard.");
   }
   throw lastError;
 };

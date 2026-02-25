@@ -15,7 +15,7 @@ import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
-import { apiPost, BACKEND_URL, isBackendConfigured } from '@/utils/api';
+import { apiPost, BACKEND_URL, isBackendConfigured, checkBackendHealth } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
@@ -145,6 +145,25 @@ const styles = StyleSheet.create({
     color: '#721C24',
     lineHeight: 20,
   },
+  successBox: {
+    backgroundColor: '#D4EDDA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#C3E6CB',
+  },
+  successTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#155724',
+    marginBottom: 8,
+  },
+  successText: {
+    fontSize: 14,
+    color: '#155724',
+    lineHeight: 20,
+  },
   debugBox: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -208,6 +227,7 @@ export default function AdminLoginScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
 
   const backendConfigured = isBackendConfigured();
   const backendUrlDisplay = BACKEND_URL || 'Non configuré';
@@ -220,7 +240,6 @@ export default function AdminLoginScreen() {
         
         if (offlineEnabled !== 'true') {
           console.log('Admin Login - Initializing offline access with default password');
-          // Activer l'accès hors ligne avec le mot de passe par défaut
           await AsyncStorage.setItem(OFFLINE_PASSWORD_KEY, 'admin123');
           await AsyncStorage.setItem(OFFLINE_ACCESS_ENABLED_KEY, 'true');
           console.log('Admin Login - Offline access initialized successfully');
@@ -232,6 +251,23 @@ export default function AdminLoginScreen() {
 
     initializeOfflineAccess();
   }, []);
+
+  // Vérifier l'état du backend au chargement
+  React.useEffect(() => {
+    const checkBackend = async () => {
+      if (!backendConfigured) {
+        setBackendStatus('offline');
+        return;
+      }
+
+      console.log('Admin Login - Checking backend health...');
+      const isHealthy = await checkBackendHealth();
+      setBackendStatus(isHealthy ? 'online' : 'offline');
+      console.log('Admin Login - Backend status:', isHealthy ? 'online' : 'offline');
+    };
+
+    checkBackend();
+  }, [backendConfigured]);
 
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info') => {
     console.log('Admin Login - Showing modal:', title, message);
@@ -255,14 +291,12 @@ export default function AdminLoginScreen() {
     try {
       const trimmedPassword = password.trim();
       
-      // Vérifier si l'accès hors ligne est activé
       const offlineEnabled = await AsyncStorage.getItem(OFFLINE_ACCESS_ENABLED_KEY);
       const savedPassword = await AsyncStorage.getItem(OFFLINE_PASSWORD_KEY);
       
       console.log('Admin Login - Offline access status:', { enabled: offlineEnabled === 'true', hasSavedPassword: !!savedPassword });
       
       if (offlineEnabled === 'true' && savedPassword) {
-        // Vérifier le mot de passe avec le mot de passe sauvegardé
         if (trimmedPassword === savedPassword) {
           console.log('Admin Login - Offline login successful');
           
@@ -306,13 +340,8 @@ export default function AdminLoginScreen() {
     console.log('Admin Login - Login button pressed');
     console.log('Admin Login - Backend URL:', BACKEND_URL);
     console.log('Admin Login - Backend configured:', backendConfigured);
+    console.log('Admin Login - Backend status:', backendStatus);
     
-    if (!backendConfigured) {
-      console.error('Admin Login - Backend not configured, trying offline login');
-      await handleOfflineLogin();
-      return;
-    }
-
     if (!password.trim()) {
       console.log('Admin Login - Empty password');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -320,14 +349,20 @@ export default function AdminLoginScreen() {
       return;
     }
 
+    const trimmedPassword = password.trim();
+
+    // Si le backend n'est pas disponible, essayer directement le mode hors ligne
+    if (!backendConfigured || backendStatus === 'offline') {
+      console.log('Admin Login - Backend not available, trying offline login');
+      await handleOfflineLogin();
+      return;
+    }
+
     setLoading(true);
     console.log('Admin Login - Attempting online login...');
-    console.log('Admin Login - Password length:', password.trim().length);
 
     try {
-      const trimmedPassword = password.trim();
       console.log('Admin Login - Calling /api/admin/login endpoint');
-      console.log('Admin Login - Password length being sent:', trimmedPassword.length);
       
       const response = await apiPost('/api/admin/login', {
         password: trimmedPassword,
@@ -349,35 +384,25 @@ export default function AdminLoginScreen() {
       console.error('Admin Login - Online login failed:', error);
       console.error('Admin Login - Error message:', error.message);
       
-      // Si la connexion en ligne échoue, essayer la connexion hors ligne
-      console.log('Admin Login - Online login failed, trying offline login as fallback');
-      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       
       const errorMessageText = error.message || '';
       
-      // Vérifier si c'est une erreur 404 (endpoint non trouvé) ou une erreur de connexion
+      // Si c'est une erreur de connexion, essayer automatiquement le mode hors ligne
       if (
-        errorMessageText.includes('404') ||
-        errorMessageText.includes('not found') ||
-        errorMessageText.includes('Not Found') ||
-        errorMessageText.includes('connexion') || 
-        errorMessageText.includes('Network') || 
-        errorMessageText.includes('Failed to fetch') || 
-        errorMessageText.includes('Impossible de se connecter') ||
-        errorMessageText.includes('timeout') ||
-        errorMessageText.includes('trop de temps')
+        errorMessageText.includes('ne répond pas') ||
+        errorMessageText.includes('n\'est pas disponible') ||
+        errorMessageText.includes('Failed to fetch') ||
+        errorMessageText.includes('Network') ||
+        errorMessageText.includes('timeout')
       ) {
-        // Problème de connexion ou backend non disponible - essayer automatiquement le mode hors ligne
         console.log('Admin Login - Backend unavailable, attempting automatic offline login');
         
-        // Essayer automatiquement la connexion hors ligne
         try {
           const offlineEnabled = await AsyncStorage.getItem(OFFLINE_ACCESS_ENABLED_KEY);
           const savedPassword = await AsyncStorage.getItem(OFFLINE_PASSWORD_KEY);
           
           if (offlineEnabled === 'true' && savedPassword && trimmedPassword === savedPassword) {
-            // Connexion hors ligne réussie automatiquement
             console.log('Admin Login - Automatic offline login successful');
             await AsyncStorage.setItem('admin_password', trimmedPassword);
             
@@ -398,34 +423,25 @@ export default function AdminLoginScreen() {
           console.error('Admin Login - Automatic offline login failed:', offlineError);
         }
         
-        // Si la connexion hors ligne automatique échoue, proposer le mode hors ligne
         showModal(
           'Serveur non disponible',
           'Le serveur backend n\'est pas accessible actuellement.\n\n' +
-          '• Le serveur peut être temporairement arrêté\n' +
-          '• Votre connexion internet peut être instable\n' +
-          '• L\'URL du backend peut avoir changé\n\n' +
-          'Utilisez le bouton "Connexion hors ligne" ci-dessous pour accéder au tableau de bord sans connexion au serveur.',
+          'Utilisez le bouton "Connexion hors ligne" ci-dessous pour accéder au tableau de bord sans connexion au serveur.\n\n' +
+          'Mot de passe par défaut: admin123',
           'warning'
         );
       } else if (
         errorMessageText.includes('401') ||
-        errorMessageText.includes('Authentication failed') ||
         errorMessageText.includes('incorrect') ||
         errorMessageText.includes('Password')
       ) {
-        // Erreur d'authentification - mot de passe incorrect
-        const lengthMatch = errorMessageText.match(/(\d+)\s*caract/i);
-        const lengthHint = lengthMatch ? `\n\nLongueur attendue: ${lengthMatch[1]} caractères.` : '';
-        
         showModal(
           'Mot de passe incorrect',
-          `Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.${lengthHint}\n\n` +
+          'Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.\n\n' +
           'Si vous avez oublié le mot de passe, utilisez le mode hors ligne avec le mot de passe par défaut: admin123',
           'error'
         );
       } else {
-        // Autre erreur
         showModal(
           'Erreur de connexion',
           `Une erreur est survenue: ${errorMessageText}\n\n` +
@@ -451,6 +467,9 @@ export default function AdminLoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/admin/offline-access');
   };
+
+  const statusText = backendStatus === 'checking' ? 'Vérification...' : backendStatus === 'online' ? '✓ En ligne' : '✗ Hors ligne';
+  const statusTextColor = backendStatus === 'checking' ? colors.textSecondary : backendStatus === 'online' ? '#28A745' : '#DC3545';
 
   return (
     <>
@@ -493,11 +512,21 @@ export default function AdminLoginScreen() {
               </Text>
             </View>
 
-            {!backendConfigured && (
+            {backendConfigured && backendStatus === 'online' && (
+              <View style={styles.successBox}>
+                <Text style={styles.successTitle}>✓ Serveur disponible</Text>
+                <Text style={styles.successText}>
+                  Le serveur backend est accessible. Vous pouvez vous connecter en ligne.
+                </Text>
+              </View>
+            )}
+
+            {(!backendConfigured || backendStatus === 'offline') && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorTitle}>⚠️ Backend non configuré</Text>
+                <Text style={styles.errorTitle}>⚠️ Serveur non disponible</Text>
                 <Text style={styles.errorText}>
-                  Le backend n'est pas configuré. Vous pouvez utiliser le mode hors ligne pour accéder au tableau de bord.
+                  Le serveur backend n'est pas accessible. Utilisez le mode hors ligne pour accéder au tableau de bord.{'\n\n'}
+                  Mot de passe par défaut: admin123
                 </Text>
               </View>
             )}
@@ -508,6 +537,7 @@ export default function AdminLoginScreen() {
                 <Text style={styles.debugText}>
                   Backend: {backendConfigured ? '✓ Configuré' : '✗ Non configuré'}
                   {'\n'}URL: {backendUrlDisplay}
+                  {'\n'}Statut: <Text style={{ color: statusTextColor }}>{statusText}</Text>
                   {'\n'}Plateforme: {Platform.OS}
                   {'\n'}Version: {Platform.Version}
                 </Text>
@@ -552,12 +582,12 @@ export default function AdminLoginScreen() {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <Text style={styles.buttonText}>
-                  {backendConfigured ? 'Se connecter' : 'Connexion hors ligne'}
+                  {backendStatus === 'online' ? 'Se connecter' : 'Connexion hors ligne'}
                 </Text>
               )}
             </TouchableOpacity>
 
-            {backendConfigured && (
+            {backendStatus === 'online' && (
               <TouchableOpacity
                 style={styles.offlineButton}
                 onPress={handleOfflineLogin}
