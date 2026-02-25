@@ -212,6 +212,27 @@ export default function AdminLoginScreen() {
   const backendConfigured = isBackendConfigured();
   const backendUrlDisplay = BACKEND_URL || 'Non configuré';
 
+  // Activer automatiquement l'accès hors ligne avec le mot de passe par défaut si ce n'est pas déjà fait
+  React.useEffect(() => {
+    const initializeOfflineAccess = async () => {
+      try {
+        const offlineEnabled = await AsyncStorage.getItem(OFFLINE_ACCESS_ENABLED_KEY);
+        
+        if (offlineEnabled !== 'true') {
+          console.log('Admin Login - Initializing offline access with default password');
+          // Activer l'accès hors ligne avec le mot de passe par défaut
+          await AsyncStorage.setItem(OFFLINE_PASSWORD_KEY, 'admin123');
+          await AsyncStorage.setItem(OFFLINE_ACCESS_ENABLED_KEY, 'true');
+          console.log('Admin Login - Offline access initialized successfully');
+        }
+      } catch (error) {
+        console.error('Admin Login - Failed to initialize offline access:', error);
+      }
+    };
+
+    initializeOfflineAccess();
+  }, []);
+
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info') => {
     console.log('Admin Login - Showing modal:', title, message);
     setModalTitle(title);
@@ -335,40 +356,82 @@ export default function AdminLoginScreen() {
       
       const errorMessageText = error.message || '';
       
+      // Vérifier si c'est une erreur 404 (endpoint non trouvé) ou une erreur de connexion
       if (
+        errorMessageText.includes('404') ||
+        errorMessageText.includes('not found') ||
+        errorMessageText.includes('Not Found') ||
         errorMessageText.includes('connexion') || 
         errorMessageText.includes('Network') || 
         errorMessageText.includes('Failed to fetch') || 
         errorMessageText.includes('Impossible de se connecter') ||
-        errorMessageText.includes('timeout')
+        errorMessageText.includes('timeout') ||
+        errorMessageText.includes('trop de temps')
       ) {
-        // Problème de connexion - proposer le mode hors ligne
-        showModal(
-          'Connexion impossible',
-          'Impossible de se connecter au serveur. Voulez-vous essayer le mode hors ligne?\n\nAppuyez sur "Connexion hors ligne" ci-dessous.',
-          'warning'
-        );
-      } else {
-        // Autre erreur (mot de passe incorrect, etc.)
-        let errorTitle = 'Erreur de connexion';
-        let detailedMessage = errorMessageText;
+        // Problème de connexion ou backend non disponible - essayer automatiquement le mode hors ligne
+        console.log('Admin Login - Backend unavailable, attempting automatic offline login');
         
-        if (errorMessageText.includes('Le mot de passe est requis') || errorMessageText.includes('requis')) {
-          errorTitle = 'Mot de passe requis';
-          detailedMessage = 'Le mot de passe est requis. Veuillez entrer votre mot de passe administrateur.';
-        } else if (
-          errorMessageText.includes('Mot de passe administrateur incorrect') ||
-          errorMessageText.includes('401') ||
-          errorMessageText.includes('Invalid admin password') ||
-          errorMessageText.includes('incorrect')
-        ) {
-          errorTitle = 'Mot de passe incorrect';
-          const lengthMatch = errorMessageText.match(/(\d+)\s*caract/i);
-          const lengthHint = lengthMatch ? `\n\nLongueur attendue: ${lengthMatch[1]} caractères.` : '';
-          detailedMessage = `Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.${lengthHint}\n\nSi le problème persiste, utilisez l'outil de diagnostic ou activez l'accès hors ligne.`;
+        // Essayer automatiquement la connexion hors ligne
+        try {
+          const offlineEnabled = await AsyncStorage.getItem(OFFLINE_ACCESS_ENABLED_KEY);
+          const savedPassword = await AsyncStorage.getItem(OFFLINE_PASSWORD_KEY);
+          
+          if (offlineEnabled === 'true' && savedPassword && trimmedPassword === savedPassword) {
+            // Connexion hors ligne réussie automatiquement
+            console.log('Admin Login - Automatic offline login successful');
+            await AsyncStorage.setItem('admin_password', trimmedPassword);
+            
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            showModal(
+              'Connexion réussie (Mode hors ligne)',
+              'Le serveur n\'est pas disponible, mais vous êtes connecté en mode hors ligne.',
+              'success'
+            );
+            
+            setTimeout(() => {
+              console.log('Admin Login - Navigating to dashboard (offline mode)');
+              router.replace('/admin/dashboard');
+            }, 1500);
+            return;
+          }
+        } catch (offlineError) {
+          console.error('Admin Login - Automatic offline login failed:', offlineError);
         }
         
-        showModal(errorTitle, detailedMessage, 'error');
+        // Si la connexion hors ligne automatique échoue, proposer le mode hors ligne
+        showModal(
+          'Serveur non disponible',
+          'Le serveur backend n\'est pas accessible actuellement.\n\n' +
+          '• Le serveur peut être temporairement arrêté\n' +
+          '• Votre connexion internet peut être instable\n' +
+          '• L\'URL du backend peut avoir changé\n\n' +
+          'Utilisez le bouton "Connexion hors ligne" ci-dessous pour accéder au tableau de bord sans connexion au serveur.',
+          'warning'
+        );
+      } else if (
+        errorMessageText.includes('401') ||
+        errorMessageText.includes('Authentication failed') ||
+        errorMessageText.includes('incorrect') ||
+        errorMessageText.includes('Password')
+      ) {
+        // Erreur d'authentification - mot de passe incorrect
+        const lengthMatch = errorMessageText.match(/(\d+)\s*caract/i);
+        const lengthHint = lengthMatch ? `\n\nLongueur attendue: ${lengthMatch[1]} caractères.` : '';
+        
+        showModal(
+          'Mot de passe incorrect',
+          `Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.${lengthHint}\n\n` +
+          'Si vous avez oublié le mot de passe, utilisez le mode hors ligne avec le mot de passe par défaut: admin123',
+          'error'
+        );
+      } else {
+        // Autre erreur
+        showModal(
+          'Erreur de connexion',
+          `Une erreur est survenue: ${errorMessageText}\n\n` +
+          'Essayez le mode hors ligne ou contactez l\'administrateur système.',
+          'error'
+        );
       }
     } finally {
       setLoading(false);
@@ -421,10 +484,12 @@ export default function AdminLoginScreen() {
 
           <View style={styles.form}>
             <View style={styles.warningBox}>
-              <Text style={styles.warningTitle}>🔒 Accès Réservé</Text>
+              <Text style={styles.warningTitle}>🔒 Accès Administrateur</Text>
               <Text style={styles.warningText}>
-                Cet espace est réservé aux administrateurs du parti A.R.M. 
-                Seul le mot de passe secret permet d'accéder au tableau de bord administrateur.
+                Espace réservé aux administrateurs du parti A.R.M.{'\n\n'}
+                Deux modes de connexion disponibles:{'\n'}
+                • En ligne: Connexion au serveur (nécessite internet){'\n'}
+                • Hors ligne: Accès local sans serveur
               </Text>
             </View>
 
@@ -519,9 +584,11 @@ export default function AdminLoginScreen() {
             )}
 
             <Text style={styles.helpText}>
-              💡 Si le backend est temporairement arrêté ou si l'abonnement est suspendu, utilisez le mode hors ligne pour accéder au tableau de bord.
-              {'\n\n'}
-              Mot de passe par défaut: admin123
+              💡 Conseils de connexion:{'\n\n'}
+              • Si le serveur n'est pas disponible, utilisez le mode hors ligne{'\n'}
+              • Mot de passe par défaut: admin123{'\n'}
+              • Configurez l'accès hors ligne pour une connexion plus rapide{'\n\n'}
+              En cas de problème persistant, utilisez l'outil de diagnostic pour vérifier la configuration.
             </Text>
           </View>
         </ScrollView>
