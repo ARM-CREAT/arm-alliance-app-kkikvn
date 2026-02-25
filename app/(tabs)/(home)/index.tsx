@@ -1,5 +1,10 @@
 
+import { IconSymbol } from "@/components/IconSymbol";
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "expo-router";
+import * as Haptics from 'expo-haptics';
+import { colors } from "@/styles/commonStyles";
+import { apiGet } from "@/utils/api";
 import { 
   StyleSheet, 
   View, 
@@ -14,18 +19,6 @@ import {
   ActivityIndicator,
   Animated
 } from "react-native";
-import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
-import { useRouter } from "expo-router";
-import * as Haptics from 'expo-haptics';
-import { apiGet } from "@/utils/api";
-
-// Helper to resolve image sources
-function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
-  if (!source) return { uri: '' };
-  if (typeof source === 'string') return { uri: source };
-  return source as ImageSourcePropType;
-}
 
 interface NewsItem {
   id: string;
@@ -53,6 +46,12 @@ interface LeadershipMember {
 
 const { width } = Dimensions.get('window');
 
+function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  if (typeof source === 'string') return { uri: source };
+  return source as ImageSourcePropType;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -65,55 +64,49 @@ export default function HomeScreen() {
   const [fabScale] = useState(new Animated.Value(1));
 
   const loadAllData = useCallback(async () => {
-    console.log('[HomeScreen] Loading all data (PUBLIC - no authentication required)');
+    console.log('[HomeScreen] Chargement de toutes les données (PUBLIC - pas d\'authentification requise)');
     setError(null);
     
     try {
-      // Load all data in parallel with individual error handling
       const results = await Promise.allSettled([
         apiGet<NewsItem[]>('/api/news'),
         apiGet<EventItem[]>('/api/events'),
         apiGet<LeadershipMember[]>('/api/leadership'),
       ]);
 
-      // Handle news
       if (results[0].status === 'fulfilled' && Array.isArray(results[0].value)) {
-        console.log('[HomeScreen] News loaded successfully:', results[0].value.length, 'items');
+        console.log('[HomeScreen] Actualités chargées avec succès:', results[0].value.length, 'éléments');
         setNews(results[0].value);
       } else {
-        console.warn('[HomeScreen] Failed to load news:', results[0]);
+        console.warn('[HomeScreen] Échec du chargement des actualités:', results[0]);
       }
 
-      // Handle events
       if (results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
-        console.log('[HomeScreen] Events loaded successfully:', results[1].value.length, 'items');
+        console.log('[HomeScreen] Événements chargés avec succès:', results[1].value.length, 'éléments');
         setEvents(results[1].value);
       } else {
-        console.warn('[HomeScreen] Failed to load events:', results[1]);
+        console.warn('[HomeScreen] Échec du chargement des événements:', results[1]);
       }
 
-      // Handle leadership
       if (results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
-        console.log('[HomeScreen] Leadership loaded successfully:', results[2].value.length, 'items');
+        console.log('[HomeScreen] Direction chargée avec succès:', results[2].value.length, 'éléments');
         setLeadership(results[2].value);
       } else {
-        console.warn('[HomeScreen] Failed to load leadership:', results[2]);
+        console.warn('[HomeScreen] Échec du chargement de la direction:', results[2]);
       }
 
-      // Check if all failed
       const allFailed = results.every(r => r.status === 'rejected');
       if (allFailed) {
-        console.warn('[HomeScreen] All API calls failed - showing default content');
+        console.warn('[HomeScreen] Tous les appels API ont échoué - affichage du contenu par défaut');
         setError('Impossible de charger les données. Affichage du contenu par défaut.');
       }
     } catch (error: any) {
-      console.error('[HomeScreen] Error loading data:', error);
+      console.error('[HomeScreen] Erreur lors du chargement des données:', error);
       setError('Une erreur est survenue. Affichage du contenu par défaut.');
     } finally {
       setLoading(false);
-      console.log('[HomeScreen] Data loading complete');
+      console.log('[HomeScreen] Chargement des données terminé');
       
-      // Fade in animation
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 500,
@@ -123,16 +116,14 @@ export default function HomeScreen() {
   }, [fadeAnim]);
 
   useEffect(() => {
-    console.log('[HomeScreen] Component mounted, loading data');
+    console.log('[HomeScreen] Composant monté, chargement des données');
     
-    // Set a maximum loading time of 3 seconds
     const loadingTimeout = setTimeout(() => {
       if (loading) {
-        console.warn('[HomeScreen] Loading timeout - showing content anyway');
+        console.warn('[HomeScreen] Délai de chargement dépassé - affichage du contenu quand même');
         setLoading(false);
         setError('Chargement lent. Affichage du contenu par défaut.');
         
-        // Fade in animation
         Animated.timing(fadeAnim, {
           toValue: 1,
           duration: 500,
@@ -147,19 +138,18 @@ export default function HomeScreen() {
   }, [loadAllData, loading, fadeAnim]);
 
   const onRefresh = useCallback(async () => {
-    console.log('User pulled to refresh');
+    console.log('L\'utilisateur a tiré pour actualiser');
     setRefreshing(true);
     await loadAllData();
     setRefreshing(false);
     
-    // Haptic feedback on refresh complete
     if (Platform.OS === 'ios') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }, [loadAllData]);
 
   const handleDonation = (amount: number) => {
-    console.log('User tapped donation button:', amount, 'EUR');
+    console.log('L\'utilisateur a appuyé sur le bouton de don:', amount, 'EUR');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -167,7 +157,7 @@ export default function HomeScreen() {
   };
 
   const handleJoinParty = () => {
-    console.log('User tapped Join Party button (PUBLIC - no login required)');
+    console.log('L\'utilisateur a appuyé sur le bouton Adhérer au Parti (PUBLIC - pas de connexion requise)');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -175,7 +165,7 @@ export default function HomeScreen() {
   };
 
   const handleMemberCard = () => {
-    console.log('User tapped Member Card button (PUBLIC - no login required)');
+    console.log('L\'utilisateur a appuyé sur le bouton Carte de Membre (PUBLIC - pas de connexion requise)');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -183,7 +173,7 @@ export default function HomeScreen() {
   };
 
   const handleContact = () => {
-    console.log('User tapped Contact button');
+    console.log('L\'utilisateur a appuyé sur le bouton Contact');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -191,7 +181,7 @@ export default function HomeScreen() {
   };
 
   const handleChat = () => {
-    console.log('User tapped Public Chat button');
+    console.log('L\'utilisateur a appuyé sur le bouton Chat Public');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -199,7 +189,7 @@ export default function HomeScreen() {
   };
 
   const handleIdeology = () => {
-    console.log('User tapped Ideology button');
+    console.log('L\'utilisateur a appuyé sur le bouton Idéologie');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -207,7 +197,7 @@ export default function HomeScreen() {
   };
 
   const handleProgram = () => {
-    console.log('User tapped View Complete Program button');
+    console.log('L\'utilisateur a appuyé sur le bouton Voir le Programme Complet');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -215,12 +205,11 @@ export default function HomeScreen() {
   };
 
   const handleAIChat = () => {
-    console.log('User tapped AI Assistant button');
+    console.log('L\'utilisateur a appuyé sur le bouton Assistant IA');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }
     
-    // Animate button press
     Animated.sequence([
       Animated.timing(fabScale, {
         toValue: 0.9,
@@ -238,7 +227,7 @@ export default function HomeScreen() {
   };
 
   const handleSettings = () => {
-    console.log('User tapped Settings button');
+    console.log('L\'utilisateur a appuyé sur le bouton Paramètres');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -246,7 +235,7 @@ export default function HomeScreen() {
   };
 
   const handleAdminAccess = () => {
-    console.log('User tapped Admin Access button');
+    console.log('L\'utilisateur a appuyé sur le bouton Accès Admin');
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -282,7 +271,6 @@ export default function HomeScreen() {
         }
       >
         <Animated.View style={{ opacity: fadeAnim }}>
-          {/* Error message */}
           {error && (
             <View style={styles.errorContainer}>
               <IconSymbol 
@@ -298,7 +286,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Header avec logo */}
           <View style={styles.header}>
             <Image 
               source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
@@ -314,7 +301,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Idéologie du parti */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
@@ -348,7 +334,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Programme politique */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
@@ -379,7 +364,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Contributions */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
@@ -428,7 +412,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Actualités */}
           {news.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -463,7 +446,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Événements */}
           {events.length > 0 && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -505,7 +487,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Actions rapides */}
           <View style={styles.section}>
             <View style={styles.quickActions}>
               <TouchableOpacity 
@@ -600,7 +581,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Direction du parti */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
@@ -662,7 +642,6 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Siège du parti */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <IconSymbol 
@@ -684,7 +663,6 @@ export default function HomeScreen() {
         </Animated.View>
       </ScrollView>
 
-      {/* Floating AI Button */}
       <Animated.View style={[styles.fabContainer, { transform: [{ scale: fabScale }] }]}>
         <TouchableOpacity 
           style={styles.fab}
