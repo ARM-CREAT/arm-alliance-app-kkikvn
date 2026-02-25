@@ -1,4 +1,3 @@
-
 {
   "expo": {
     "name": "Alliance ARM",
@@ -45,7 +44,7 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev"
+      "backendUrl": "https://prod-proj-lcqctzjnnyj98dyvuaf4w-liwg5h36mq-ey.a.run.app"
     }
   }
 }
