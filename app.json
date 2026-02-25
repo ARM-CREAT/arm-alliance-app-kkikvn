@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Alliance ARM",
@@ -38,14 +39,13 @@
       "expo-web-browser",
       "expo-localization"
     ],
-    "scheme": "Alliance ARM",
+    "scheme": "alliance-arm",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://prod-proj-lcqctzjnnyj98dyvuaf4w-liwg5h36mq-ey.a.run.app"
+      "backendUrl": "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev"
     }
-  },
-  "scheme": "alliance-arm"
+  }
 }
