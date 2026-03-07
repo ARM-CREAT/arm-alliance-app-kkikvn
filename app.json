@@ -2,8 +2,8 @@
 {
   "expo": {
     "name": "Alliance ARM",
-    "slug": "alliance-arm",
-    "version": "1.0.7",
+    "slug": "arm-alliance-app-kkikvn",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/images/SAVE_20251219_163224.jpg",
     "userInterfaceStyle": "automatic",
@@ -26,7 +26,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.armmali.app",
-      "versionCode": 9
+      "versionCode": 10
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
