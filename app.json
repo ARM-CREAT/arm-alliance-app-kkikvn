@@ -1,8 +1,7 @@
-
 {
   "expo": {
     "name": "Alliance ARM",
-    "slug": "arm-alliance-app-kkikvn",
+    "slug": "alliance-arm",
     "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/images/SAVE_20251219_163224.jpg",
@@ -39,7 +38,7 @@
       "expo-web-browser",
       "expo-localization"
     ],
-    "scheme": "alliance-arm",
+    "scheme": "alliancearm",
     "experiments": {
       "typedRoutes": true
     },
