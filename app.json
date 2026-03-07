@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Alliance ARM",
@@ -24,9 +25,8 @@
         "foregroundImage": "./assets/images/SAVE_20251219_163224.jpg",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.armmali.app",
-      "versionCode": 8
+      "versionCode": 9
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -36,7 +36,15 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
-      "expo-localization"
+      "expo-localization",
+      [
+        "react-native-edge-to-edge",
+        {
+          "android": {
+            "enforceNavigationBarContrast": false
+          }
+        }
+      ]
     ],
     "scheme": "alliancearm",
     "experiments": {
