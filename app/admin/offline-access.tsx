@@ -189,7 +189,6 @@ const styles = StyleSheet.create({
 
 const OFFLINE_PASSWORD_KEY = 'admin_offline_password';
 const OFFLINE_ACCESS_ENABLED_KEY = 'admin_offline_access_enabled';
-const DEFAULT_ADMIN_PASSWORD = 'admin123';
 
 export default function OfflineAccessScreen() {
   const router = useRouter();
@@ -244,9 +243,6 @@ export default function OfflineAccessScreen() {
     try {
       const trimmedPassword = password.trim();
       
-      // Vérifier si c'est le mot de passe par défaut
-      const isDefaultPassword = trimmedPassword === DEFAULT_ADMIN_PASSWORD;
-      
       // Sauvegarder le mot de passe localement
       await AsyncStorage.setItem(OFFLINE_PASSWORD_KEY, trimmedPassword);
       await AsyncStorage.setItem(OFFLINE_ACCESS_ENABLED_KEY, 'true');
@@ -259,10 +255,9 @@ export default function OfflineAccessScreen() {
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      const passwordTypeText = isDefaultPassword ? 'par défaut (admin123)' : 'personnalisé';
       showModal(
         'Accès hors ligne activé',
-        `L'accès administrateur hors ligne est maintenant activé avec le mot de passe ${passwordTypeText}.\n\nVous pourrez accéder au tableau de bord même si le backend est indisponible.`,
+        `L'accès administrateur hors ligne est maintenant activé.\n\nVous pourrez accéder au tableau de bord même si le backend est indisponible.`,
         'success'
       );
     } catch (error: any) {
@@ -304,7 +299,7 @@ export default function OfflineAccessScreen() {
   };
 
   const passwordLengthText = savedPassword ? `${savedPassword.length} caractères` : 'N/A';
-  const isDefaultPasswordText = savedPassword === DEFAULT_ADMIN_PASSWORD ? 'Oui (admin123)' : 'Non (personnalisé)';
+  const isDefaultPasswordText = savedPassword ? 'Personnalisé' : 'N/A';
 
   return (
     <>
@@ -404,9 +399,7 @@ export default function OfflineAccessScreen() {
               <Text style={styles.warningText}>
                 Pour activer l'accès hors ligne, entrez votre mot de passe administrateur ci-dessous.
                 {'\n\n'}
-                Si vous utilisez le mot de passe par défaut, entrez: admin123
-                {'\n\n'}
-                Si vous avez configuré un mot de passe personnalisé via la variable d'environnement ADMIN_PASSWORD, utilisez ce mot de passe.
+                Utilisez le mot de passe configuré via la variable d'environnement ADMIN_PASSWORD.
               </Text>
             </View>
 
@@ -455,15 +448,7 @@ export default function OfflineAccessScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📋 Mot de passe par défaut</Text>
-              <Text style={styles.sectionText}>
-                Si vous n'avez pas configuré de mot de passe personnalisé, utilisez le mot de passe par défaut:
-              </Text>
-              <View style={styles.codeBox}>
-                <Text style={styles.codeText}>admin123</Text>
-              </View>
-            </View>
+
           </>
         )}
 

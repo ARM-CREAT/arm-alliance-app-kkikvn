@@ -232,25 +232,7 @@ export default function AdminLoginScreen() {
   const backendConfigured = isBackendConfigured();
   const backendUrlDisplay = BACKEND_URL || 'Non configuré';
 
-  // Activer automatiquement l'accès hors ligne avec le mot de passe par défaut si ce n'est pas déjà fait
-  React.useEffect(() => {
-    const initializeOfflineAccess = async () => {
-      try {
-        const offlineEnabled = await AsyncStorage.getItem(OFFLINE_ACCESS_ENABLED_KEY);
-        
-        if (offlineEnabled !== 'true') {
-          console.log('Admin Login - Initializing offline access with default password');
-          await AsyncStorage.setItem(OFFLINE_PASSWORD_KEY, 'admin123');
-          await AsyncStorage.setItem(OFFLINE_ACCESS_ENABLED_KEY, 'true');
-          console.log('Admin Login - Offline access initialized successfully');
-        }
-      } catch (error) {
-        console.error('Admin Login - Failed to initialize offline access:', error);
-      }
-    };
 
-    initializeOfflineAccess();
-  }, []);
 
   // Vérifier l'état du backend au chargement
   React.useEffect(() => {
@@ -427,7 +409,6 @@ export default function AdminLoginScreen() {
           'Serveur non disponible',
           'Le serveur backend n\'est pas accessible actuellement.\n\n' +
           'Utilisez le bouton "Connexion hors ligne" ci-dessous pour accéder au tableau de bord sans connexion au serveur.\n\n' +
-          'Mot de passe par défaut: admin123',
           'warning'
         );
       } else if (
@@ -438,7 +419,7 @@ export default function AdminLoginScreen() {
         showModal(
           'Mot de passe incorrect',
           'Le mot de passe administrateur est incorrect. Veuillez vérifier et réessayer.\n\n' +
-          'Si vous avez oublié le mot de passe, utilisez le mode hors ligne avec le mot de passe par défaut: admin123',
+          'Si vous avez oublié le mot de passe, contactez l\'administrateur système.',
           'error'
         );
       } else {
@@ -525,8 +506,7 @@ export default function AdminLoginScreen() {
               <View style={styles.errorBox}>
                 <Text style={styles.errorTitle}>⚠️ Serveur non disponible</Text>
                 <Text style={styles.errorText}>
-                  Le serveur backend n'est pas accessible. Utilisez le mode hors ligne pour accéder au tableau de bord.{'\n\n'}
-                  Mot de passe par défaut: admin123
+                  Le serveur backend n'est pas accessible. Utilisez le mode hors ligne pour accéder au tableau de bord.
                 </Text>
               </View>
             )}
@@ -616,7 +596,6 @@ export default function AdminLoginScreen() {
             <Text style={styles.helpText}>
               💡 Conseils de connexion:{'\n\n'}
               • Si le serveur n'est pas disponible, utilisez le mode hors ligne{'\n'}
-              • Mot de passe par défaut: admin123{'\n'}
               • Configurez l'accès hors ligne pour une connexion plus rapide{'\n\n'}
               En cas de problème persistant, utilisez l'outil de diagnostic pour vérifier la configuration.
             </Text>
