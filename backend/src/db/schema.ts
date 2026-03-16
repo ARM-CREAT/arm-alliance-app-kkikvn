@@ -96,6 +96,7 @@ export const politicalProgram = pgTable('political_program', {
   description: text('description').notNull(),
   order: integer('order').default(0),
   createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // Regions table - Mali regions with cercles and communes
@@ -216,4 +217,31 @@ export const electionResults = pgTable('election_results', {
   verifiedBy: text('verified_by'),
   verifiedAt: timestamp('verified_at'),
   status: text('status').notNull().default('pending'), // pending, verified, rejected
+});
+
+// Conferences table - Virtual meeting rooms with Jit.si integration
+export const conferences = pgTable('conferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  duration: integer('duration').notNull().default(60),
+  hostName: text('host_name').notNull(),
+  roomCode: text('room_code').notNull().unique(),
+  joinUrl: text('join_url').notNull(),
+  status: text('status').notNull().default('scheduled'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Calls table - Voice and video call signaling
+export const calls = pgTable('calls', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  initiatorId: text('initiator_id').notNull(),
+  targetMemberId: text('target_member_id').notNull(),
+  callType: text('call_type').notNull(), // audio or video
+  roomCode: text('room_code').notNull().unique(),
+  joinUrl: text('join_url').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
 });

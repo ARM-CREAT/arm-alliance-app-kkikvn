@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, gt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -11,15 +11,39 @@ interface EventBody {
   imageUrl?: string;
 }
 
-export function register(app: App, fastify: FastifyInstance) {
-  const requireAuth = app.requireAuth();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
-  // GET /api/events - Get all upcoming events
+function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
+  const password = request.headers['x-admin-password'];
+  if (password !== ADMIN_PASSWORD) {
+    reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'Invalid admin password',
+    });
+    return false;
+  }
+  return true;
+}
+
+function formatEvent(event: any) {
+  return {
+    id: event.id,
+    title: event.title,
+    description: event.description,
+    date: event.date.toISOString(),
+    location: event.location,
+    imageUrl: event.imageUrl,
+    createdAt: event.createdAt.toISOString(),
+  };
+}
+
+export function register(app: App, fastify: FastifyInstance) {
+  // GET /api/events - Get all events (public)
   fastify.get(
     '/api/events',
     {
       schema: {
-        description: 'Get all upcoming events',
+        description: 'Get all events',
         tags: ['events'],
         response: {
           200: { type: 'array' },
@@ -27,20 +51,19 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      app.logger.info('Fetching upcoming events');
+      app.logger.info('Fetching events');
 
       try {
         const result = await app.db
           .select()
           .from(schema.events)
-          .where(gt(schema.events.date, new Date()))
           .orderBy(schema.events.date);
 
         app.logger.info(
           { count: result.length },
           'Events fetched successfully'
         );
-        return result;
+        return result.map(formatEvent);
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch events');
         throw error;
@@ -53,27 +76,26 @@ export function register(app: App, fastify: FastifyInstance) {
     '/api/events',
     {
       schema: {
-        description: 'Create an event (admin only)',
+        description: 'Create an event (requires admin password)',
         tags: ['events'],
         body: {
           type: 'object',
           properties: {
             title: { type: 'string' },
             description: { type: 'string' },
-            date: { type: 'string' },
+            date: { type: 'string', format: 'date-time' },
             location: { type: 'string' },
             imageUrl: { type: 'string' },
           },
           required: ['title', 'description', 'date', 'location'],
         },
         response: {
-          200: { type: 'object' },
+          201: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
+      if (!verifyAdminPassword(request, reply)) return;
 
       const { title, description, date, location, imageUrl } = request.body;
       app.logger.info({ title, date }, 'Creating event');
@@ -94,7 +116,8 @@ export function register(app: App, fastify: FastifyInstance) {
           { eventId: result[0].id, title },
           'Event created successfully'
         );
-        return result[0];
+        reply.status(201);
+        return formatEvent(result[0]);
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create event');
         throw error;
@@ -107,12 +130,12 @@ export function register(app: App, fastify: FastifyInstance) {
     '/api/events/:id',
     {
       schema: {
-        description: 'Update an event (admin only)',
+        description: 'Update an event (requires admin password)',
         tags: ['events'],
         params: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
           },
         },
         body: {
@@ -120,19 +143,19 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: {
             title: { type: 'string' },
             description: { type: 'string' },
-            date: { type: 'string' },
+            date: { type: 'string', format: 'date-time' },
             location: { type: 'string' },
             imageUrl: { type: 'string' },
           },
         },
         response: {
           200: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
+      if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
       const updates = request.body;
@@ -152,8 +175,14 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.events.id, id))
           .returning();
 
+        if (result.length === 0) {
+          app.logger.warn({ eventId: id }, 'Event not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Event not found' };
+        }
+
         app.logger.info({ eventId: id }, 'Event updated successfully');
-        return result[0];
+        return formatEvent(result[0]);
       } catch (error) {
         app.logger.error(
           { err: error, eventId: id },
@@ -169,22 +198,22 @@ export function register(app: App, fastify: FastifyInstance) {
     '/api/events/:id',
     {
       schema: {
-        description: 'Delete an event (admin only)',
+        description: 'Delete an event (requires admin password)',
         tags: ['events'],
         params: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
           },
         },
         response: {
-          200: { type: 'object' },
+          204: {},
+          404: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
+      if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
       app.logger.info({ eventId: id }, 'Deleting event');
@@ -195,8 +224,15 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.events.id, id))
           .returning();
 
+        if (result.length === 0) {
+          app.logger.warn({ eventId: id }, 'Event not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Event not found' };
+        }
+
         app.logger.info({ eventId: id }, 'Event deleted successfully');
-        return result[0];
+        reply.status(204);
+        return;
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to delete event');
         throw error;

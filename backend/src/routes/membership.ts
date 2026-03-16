@@ -172,4 +172,68 @@ export function register(app: App, fastify: FastifyInstance) {
       }
     }
   );
+
+  // GET /api/membership/my-card - Get authenticated member's card (authenticated)
+  fastify.get(
+    '/api/membership/my-card',
+    {
+      schema: {
+        description: 'Get authenticated member card',
+        tags: ['membership'],
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const userId = session.user.id;
+      app.logger.info({ userId }, 'Fetching member card');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.userId, userId));
+
+        if (result.length === 0) {
+          app.logger.warn({ userId }, 'Member profile not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Member profile not found' };
+        }
+
+        const profile = result[0];
+        const joinDate = new Date(profile.createdAt);
+        const expiryDate = new Date(joinDate);
+        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+
+        const cardQrData = JSON.stringify({
+          membershipNumber: profile.membershipNumber,
+          fullName: profile.fullName,
+          status: profile.status,
+        });
+
+        app.logger.info(
+          { userId, membershipNumber: profile.membershipNumber },
+          'Member card fetched successfully'
+        );
+
+        return {
+          membershipNumber: profile.membershipNumber,
+          fullName: profile.fullName,
+          status: profile.status,
+          joinDate: joinDate.toISOString(),
+          expiryDate: expiryDate.toISOString(),
+          cardQrData,
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId }, 'Failed to fetch member card');
+        throw error;
+      }
+    }
+  );
 }
