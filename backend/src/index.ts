@@ -25,6 +25,9 @@ import * as adminMembersRoutes from './routes/adminMembers.js';
 import * as initGeographyRoutes from './routes/initGeography.js';
 import * as healthRoutes from './routes/health.js';
 import * as callRoutes from './routes/calls.js';
+import * as ideologyRoutes from './routes/ideology.js';
+import * as contactRoutes from './routes/contacts.js';
+import * as settingsRoutes from './routes/settings.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -67,9 +70,15 @@ internalMessagingRoutes.register(app, app.fastify);
 adminMembersRoutes.register(app, app.fastify);
 initGeographyRoutes.register(app, app.fastify);
 callRoutes.register(app, app.fastify);
+ideologyRoutes.register(app, app.fastify);
+contactRoutes.register(app, app.fastify);
+settingsRoutes.register(app, app.fastify);
 
-// Seed conference data
+// Seed data
 await conferenceRoutes.seedConferences(app);
+await ideologyRoutes.seedAppContent(app);
+await contactRoutes.seedContacts(app);
+await settingsRoutes.seedSettings(app);
 
 await app.run();
 app.logger.info('A.R.M Political Party Platform running');

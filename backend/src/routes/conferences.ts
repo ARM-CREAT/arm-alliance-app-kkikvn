@@ -7,17 +7,10 @@ interface ConferenceBody {
   title: string;
   description?: string;
   scheduledAt: string;
-  duration: number;
-  hostName: string;
-}
-
-interface ConferenceUpdateBody {
-  title?: string;
-  description?: string;
-  scheduledAt?: string;
   duration?: number;
-  hostName?: string;
-  status?: 'scheduled' | 'active' | 'completed' | 'cancelled';
+  hostName: string;
+  status?: string;
+  joinUrl?: string;
 }
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -37,7 +30,7 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 function generateRoomCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 8; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
@@ -112,7 +105,7 @@ export function register(app: App, fastify: FastifyInstance) {
         description: 'Get all conferences',
         tags: ['conferences'],
         response: {
-          200: { type: 'array' },
+          200: { type: 'object' },
         },
       },
     },
@@ -129,53 +122,9 @@ export function register(app: App, fastify: FastifyInstance) {
           { count: result.length },
           'Conferences fetched successfully'
         );
-        return result.map(formatConference);
+        return { conferences: result.map(formatConference) };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch conferences');
-        throw error;
-      }
-    }
-  );
-
-  // GET /api/conferences/:id - Get single conference (public)
-  fastify.get<{ Params: { id: string } }>(
-    '/api/conferences/:id',
-    {
-      schema: {
-        description: 'Get a single conference',
-        tags: ['conferences'],
-        params: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-          },
-        },
-        response: {
-          200: { type: 'object' },
-          404: { type: 'object' },
-        },
-      },
-    },
-    async (request, reply) => {
-      const { id } = request.params;
-      app.logger.info({ conferenceId: id }, 'Fetching conference');
-
-      try {
-        const result = await app.db
-          .select()
-          .from(schema.conferences)
-          .where(eq(schema.conferences.id, id));
-
-        if (result.length === 0) {
-          app.logger.warn({ conferenceId: id }, 'Conference not found');
-          reply.status(404);
-          return { error: 'NotFound', message: 'Conference not found' };
-        }
-
-        app.logger.info({ conferenceId: id }, 'Conference fetched successfully');
-        return formatConference(result[0]);
-      } catch (error) {
-        app.logger.error({ err: error, conferenceId: id }, 'Failed to fetch conference');
         throw error;
       }
     }
@@ -196,20 +145,30 @@ export function register(app: App, fastify: FastifyInstance) {
             scheduledAt: { type: 'string', format: 'date-time' },
             duration: { type: 'number' },
             hostName: { type: 'string' },
+            status: { type: 'string' },
+            joinUrl: { type: 'string' },
           },
-          required: ['title', 'scheduledAt', 'duration', 'hostName'],
+          required: ['title', 'scheduledAt', 'hostName'],
         },
         response: {
           201: { type: 'object' },
+          400: { type: 'object' },
+          401: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { title, description, scheduledAt, duration, hostName } = request.body;
+      const { title, description, scheduledAt, duration, hostName, status, joinUrl } = request.body;
+
+      if (!title) {
+        reply.status(400);
+        return { error: 'BadRequest', message: 'Title is required' };
+      }
+
       const roomCode = generateRoomCode();
-      const joinUrl = `https://meet.jit.si/AllianceARM-${roomCode}`;
+      const finalJoinUrl = joinUrl || `https://meet.jit.si/AllianceARM-${roomCode}`;
 
       app.logger.info({ title, roomCode }, 'Creating conference');
 
@@ -220,11 +179,11 @@ export function register(app: App, fastify: FastifyInstance) {
             title,
             description,
             scheduledAt: new Date(scheduledAt),
-            duration,
+            duration: duration || 60,
             hostName,
             roomCode,
-            joinUrl,
-            status: 'scheduled',
+            joinUrl: finalJoinUrl,
+            status: status || 'scheduled',
           })
           .returning();
 
@@ -233,7 +192,7 @@ export function register(app: App, fastify: FastifyInstance) {
           'Conference created successfully'
         );
         reply.status(201);
-        return formatConference(result[0]);
+        return { conference: formatConference(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create conference');
         throw error;
@@ -242,7 +201,7 @@ export function register(app: App, fastify: FastifyInstance) {
   );
 
   // PUT /api/conferences/:id - Update conference (admin)
-  fastify.put<{ Params: { id: string }; Body: ConferenceUpdateBody }>(
+  fastify.put<{ Params: { id: string }; Body: Partial<ConferenceBody> }>(
     '/api/conferences/:id',
     {
       schema: {
@@ -262,15 +221,14 @@ export function register(app: App, fastify: FastifyInstance) {
             scheduledAt: { type: 'string', format: 'date-time' },
             duration: { type: 'number' },
             hostName: { type: 'string' },
-            status: {
-              type: 'string',
-              enum: ['scheduled', 'active', 'completed', 'cancelled'],
-            },
+            status: { type: 'string' },
+            joinUrl: { type: 'string' },
           },
         },
         response: {
           200: { type: 'object' },
           404: { type: 'object' },
+          401: { type: 'object' },
         },
       },
     },
@@ -301,7 +259,7 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info({ conferenceId: id }, 'Conference updated successfully');
-        return formatConference(result[0]);
+        return { conference: formatConference(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, conferenceId: id }, 'Failed to update conference');
         throw error;
@@ -323,8 +281,9 @@ export function register(app: App, fastify: FastifyInstance) {
           },
         },
         response: {
-          204: {},
+          200: { type: 'object' },
           404: { type: 'object' },
+          401: { type: 'object' },
         },
       },
     },
@@ -347,8 +306,7 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info({ conferenceId: id }, 'Conference deleted successfully');
-        reply.status(204);
-        return;
+        return { success: true };
       } catch (error) {
         app.logger.error({ err: error, conferenceId: id }, 'Failed to delete conference');
         throw error;
