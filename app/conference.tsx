@@ -215,8 +215,17 @@ export default function ConferenceScreen() {
                 <View style={styles.headerBtnRow}>
                   <TouchableOpacity
                     onPress={() => {
-                      console.log('[Conference] Admin tapped Lancer la caméra');
-                      router.push({ pathname: '/live-conference', params: { title: 'Conférence en direct', hostName: 'Admin' } });
+                      console.log('[Conference] Admin tapped Lancer la caméra (host mode)');
+                      router.push({
+                        pathname: '/live-conference',
+                        params: {
+                          title: 'Conférence ARM en Direct',
+                          hostName: 'ARM',
+                          roomCode: 'ARM-0001',
+                          isHost: 'true',
+                          participantName: 'ARM',
+                        },
+                      });
                     }}
                     style={[styles.headerBtn, styles.headerBtnCamera]}
                   >
@@ -235,6 +244,35 @@ export default function ConferenceScreen() {
         contentContainerStyle={styles.listContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
       >
+        {/* Join live button — always visible at top */}
+        <TouchableOpacity
+          style={styles.joinLiveBtn}
+          onPress={() => {
+            console.log('[Conference] User tapped Rejoindre en direct, roomCode: ARM-0001');
+            if (Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            }
+            router.push({
+              pathname: '/live-conference',
+              params: {
+                title: 'Conférence ARM en Direct',
+                hostName: 'ARM',
+                roomCode: 'ARM-0001',
+                isHost: 'false',
+                participantName: 'Militant ARM',
+              },
+            });
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.joinLiveBtnIcon}>🔴</Text>
+          <View style={styles.joinLiveBtnTextCol}>
+            <Text style={styles.joinLiveBtnTitle}>Rejoindre en direct</Text>
+            <Text style={styles.joinLiveBtnSub}>Conférence ARM • ARM-0001</Text>
+          </View>
+          <Text style={styles.joinLiveBtnArrow}>›</Text>
+        </TouchableOpacity>
+
         {error && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{error}</Text>
@@ -302,11 +340,21 @@ export default function ConferenceScreen() {
                     <TouchableOpacity
                       style={styles.liveButton}
                       onPress={() => {
-                        console.log('[Conference] User tapped Démarrer en direct for:', conf.id);
+                        const rc = conf.roomCode ?? 'ARM-0001';
+                        console.log('[Conference] User tapped Démarrer en direct for:', conf.id, 'roomCode:', rc);
                         if (Platform.OS !== 'web') {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                         }
-                        router.push({ pathname: '/live-conference', params: { title: conf.title, hostName: conf.hostName } });
+                        router.push({
+                          pathname: '/live-conference',
+                          params: {
+                            title: conf.title,
+                            hostName: conf.hostName,
+                            roomCode: rc,
+                            isHost: 'false',
+                            participantName: 'Militant ARM',
+                          },
+                        });
                       }}
                       activeOpacity={0.8}
                     >
@@ -442,4 +490,25 @@ const styles = StyleSheet.create({
   createBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: colors.primary },
   createBtnDisabled: { opacity: 0.5 },
   createBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  joinLiveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A3A1F',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(45,139,60,0.4)',
+    gap: 12,
+    shadowColor: '#2D8B3C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  joinLiveBtnIcon: { fontSize: 20 },
+  joinLiveBtnTextCol: { flex: 1 },
+  joinLiveBtnTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  joinLiveBtnSub: { fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+  joinLiveBtnArrow: { fontSize: 22, color: colors.success, fontWeight: '300' },
 });
