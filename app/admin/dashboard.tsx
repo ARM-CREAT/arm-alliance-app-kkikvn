@@ -374,6 +374,91 @@ export default function AdminDashboardScreen() {
           </View>
 
           <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Gestion Avancée</Text>
+            <View style={styles.grid}>
+              <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleNavigation('/admin/conferences', 'Gestion Conférences')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="video.badge.plus" 
+                    android_material_icon_name="video-call" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Conférences</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleNavigation('/admin/donations', 'Dons & Contributions')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="dollarsign.circle.fill" 
+                    android_material_icon_name="attach-money" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Dons</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleNavigation('/admin/ideology', 'Idéologie')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="book.fill" 
+                    android_material_icon_name="menu-book" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Idéologie</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleNavigation('/admin/contacts', 'Contacts')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="phone.circle.fill" 
+                    android_material_icon_name="contacts" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Contacts</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleNavigation('/admin/app-settings', 'Paramètres App')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="gearshape.fill" 
+                    android_material_icon_name="settings" 
+                    size={32} 
+                    color={colors.accent} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Paramètres App</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Outils Admin</Text>
             <View style={styles.grid}>
               <TouchableOpacity 
