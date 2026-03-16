@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { eq } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
+import { getParticipants } from '../utils/conferenceStore.js';
 
 interface ConferenceBody {
   title: string;
@@ -9,6 +11,21 @@ interface ConferenceBody {
   scheduledAt: string;
   duration?: number;
   hostName: string;
+  status?: string;
+  joinUrl?: string;
+}
+
+interface JoinConferenceBody {
+  roomCode: string;
+  participantName: string;
+}
+
+interface ConferenceUpdateBody {
+  title?: string;
+  description?: string;
+  scheduledAt?: string;
+  duration?: number;
+  hostName?: string;
   status?: string;
   joinUrl?: string;
 }
@@ -30,10 +47,15 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 function generateRoomCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 6; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return code;
+}
+
+function generateARMRoomCode(): string {
+  const digits = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `ARM-${digits}`;
 }
 
 function formatConference(conf: any) {
@@ -47,52 +69,38 @@ function formatConference(conf: any) {
     roomCode: conf.roomCode,
     joinUrl: conf.joinUrl,
     status: conf.status,
+    participantCount: conf.participantCount,
+    startedAt: conf.startedAt ? conf.startedAt.toISOString() : null,
+    endedAt: conf.endedAt ? conf.endedAt.toISOString() : null,
     createdAt: conf.createdAt.toISOString(),
   };
 }
 
-export async function seedConferences(app: App) {
+export async function seedDefaultConference(app: App) {
   try {
-    const existing = await app.db.select().from(schema.conferences);
-    if (existing.length === 0) {
-      const sampleConferences = [
-        {
-          title: 'Réunion du Bureau Politique',
-          description: 'Réunion mensuelle du bureau politique pour discuter des orientations stratégiques du parti.',
-          scheduledAt: new Date('2025-08-15T10:00:00Z'),
-          duration: 120,
-          hostName: 'Dr. Modibo Keïta',
-          roomCode: 'ARM001',
-          joinUrl: 'https://meet.jit.si/AllianceARM-ARM001',
-          status: 'scheduled',
-        },
-        {
-          title: 'Assemblée Générale des Militants',
-          description: 'Assemblée générale ouverte à tous les militants pour présenter le bilan des activités.',
-          scheduledAt: new Date('2025-09-05T14:00:00Z'),
-          duration: 180,
-          hostName: 'Mme. Fatoumata Diallo',
-          roomCode: 'ARM002',
-          joinUrl: 'https://meet.jit.si/AllianceARM-ARM002',
-          status: 'scheduled',
-        },
-        {
-          title: 'Conférence de Presse Virtuelle',
-          description: 'Conférence de presse en ligne pour présenter le programme électoral de l\'Alliance ARM.',
-          scheduledAt: new Date('2025-09-20T09:00:00Z'),
-          duration: 90,
-          hostName: 'M. Ibrahim Coulibaly',
-          roomCode: 'ARM003',
-          joinUrl: 'https://meet.jit.si/AllianceARM-ARM003',
-          status: 'scheduled',
-        },
-      ];
+    const existing = await app.db
+      .select()
+      .from(schema.conferences)
+      .where(eq(schema.conferences.roomCode, 'ARM-0001'));
 
-      await app.db.insert(schema.conferences).values(sampleConferences);
-      app.logger.info({ count: sampleConferences.length }, 'Sample conferences seeded');
+    if (existing.length === 0) {
+      const now = new Date();
+      await app.db.insert(schema.conferences).values({
+        title: 'Conférence ARM en Direct',
+        description: 'Conférence officielle de l\'Alliance pour le Rassemblement Malien',
+        hostName: 'ARM',
+        status: 'active',
+        roomCode: 'ARM-0001',
+        joinUrl: '/conference/ARM-0001',
+        scheduledAt: now,
+        duration: 120,
+        participantCount: 0,
+        startedAt: now,
+      });
+      app.logger.info('Default active conference seeded');
     }
   } catch (error) {
-    app.logger.error({ err: error }, 'Failed to seed conferences');
+    app.logger.error({ err: error }, 'Failed to seed default conference');
   }
 }
 
@@ -125,6 +133,50 @@ export function register(app: App, fastify: FastifyInstance) {
         return { conferences: result.map(formatConference) };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch conferences');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/conferences/:id - Get single conference (public)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/conferences/:id',
+    {
+      schema: {
+        description: 'Get a single conference',
+        tags: ['conferences'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      app.logger.info({ conferenceId: id }, 'Fetching conference');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.conferences)
+          .where(eq(schema.conferences.id, id));
+
+        if (result.length === 0) {
+          app.logger.warn({ conferenceId: id }, 'Conference not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Conference not found' };
+        }
+
+        app.logger.info({ conferenceId: id }, 'Conference fetched successfully');
+        return formatConference(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, conferenceId: id }, 'Failed to fetch conference');
         throw error;
       }
     }
@@ -184,6 +236,7 @@ export function register(app: App, fastify: FastifyInstance) {
             roomCode,
             joinUrl: finalJoinUrl,
             status: status || 'scheduled',
+            participantCount: 0,
           })
           .returning();
 
@@ -201,7 +254,7 @@ export function register(app: App, fastify: FastifyInstance) {
   );
 
   // PUT /api/conferences/:id - Update conference (admin)
-  fastify.put<{ Params: { id: string }; Body: Partial<ConferenceBody> }>(
+  fastify.put<{ Params: { id: string }; Body: ConferenceUpdateBody }>(
     '/api/conferences/:id',
     {
       schema: {
@@ -309,6 +362,248 @@ export function register(app: App, fastify: FastifyInstance) {
         return { success: true };
       } catch (error) {
         app.logger.error({ err: error, conferenceId: id }, 'Failed to delete conference');
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/conferences/:id/start - Start conference (admin)
+  fastify.post<{ Params: { id: string } }>(
+    '/api/conferences/:id/start',
+    {
+      schema: {
+        description: 'Start a conference (admin only)',
+        tags: ['conferences'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
+      const { id } = request.params;
+      const now = new Date();
+
+      app.logger.info({ conferenceId: id }, 'Starting conference');
+
+      try {
+        // Get conference
+        const conf = await app.db
+          .select()
+          .from(schema.conferences)
+          .where(eq(schema.conferences.id, id));
+
+        if (conf.length === 0) {
+          app.logger.warn({ conferenceId: id }, 'Conference not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Conference not found' };
+        }
+
+        // Generate room code if missing
+        let roomCode = conf[0].roomCode;
+        if (!roomCode) {
+          roomCode = generateARMRoomCode();
+        }
+
+        // Update conference
+        const result = await app.db
+          .update(schema.conferences)
+          .set({
+            status: 'active',
+            startedAt: now,
+            roomCode,
+          })
+          .where(eq(schema.conferences.id, id))
+          .returning();
+
+        app.logger.info(
+          { conferenceId: id, roomCode },
+          'Conference started successfully'
+        );
+        return formatConference(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, conferenceId: id }, 'Failed to start conference');
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/conferences/:id/end - End conference (admin)
+  fastify.post<{ Params: { id: string } }>(
+    '/api/conferences/:id/end',
+    {
+      schema: {
+        description: 'End a conference (admin only)',
+        tags: ['conferences'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
+      const { id } = request.params;
+      const now = new Date();
+
+      app.logger.info({ conferenceId: id }, 'Ending conference');
+
+      try {
+        const result = await app.db
+          .update(schema.conferences)
+          .set({
+            status: 'ended',
+            endedAt: now,
+          })
+          .where(eq(schema.conferences.id, id))
+          .returning();
+
+        if (result.length === 0) {
+          app.logger.warn({ conferenceId: id }, 'Conference not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Conference not found' };
+        }
+
+        app.logger.info({ conferenceId: id }, 'Conference ended successfully');
+        return formatConference(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, conferenceId: id }, 'Failed to end conference');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/conferences/:id/participants - Get participants in a conference
+  fastify.get<{ Params: { id: string } }>(
+    '/api/conferences/:id/participants',
+    {
+      schema: {
+        description: 'Get participants in a conference',
+        tags: ['conferences'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'array' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      app.logger.info({ conferenceId: id }, 'Fetching participants');
+
+      try {
+        const conf = await app.db
+          .select()
+          .from(schema.conferences)
+          .where(eq(schema.conferences.id, id));
+
+        if (conf.length === 0) {
+          app.logger.warn({ conferenceId: id }, 'Conference not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Conference not found' };
+        }
+
+        const roomCode = conf[0].roomCode;
+        const participants = getParticipants(roomCode);
+        const formatted = participants.map((p, index) => ({
+          id: index,
+          name: p.name,
+          joinedAt: p.joinedAt.toISOString(),
+          isHost: p.isHost,
+        }));
+
+        app.logger.info(
+          { conferenceId: id, count: formatted.length },
+          'Participants fetched successfully'
+        );
+        return formatted;
+      } catch (error) {
+        app.logger.error(
+          { err: error, conferenceId: id },
+          'Failed to fetch participants'
+        );
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/conferences/join - Join a conference
+  fastify.post<{ Body: JoinConferenceBody }>(
+    '/api/conferences/join',
+    {
+      schema: {
+        description: 'Join a conference',
+        tags: ['conferences'],
+        body: {
+          type: 'object',
+          properties: {
+            roomCode: { type: 'string' },
+            participantName: { type: 'string' },
+          },
+          required: ['roomCode', 'participantName'],
+        },
+        response: {
+          200: { type: 'object' },
+          400: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { roomCode, participantName } = request.body;
+      app.logger.info({ roomCode, participantName }, 'Joining conference');
+
+      try {
+        const conf = await app.db
+          .select()
+          .from(schema.conferences)
+          .where(eq(schema.conferences.roomCode, roomCode));
+
+        if (conf.length === 0 || conf[0].status !== 'active') {
+          app.logger.warn({ roomCode }, 'Conference not found or not active');
+          reply.status(400);
+          return {
+            error: 'Conference not found or not active',
+            message: 'The conference is not available',
+          };
+        }
+
+        const participantToken = randomUUID();
+        app.logger.info(
+          { roomCode, participantToken },
+          'Participant joined conference'
+        );
+
+        return {
+          conferenceId: conf[0].id,
+          title: conf[0].title,
+          hostName: conf[0].hostName,
+          roomCode,
+          participantToken,
+        };
+      } catch (error) {
+        app.logger.error({ err: error, roomCode }, 'Failed to join conference');
         throw error;
       }
     }

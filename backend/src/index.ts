@@ -1,4 +1,5 @@
 import { createApplication } from "@specific-dev/framework";
+import { eq, sql } from 'drizzle-orm';
 import * as schema from './db/schema.js';
 
 // Import route registration functions
@@ -75,10 +76,117 @@ contactRoutes.register(app, app.fastify);
 settingsRoutes.register(app, app.fastify);
 
 // Seed data
-await conferenceRoutes.seedConferences(app);
+await conferenceRoutes.seedDefaultConference(app);
 await ideologyRoutes.seedAppContent(app);
 await contactRoutes.seedContacts(app);
 await settingsRoutes.seedSettings(app);
+
+// Setup WebSocket signaling for conferences
+import {
+  addParticipant,
+  removeParticipant,
+  broadcastToRoom,
+  broadcastToRoomExcludeSender,
+} from './utils/conferenceStore.js';
+import { randomUUID } from 'crypto';
+
+app.fastify.register(async (fastify) => {
+  fastify.get<{ Params: { roomCode: string }; Querystring: { name?: string; isHost?: string } }>(
+    '/ws/conference/:roomCode',
+    { websocket: true },
+    async (socket, request) => {
+      const roomCode = request.params.roomCode;
+      const name = (request.query.name as string) || 'Anonymous';
+      const isHost = ((request.query.isHost as string) || 'false') === 'true';
+      const participantId = randomUUID();
+
+      app.logger.info(
+        { roomCode, participantId, name, isHost },
+        'WebSocket connection established'
+      );
+
+      // Add participant to room
+      addParticipant(roomCode, participantId, name, socket, isHost);
+
+      try {
+        // Update participant count in database
+        const conf = await app.db
+          .update(schema.conferences)
+          .set({
+            participantCount: sql`${schema.conferences.participantCount} + 1`,
+          })
+          .where(eq(schema.conferences.roomCode, roomCode))
+          .returning();
+
+        // Broadcast participant joined
+        broadcastToRoom(roomCode, {
+          type: 'participant-joined',
+          name,
+          participantCount: conf[0]?.participantCount || 1,
+        });
+
+        // Handle incoming messages
+        socket.on('message', async (data) => {
+          try {
+            const message = JSON.parse(data.toString());
+            app.logger.debug(
+              { roomCode, participantId, messageType: message.type },
+              'WebSocket message received'
+            );
+
+            // Relay message to other participants
+            broadcastToRoomExcludeSender(roomCode, message, participantId);
+          } catch (error) {
+            // Silently ignore malformed messages
+            app.logger.warn(
+              { roomCode, participantId, err: error },
+              'Failed to parse WebSocket message'
+            );
+          }
+        });
+
+        // Handle disconnect
+        socket.on('close', async () => {
+          app.logger.info(
+            { roomCode, participantId, name },
+            'WebSocket connection closed'
+          );
+
+          removeParticipant(roomCode, participantId);
+
+          try {
+            // Update participant count in database
+            const updatedConf = await app.db
+              .update(schema.conferences)
+              .set({
+                participantCount: sql`GREATEST(${schema.conferences.participantCount} - 1, 0)`,
+              })
+              .where(eq(schema.conferences.roomCode, roomCode))
+              .returning();
+
+            // Broadcast participant left
+            broadcastToRoom(roomCode, {
+              type: 'participant-left',
+              name,
+              participantCount: updatedConf[0]?.participantCount || 0,
+            });
+          } catch (error) {
+            app.logger.error(
+              { err: error, roomCode, participantId },
+              'Failed to update participant count on disconnect'
+            );
+          }
+        });
+      } catch (error) {
+        app.logger.error(
+          { err: error, roomCode, participantId },
+          'WebSocket connection error'
+        );
+        socket.close();
+      }
+    }
+  );
+});
 
 await app.run();
 app.logger.info('A.R.M Political Party Platform running');
