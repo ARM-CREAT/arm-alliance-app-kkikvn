@@ -230,6 +230,18 @@ export default function HomeScreen() {
     router.push('/admin/login');
   };
 
+  const handleConferences = () => {
+    console.log('User tapped Conferences button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/conference');
+  };
+
+  const handleCalls = () => {
+    console.log('User tapped Calls button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/call');
+  };
+
   if (loading) {
     return (
       <>
@@ -578,6 +590,36 @@ export default function HomeScreen() {
                   />
                   <Text style={styles.actionTitle}>Admin</Text>
                   <Text style={styles.actionSubtitle}>Accès sécurisé</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.actionCard} 
+                  onPress={handleConferences}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="video.fill" 
+                    android_material_icon_name="videocam" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.actionTitle}>Conférences</Text>
+                  <Text style={styles.actionSubtitle}>Vidéo en ligne</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.actionCard} 
+                  onPress={handleCalls}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="phone.fill" 
+                    android_material_icon_name="call" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                  <Text style={styles.actionTitle}>Appels</Text>
+                  <Text style={styles.actionSubtitle}>Audio & Vidéo</Text>
                 </TouchableOpacity>
               </View>
             </View>

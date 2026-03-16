@@ -1,103 +1,201 @@
 
-import React, { useState, useRef, useEffect } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
   FlatList,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator
+  Animated,
+  Clipboard,
+  Alert,
+  Image,
+  ImageSourcePropType,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { IconSymbol } from "@/components/IconSymbol";
 import { colors } from "@/styles/commonStyles";
-import * as Haptics from 'expo-haptics';
+import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   timestamp: Date;
 }
 
-export default function AIChatScreen() {
-  const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Bonjour! Je suis l\'assistant IA de l\'A.R.M. Je peux répondre à vos questions sur notre parti, notre programme politique, nos événements et notre direction. Comment puis-je vous aider?',
-      timestamp: new Date(),
-    }
-  ]);
-  const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
+const QUICK_REPLIES = [
+  "Qui est Alliance ARM?",
+  "Programme politique",
+  "Comment adhérer?",
+  "Prochains événements",
+];
+
+function resolveImageSource(
+  source: string | number | ImageSourcePropType | undefined
+): ImageSourcePropType {
+  if (!source) return { uri: "" };
+  if (typeof source === "string") return { uri: source };
+  return source as ImageSourcePropType;
+}
+
+function TypingIndicator() {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    console.log('AI Chat screen opened');
+    const animate = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, {
+            toValue: -6,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.delay(600),
+        ])
+      );
+
+    const a1 = animate(dot1, 0);
+    const a2 = animate(dot2, 150);
+    const a3 = animate(dot3, 300);
+    a1.start();
+    a2.start();
+    a3.start();
+    return () => {
+      a1.stop();
+      a2.stop();
+      a3.stop();
+    };
+  }, [dot1, dot2, dot3]);
+
+  return (
+    <View style={typingStyles.container}>
+      <View style={typingStyles.bubble}>
+        {[dot1, dot2, dot3].map((dot, i) => (
+          <Animated.View
+            key={i}
+            style={[typingStyles.dot, { transform: [{ translateY: dot }] }]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const typingStyles = StyleSheet.create({
+  container: {
+    alignSelf: "flex-start",
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  bubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderBottomLeftRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textSecondary,
+  },
+});
+
+export default function AIChatScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    console.log("[AIChat] Screen opened");
   }, []);
 
-  const handleSendMessage = async () => {
-    const messageText = inputText.trim();
-    if (!messageText || isLoading) {
-      console.log('Cannot send empty message or already loading');
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  }, []);
+
+  const handleSendMessage = async (overrideText?: string) => {
+    const messageText = (overrideText ?? inputText).trim();
+    if (!messageText || isStreaming) {
+      console.log("[AIChat] Cannot send: empty or already streaming");
       return;
     }
 
-    console.log('User sending message to AI:', messageText);
-    
-    if (Platform.OS === 'ios') {
+    console.log("[AIChat] User sending message:", messageText);
+
+    if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      role: 'user',
+      role: "user",
       content: messageText,
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    setInputText('');
-    setIsLoading(true);
+    setMessages((prev) => [...prev, userMessage]);
+    setInputText("");
+    setHasStarted(true);
+    setIsStreaming(true);
+    scrollToBottom();
 
     try {
-      const { BACKEND_URL } = await import('@/utils/api');
-      
-      console.log('Calling AI endpoint with message:', messageText);
-      
+      const { BACKEND_URL } = await import("@/utils/api");
+      console.log("[AIChat] POST /api/ai/chat with message:", messageText);
+
       const response = await fetch(`${BACKEND_URL}/api/ai/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: messageText,
-        }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: messageText }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get AI response');
+        const errText = await response.text();
+        console.error("[AIChat] API error:", response.status, errText);
+        throw new Error(`Erreur ${response.status}`);
       }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      
-      let assistantMessageId = (Date.now() + 1).toString();
-      let fullResponse = '';
+      const assistantId = (Date.now() + 1).toString();
+      let fullResponse = "";
 
       const assistantMessage: Message = {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: '',
+        id: assistantId,
+        role: "assistant",
+        content: "",
         timestamp: new Date(),
       };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages((prev) => [...prev, assistantMessage]);
 
       if (reader) {
         while (true) {
@@ -105,150 +203,247 @@ export default function AIChatScreen() {
           if (done) break;
 
           const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          const lines = chunk.split("\n");
 
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
+            if (line.startsWith("data: ")) {
               try {
                 const data = JSON.parse(line.slice(6));
                 if (data.text) {
                   fullResponse += data.text;
-                  setMessages(prev => 
-                    prev.map(msg => 
-                      msg.id === assistantMessageId 
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === assistantId
                         ? { ...msg, content: fullResponse }
                         : msg
                     )
                   );
+                  scrollToBottom();
                 }
               } catch (e) {
-                console.error('Error parsing SSE data:', e);
+                // ignore parse errors on partial chunks
               }
             }
           }
         }
       }
 
-      console.log('AI response received:', fullResponse);
-      
-      if (Platform.OS === 'ios') {
+      console.log("[AIChat] AI response complete, length:", fullResponse.length);
+      if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (error) {
-      console.error('Error sending message to AI:', error);
-      
+    } catch (error: any) {
+      console.error("[AIChat] Error:", error);
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Désolé, une erreur s\'est produite. Veuillez réessayer.',
+        id: (Date.now() + 2).toString(),
+        role: "assistant",
+        content: "Désolé, une erreur s'est produite. Veuillez réessayer.",
         timestamp: new Date(),
       };
-      
-      setMessages(prev => [...prev, errorMessage]);
-      
-      if (Platform.OS === 'ios') {
+      setMessages((prev) => [...prev, errorMessage]);
+      if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     } finally {
-      setIsLoading(false);
+      setIsStreaming(false);
+      scrollToBottom();
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isUser = item.role === 'user';
-    const messageTime = item.timestamp.toLocaleTimeString('fr-FR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+  const handleClearConversation = () => {
+    console.log("[AIChat] User tapped clear conversation");
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setMessages([]);
+    setHasStarted(false);
+  };
+
+  const handleLongPress = (content: string) => {
+    console.log("[AIChat] User long-pressed message, copying to clipboard");
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    Clipboard.setString(content);
+    Alert.alert("Copié", "Le message a été copié dans le presse-papiers.");
+  };
+
+  const handleQuickReply = (text: string) => {
+    console.log("[AIChat] User tapped quick reply:", text);
+    handleSendMessage(text);
+  };
+
+  const charCount = inputText.length;
+  const charCountColor =
+    charCount > 450 ? colors.danger : charCount > 400 ? colors.warning : colors.textSecondary;
+
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    const isUser = item.role === "user";
+    const timeStr = item.timestamp.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
     });
 
     return (
-      <View style={[
-        styles.messageContainer,
-        isUser ? styles.userMessageContainer : styles.assistantMessageContainer
-      ]}>
-        <View style={[
-          styles.messageBubble,
-          isUser ? styles.userBubble : styles.assistantBubble
-        ]}>
-          <Text style={[
-            styles.messageText,
-            isUser ? styles.userMessageText : styles.assistantMessageText
-          ]}>
-            {item.content}
-          </Text>
-          <Text style={[
-            styles.messageTime,
-            isUser ? styles.userMessageTime : styles.assistantMessageTime
-          ]}>
-            {messageTime}
+      <Animated.View
+        style={[
+          styles.messageContainer,
+          isUser ? styles.userMessageContainer : styles.assistantMessageContainer,
+        ]}
+      >
+        {!isUser && (
+          <View style={styles.avatarContainer}>
+            <Image
+              source={resolveImageSource(
+                require("@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg")
+              )}
+              style={styles.avatar}
+            />
+          </View>
+        )}
+        <View style={styles.bubbleWrapper}>
+          <TouchableOpacity
+            onLongPress={() => handleLongPress(item.content)}
+            activeOpacity={0.85}
+            delayLongPress={400}
+          >
+            <View
+              style={[
+                styles.messageBubble,
+                isUser ? styles.userBubble : styles.assistantBubble,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.messageText,
+                  isUser ? styles.userMessageText : styles.assistantMessageText,
+                ]}
+              >
+                {item.content}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <Text
+            style={[
+              styles.messageTime,
+              isUser ? styles.userMessageTime : styles.assistantMessageTime,
+            ]}
+          >
+            {timeStr}
           </Text>
         </View>
-      </View>
+      </Animated.View>
     );
   };
 
+  const EmptyState = () => (
+    <View style={styles.emptyState}>
+      <Image
+        source={resolveImageSource(
+          require("@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg")
+        )}
+        style={styles.emptyLogo}
+      />
+      <Text style={styles.emptyTitle}>Assistant A.R.M</Text>
+      <Text style={styles.emptySubtitle}>
+        Posez vos questions sur l'Alliance pour le Rassemblement Malien
+      </Text>
+    </View>
+  );
+
   return (
     <>
-      <Stack.Screen 
+      <Stack.Screen
         options={{
           headerShown: true,
-          title: 'Assistant IA',
-          headerBackTitle: 'Retour',
-          headerStyle: {
-            backgroundColor: colors.primary,
-          },
+          title: "Assistant IA",
+          headerBackTitle: "Retour",
+          headerStyle: { backgroundColor: colors.primary },
           headerTintColor: colors.background,
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-        }} 
+          headerTitleStyle: { fontWeight: "bold" },
+          headerRight: () =>
+            messages.length > 0 ? (
+              <TouchableOpacity
+                onPress={handleClearConversation}
+                style={styles.headerButton}
+              >
+                <Text style={styles.headerButtonText}>🗑</Text>
+              </TouchableOpacity>
+            ) : null,
+        }}
       />
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         <FlatList
           ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          contentContainerStyle={[
+            styles.messagesList,
+            messages.length === 0 && styles.messagesListEmpty,
+          ]}
+          ListEmptyComponent={<EmptyState />}
+          ListFooterComponent={isStreaming ? <TypingIndicator /> : null}
+          onContentSizeChange={scrollToBottom}
+          onLayout={scrollToBottom}
         />
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Posez votre question..."
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            maxLength={500}
-            editable={!isLoading}
-          />
-          <TouchableOpacity 
-            style={[
-              styles.sendButton,
-              (!inputText.trim() || isLoading) && styles.sendButtonDisabled
-            ]}
-            onPress={handleSendMessage}
-            disabled={!inputText.trim() || isLoading}
-            activeOpacity={0.7}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color={colors.background} />
-            ) : (
-              <IconSymbol 
-                ios_icon_name="arrow.up" 
-                android_material_icon_name="send" 
-                size={24} 
-                color={colors.background} 
-              />
-            )}
-          </TouchableOpacity>
+        {!hasStarted && (
+          <View style={styles.quickRepliesContainer}>
+            <FlatList
+              horizontal
+              data={QUICK_REPLIES}
+              keyExtractor={(item) => item}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickRepliesList}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.quickReplyChip}
+                  onPress={() => handleQuickReply(item)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.quickReplyText}>{item}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
+        <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
+          <View style={styles.inputRow}>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder="Posez votre question..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              maxLength={500}
+              editable={!isStreaming}
+            />
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!inputText.trim() || isStreaming) && styles.sendButtonDisabled,
+              ]}
+              onPress={() => handleSendMessage()}
+              disabled={!inputText.trim() || isStreaming}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sendIcon}>↑</Text>
+            </TouchableOpacity>
+          </View>
+          {charCount > 0 && (
+            <Text style={[styles.charCount, { color: charCountColor }]}>
+              {charCount}
+              {"/500"}
+            </Text>
+          )}
         </View>
       </KeyboardAvoidingView>
     </>
@@ -258,29 +453,76 @@ export default function AIChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.backgroundAlt,
   },
   messagesList: {
     padding: 16,
     paddingBottom: 8,
   },
+  messagesListEmpty: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingHorizontal: 40,
+    paddingVertical: 40,
+  },
+  emptyLogo: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: colors.primary,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: colors.text,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+  },
   messageContainer: {
     marginBottom: 12,
-    maxWidth: '80%',
+    maxWidth: "82%",
+    flexDirection: "row",
+    alignItems: "flex-end",
   },
   userMessageContainer: {
-    alignSelf: 'flex-end',
+    alignSelf: "flex-end",
+    flexDirection: "row-reverse",
   },
   assistantMessageContainer: {
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
+  },
+  avatarContainer: {
+    marginRight: 8,
+    marginBottom: 18,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  bubbleWrapper: {
+    flex: 1,
   },
   messageBubble: {
-    borderRadius: 16,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
     elevation: 2,
   },
   userBubble: {
@@ -293,11 +535,10 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 15,
-    lineHeight: 20,
-    marginBottom: 4,
+    lineHeight: 21,
   },
   userMessageText: {
-    color: colors.background,
+    color: "#FFFFFF",
   },
   assistantMessageText: {
     color: colors.text,
@@ -307,25 +548,50 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   userMessageTime: {
-    color: colors.background,
-    opacity: 0.7,
-    textAlign: 'right',
+    color: colors.textSecondary,
+    textAlign: "right",
   },
   assistantMessageTime: {
     color: colors.textSecondary,
   },
+  quickRepliesContainer: {
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingVertical: 10,
+  },
+  quickRepliesList: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  quickReplyChip: {
+    backgroundColor: colors.primary + "18",
+    borderWidth: 1,
+    borderColor: colors.primary + "40",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  quickReplyText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: "600",
+  },
   inputContainer: {
-    flexDirection: 'row',
-    padding: 12,
     backgroundColor: colors.card,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    alignItems: 'flex-end',
+    paddingTop: 10,
+    paddingHorizontal: 12,
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
   },
   input: {
     flex: 1,
     backgroundColor: colors.background,
-    borderRadius: 20,
+    borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 10,
     marginRight: 8,
@@ -340,8 +606,8 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -351,5 +617,24 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: colors.textSecondary,
     opacity: 0.5,
+    shadowOpacity: 0,
+  },
+  sendIcon: {
+    fontSize: 20,
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  charCount: {
+    fontSize: 11,
+    textAlign: "right",
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  headerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  headerButtonText: {
+    fontSize: 18,
   },
 });

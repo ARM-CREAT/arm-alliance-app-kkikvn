@@ -219,6 +219,18 @@ export default function RootLayout() {
                       headerShown: false,
                     }} 
                   />
+                  <Stack.Screen 
+                    name="conference" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
+                  <Stack.Screen 
+                    name="call" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
                 </Stack>
                 <StatusBar style="auto" />
                 

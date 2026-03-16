@@ -337,6 +337,43 @@ export default function AdminDashboardScreen() {
           </View>
 
           <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Communication</Text>
+            <View style={styles.grid}>
+              <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleNavigation('/conference', 'Conférences')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="video.fill" 
+                    android_material_icon_name="videocam" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Conférences</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleNavigation('/call', 'Appels')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="phone.fill" 
+                    android_material_icon_name="call" 
+                    size={32} 
+                    color={colors.primary} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Appels</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Outils Admin</Text>
             <View style={styles.grid}>
               <TouchableOpacity 
