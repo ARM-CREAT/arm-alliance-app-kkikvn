@@ -14,7 +14,7 @@ import {
   Modal as RNModal,
   KeyboardAvoidingView,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { apiGet, BACKEND_URL } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
@@ -212,9 +212,20 @@ export default function ConferenceScreen() {
           headerTintColor: '#FFFFFF',
           headerRight: isAdmin
             ? () => (
-                <TouchableOpacity onPress={handleOpenCreateModal} style={styles.headerBtn}>
-                  <Text style={styles.headerBtnText}>+ Créer</Text>
-                </TouchableOpacity>
+                <View style={styles.headerBtnRow}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      console.log('[Conference] Admin tapped Lancer la caméra');
+                      router.push({ pathname: '/live-conference', params: { title: 'Conférence en direct', hostName: 'Admin' } });
+                    }}
+                    style={[styles.headerBtn, styles.headerBtnCamera]}
+                  >
+                    <Text style={styles.headerBtnText}>📹</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleOpenCreateModal} style={styles.headerBtn}>
+                    <Text style={styles.headerBtnText}>+ Créer</Text>
+                  </TouchableOpacity>
+                </View>
               )
             : undefined,
         }}
@@ -284,6 +295,23 @@ export default function ConferenceScreen() {
                     >
                       <Text style={styles.joinButtonIcon}>📹</Text>
                       <Text style={styles.joinButtonText}>Rejoindre</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {conf.status === 'active' ? (
+                    <TouchableOpacity
+                      style={styles.liveButton}
+                      onPress={() => {
+                        console.log('[Conference] User tapped Démarrer en direct for:', conf.id);
+                        if (Platform.OS !== 'web') {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        }
+                        router.push({ pathname: '/live-conference', params: { title: conf.title, hostName: conf.hostName } });
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.liveButtonIcon}>🔴</Text>
+                      <Text style={styles.liveButtonText}>Démarrer en direct</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -365,7 +393,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.backgroundAlt },
   loadingContainer: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 16, fontSize: 16, color: colors.textSecondary },
+  headerBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  headerBtnCamera: { paddingHorizontal: 8 },
   headerBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
   listContent: { padding: 16, paddingBottom: 32 },
   errorBanner: { backgroundColor: colors.danger + '15', borderRadius: 12, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -389,6 +419,9 @@ const styles = StyleSheet.create({
   joinButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, marginTop: 12, gap: 8, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3 },
   joinButtonIcon: { fontSize: 16 },
   joinButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  liveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success, borderRadius: 10, paddingVertical: 12, marginTop: 8, gap: 8, shadowColor: colors.success, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3 },
+  liveButtonIcon: { fontSize: 14 },
+  liveButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalWrapper: { justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '90%' },

@@ -232,6 +232,13 @@ export default function RootLayout() {
                     }} 
                   />
                   <Stack.Screen 
+                    name="live-conference" 
+                    options={{ 
+                      headerShown: false,
+                      presentation: 'fullScreenModal',
+                    }} 
+                  />
+                  <Stack.Screen 
                     name="admin/conferences" 
                     options={{ 
                       headerShown: false,
