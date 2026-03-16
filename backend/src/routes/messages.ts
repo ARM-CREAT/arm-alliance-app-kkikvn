@@ -17,7 +17,7 @@ interface UpdateStatusBody {
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
-  // POST /api/messages - Create contact message
+  // POST /api/messages - Create contact message (public)
   fastify.post<{ Body: MessageBody }>(
     '/api/messages',
     {
@@ -35,12 +35,24 @@ export function register(app: App, fastify: FastifyInstance) {
           required: ['senderName', 'senderEmail', 'subject', 'message'],
         },
         response: {
-          200: { type: 'object' },
+          201: { type: 'object' },
+          400: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
       const { senderName, senderEmail, subject, message } = request.body;
+
+      // Validate required fields
+      if (!senderName || !senderEmail || !subject || !message) {
+        app.logger.warn(
+          { senderEmail, subject },
+          'Missing required fields in contact message'
+        );
+        reply.status(400);
+        return { error: 'Missing required fields' };
+      }
+
       app.logger.info(
         { senderEmail, subject },
         'Receiving contact message'
@@ -54,6 +66,7 @@ export function register(app: App, fastify: FastifyInstance) {
             senderEmail,
             subject,
             message,
+            status: 'unread',
           })
           .returning();
 
@@ -61,7 +74,8 @@ export function register(app: App, fastify: FastifyInstance) {
           { messageId: result[0].id, subject },
           'Contact message received and stored'
         );
-        return result[0];
+        reply.status(201);
+        return { success: true, id: result[0].id };
       } catch (error) {
         app.logger.error(
           { err: error, senderEmail },

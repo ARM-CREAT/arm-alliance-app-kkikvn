@@ -12,14 +12,49 @@ interface ContactBody {
   type?: string;
 }
 
+interface ContactUpdateBody {
+  name?: string;
+  role?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  type?: string;
+}
+
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+const DEFAULT_CONTACTS = [
+  {
+    name: 'Secrétariat ARM',
+    role: 'Contact principal',
+    phone: '+34632607101',
+    email: 'contact@arm-mali.org',
+    address: 'Rue 530, Porte 245, Sebenikoro, Bamako, Mali',
+    type: 'general',
+  },
+  {
+    name: 'Bureau Mali',
+    role: 'Représentation nationale',
+    phone: '+22376304869',
+    email: 'mali@arm-mali.org',
+    address: 'Bamako, Mali',
+    type: 'regional',
+  },
+  {
+    name: 'Relations Presse',
+    role: 'Communication & Médias',
+    phone: '+34632607101',
+    email: 'presse@arm-mali.org',
+    address: 'Bamako, Mali',
+    type: 'media',
+  },
+];
 
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
   const password = request.headers['x-admin-password'];
   if (password !== ADMIN_PASSWORD) {
     reply.status(401).send({
       error: 'Unauthorized',
-      message: 'Invalid admin password',
     });
     return false;
   }
@@ -44,27 +79,11 @@ export async function seedContacts(app: App) {
   try {
     const existing = await app.db.select().from(schema.contacts);
     if (existing.length === 0) {
-      const sampleContacts = [
-        {
-          name: 'Secrétariat ARM',
-          role: 'Contact principal',
-          phone: '+223 XX XX XX XX',
-          email: 'contact@arm-mali.org',
-          address: 'Bamako, Mali',
-          type: 'general',
-        },
-        {
-          name: 'Direction Nationale',
-          role: 'Direction',
-          phone: '+223 XX XX XX XX',
-          email: 'direction@arm-mali.org',
-          address: 'Bamako, Mali',
-          type: 'leadership',
-        },
-      ];
-
-      await app.db.insert(schema.contacts).values(sampleContacts);
-      app.logger.info({ count: sampleContacts.length }, 'Sample contacts seeded');
+      await app.db.insert(schema.contacts).values(DEFAULT_CONTACTS);
+      app.logger.info(
+        { count: DEFAULT_CONTACTS.length },
+        'Default contacts seeded'
+      );
     }
   } catch (error) {
     app.logger.error({ err: error }, 'Failed to seed contacts');
@@ -88,6 +107,17 @@ export function register(app: App, fastify: FastifyInstance) {
       app.logger.info('Fetching contacts');
 
       try {
+        // Check if table is empty and seed if needed
+        const existingCount = await app.db
+          .select()
+          .from(schema.contacts);
+
+        if (existingCount.length === 0) {
+          app.logger.info('Contacts table is empty, seeding default contacts');
+          await app.db.insert(schema.contacts).values(DEFAULT_CONTACTS);
+        }
+
+        // Fetch all contacts
         const result = await app.db
           .select()
           .from(schema.contacts)
@@ -100,6 +130,42 @@ export function register(app: App, fastify: FastifyInstance) {
         return { contacts: result.map(formatContact) };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch contacts');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/admin/contacts - Get all contacts (admin)
+  fastify.get(
+    '/api/admin/contacts',
+    {
+      schema: {
+        description: 'Get all contacts (admin only)',
+        tags: ['admin', 'contacts'],
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
+      app.logger.info('Admin fetching contacts');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.contacts)
+          .orderBy(schema.contacts.createdAt);
+
+        app.logger.info(
+          { count: result.length },
+          'Admin contacts fetched successfully'
+        );
+        return { contacts: result.map(formatContact) };
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch admin contacts');
         throw error;
       }
     }
@@ -136,12 +202,14 @@ export function register(app: App, fastify: FastifyInstance) {
 
       const { name, role, phone, email, address, type } = request.body;
 
+      // Validate required fields
       if (!name || !role) {
+        app.logger.warn(
+          { name, role },
+          'Missing required fields for contact creation'
+        );
         reply.status(400);
-        return {
-          error: 'BadRequest',
-          message: 'Name and role are required',
-        };
+        return { error: 'Missing required fields' };
       }
 
       app.logger.info({ name }, 'Creating contact');
@@ -161,7 +229,7 @@ export function register(app: App, fastify: FastifyInstance) {
 
         app.logger.info({ contactId: result[0].id }, 'Contact created successfully');
         reply.status(201);
-        return { contact: formatContact(result[0]) };
+        return { success: true, contact: formatContact(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, name }, 'Failed to create contact');
         throw error;
@@ -170,7 +238,7 @@ export function register(app: App, fastify: FastifyInstance) {
   );
 
   // PUT /api/admin/contacts/:id - Update contact (admin)
-  fastify.put<{ Params: { id: string }; Body: Partial<ContactBody> }>(
+  fastify.put<{ Params: { id: string }; Body: ContactUpdateBody }>(
     '/api/admin/contacts/:id',
     {
       schema: {
@@ -204,30 +272,33 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
-      const updates = {
-        ...request.body,
-        updatedAt: new Date(),
-      };
+      const updates = request.body;
 
       app.logger.info({ contactId: id }, 'Updating contact');
 
       try {
         const result = await app.db
           .update(schema.contacts)
-          .set(updates)
+          .set({
+            ...updates,
+            updatedAt: new Date(),
+          })
           .where(eq(schema.contacts.id, id))
           .returning();
 
         if (result.length === 0) {
           app.logger.warn({ contactId: id }, 'Contact not found');
           reply.status(404);
-          return { error: 'NotFound', message: 'Contact not found' };
+          return { error: 'Contact not found' };
         }
 
         app.logger.info({ contactId: id }, 'Contact updated successfully');
-        return { contact: formatContact(result[0]) };
+        return { success: true, contact: formatContact(result[0]) };
       } catch (error) {
-        app.logger.error({ err: error, contactId: id }, 'Failed to update contact');
+        app.logger.error(
+          { err: error, contactId: id },
+          'Failed to update contact'
+        );
         throw error;
       }
     }
@@ -268,13 +339,16 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ contactId: id }, 'Contact not found');
           reply.status(404);
-          return { error: 'NotFound', message: 'Contact not found' };
+          return { error: 'Contact not found' };
         }
 
         app.logger.info({ contactId: id }, 'Contact deleted successfully');
         return { success: true };
       } catch (error) {
-        app.logger.error({ err: error, contactId: id }, 'Failed to delete contact');
+        app.logger.error(
+          { err: error, contactId: id },
+          'Failed to delete contact'
+        );
         throw error;
       }
     }
