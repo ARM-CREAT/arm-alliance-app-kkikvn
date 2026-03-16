@@ -230,6 +230,9 @@ export const conferences = pgTable('conferences', {
   roomCode: text('room_code').notNull().unique(),
   joinUrl: text('join_url').notNull(),
   status: text('status').notNull().default('scheduled'),
+  participantCount: integer('participant_count').notNull().default(0),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
