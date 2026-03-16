@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -12,10 +12,40 @@ interface DonationBody {
   contributionType?: 'one-time' | 'monthly' | 'annual';
 }
 
-export function register(app: App, fastify: FastifyInstance) {
-  const requireAuth = app.requireAuth();
+interface UpdateStatusBody {
+  status: 'pending' | 'confirmed' | 'cancelled';
+}
 
-  // POST /api/donations - Create donation
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
+  const password = request.headers['x-admin-password'];
+  if (password !== ADMIN_PASSWORD) {
+    reply.status(401).send({
+      error: 'Unauthorized',
+      message: 'Invalid admin password',
+    });
+    return false;
+  }
+  return true;
+}
+
+function formatDonation(donation: any) {
+  return {
+    id: donation.id,
+    donorName: donation.donorName,
+    donorEmail: donation.donorEmail,
+    amount: donation.amount.toString(),
+    currency: donation.currency,
+    paymentMethod: donation.paymentMethod,
+    status: donation.status,
+    contributionType: donation.contributionType,
+    createdAt: donation.createdAt.toISOString(),
+  };
+}
+
+export function register(app: App, fastify: FastifyInstance) {
+  // POST /api/donations - Create donation (public)
   fastify.post<{ Body: DonationBody }>(
     '/api/donations',
     {
@@ -35,7 +65,7 @@ export function register(app: App, fastify: FastifyInstance) {
           required: ['donorName', 'donorEmail', 'amount'],
         },
         response: {
-          200: { type: 'object' },
+          201: { type: 'object' },
         },
       },
     },
@@ -64,6 +94,7 @@ export function register(app: App, fastify: FastifyInstance) {
           { donationId: result[0].id, amount },
           'Donation record created'
         );
+        reply.status(201);
         return result[0];
       } catch (error) {
         app.logger.error(
@@ -75,21 +106,21 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/donations - Get all donations (admin only)
+  // GET /api/admin/donations - Get all donations (admin)
   fastify.get(
-    '/api/donations',
+    '/api/admin/donations',
     {
       schema: {
         description: 'Get all donations (admin only)',
-        tags: ['donations'],
+        tags: ['admin', 'donations'],
         response: {
-          200: { type: 'array' },
+          200: { type: 'object' },
+          401: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
+      if (!verifyAdminPassword(request, reply)) return;
 
       app.logger.info('Fetching all donations');
 
@@ -103,7 +134,7 @@ export function register(app: App, fastify: FastifyInstance) {
           { count: result.length },
           'Donations fetched successfully'
         );
-        return result;
+        return { donations: result.map(formatDonation) };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch donations');
         throw error;
@@ -111,28 +142,22 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/donations/stats - Get donation statistics
+  // GET /api/admin/donations/stats - Get donation statistics (admin)
   fastify.get(
-    '/api/donations/stats',
+    '/api/admin/donations/stats',
     {
       schema: {
-        description: 'Get donation statistics',
-        tags: ['donations'],
+        description: 'Get donation statistics (admin only)',
+        tags: ['admin', 'donations'],
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              totalAmount: { type: 'string' },
-              donationCount: { type: 'number' },
-              completedCount: { type: 'number' },
-              pendingCount: { type: 'number' },
-              currency: { type: 'string' },
-            },
-          },
+          200: { type: 'object' },
+          401: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
       app.logger.info('Fetching donation statistics');
 
       try {
@@ -140,29 +165,152 @@ export function register(app: App, fastify: FastifyInstance) {
           .select()
           .from(schema.donations);
 
-        const completed = donations.filter(d => d.status === 'completed');
-        const pending = donations.filter(d => d.status === 'pending');
-
-        const totalAmount = completed.reduce(
+        const totalCount = donations.length;
+        const totalAmount = donations.reduce(
           (sum, d) => sum + parseFloat(d.amount as unknown as string),
           0
         );
 
+        // Group by contribution type
+        const byContributionType: Record<string, number> = {};
+        donations.forEach(d => {
+          byContributionType[d.contributionType || 'one-time'] =
+            (byContributionType[d.contributionType || 'one-time'] || 0) + 1;
+        });
+
+        // Group by status
+        const byStatus: Record<string, number> = {};
+        donations.forEach(d => {
+          byStatus[d.status] = (byStatus[d.status] || 0) + 1;
+        });
+
         const stats = {
-          totalAmount: totalAmount.toFixed(2),
-          donationCount: donations.length,
-          completedCount: completed.length,
-          pendingCount: pending.length,
-          currency: 'EUR',
+          totalCount,
+          totalAmount,
+          byContributionType,
+          byStatus,
         };
 
         app.logger.info(stats, 'Donation statistics calculated');
-        return stats;
+        return { stats };
       } catch (error) {
         app.logger.error(
           { err: error },
           'Failed to fetch donation statistics'
         );
+        throw error;
+      }
+    }
+  );
+
+  // PUT /api/admin/donations/:id/status - Update donation status (admin)
+  fastify.put<{ Params: { id: string }; Body: UpdateStatusBody }>(
+    '/api/admin/donations/:id/status',
+    {
+      schema: {
+        description: 'Update donation status (admin only)',
+        tags: ['admin', 'donations'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['pending', 'confirmed', 'cancelled'] },
+          },
+          required: ['status'],
+        },
+        response: {
+          200: { type: 'object' },
+          400: { type: 'object' },
+          404: { type: 'object' },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
+      const { id } = request.params;
+      const { status } = request.body;
+
+      if (!['pending', 'confirmed', 'cancelled'].includes(status)) {
+        reply.status(400);
+        return { error: 'BadRequest', message: 'Invalid status' };
+      }
+
+      app.logger.info({ donationId: id, status }, 'Updating donation status');
+
+      try {
+        const result = await app.db
+          .update(schema.donations)
+          .set({ status })
+          .where(eq(schema.donations.id, id))
+          .returning();
+
+        if (result.length === 0) {
+          app.logger.warn({ donationId: id }, 'Donation not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Donation not found' };
+        }
+
+        app.logger.info({ donationId: id, status }, 'Donation status updated');
+        return { donation: formatDonation(result[0]) };
+      } catch (error) {
+        app.logger.error(
+          { err: error, donationId: id },
+          'Failed to update donation status'
+        );
+        throw error;
+      }
+    }
+  );
+
+  // DELETE /api/admin/donations/:id - Delete donation (admin)
+  fastify.delete<{ Params: { id: string } }>(
+    '/api/admin/donations/:id',
+    {
+      schema: {
+        description: 'Delete a donation (admin only)',
+        tags: ['admin', 'donations'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
+      const { id } = request.params;
+      app.logger.info({ donationId: id }, 'Deleting donation');
+
+      try {
+        const result = await app.db
+          .delete(schema.donations)
+          .where(eq(schema.donations.id, id))
+          .returning();
+
+        if (result.length === 0) {
+          app.logger.warn({ donationId: id }, 'Donation not found');
+          reply.status(404);
+          return { error: 'NotFound', message: 'Donation not found' };
+        }
+
+        app.logger.info({ donationId: id }, 'Donation deleted successfully');
+        return { success: true };
+      } catch (error) {
+        app.logger.error({ err: error, donationId: id }, 'Failed to delete donation');
         throw error;
       }
     }
