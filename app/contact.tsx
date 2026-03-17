@@ -1,42 +1,22 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  Platform,
-  KeyboardAvoidingView,
-  ActivityIndicator,
-  Linking,
-  RefreshControl,
+  View, Text, ScrollView, TextInput, TouchableOpacity,
+  StyleSheet, Alert, Linking, RefreshControl, ActivityIndicator
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
-import { colors } from '@/styles/commonStyles';
-import * as Haptics from 'expo-haptics';
-import { Modal } from '@/components/ui/Modal';
-import { Map, MapMarker } from '@/components/Map';
-import { BACKEND_URL } from '@/utils/api-helpers';
-import { apiGet, apiPost } from '@/utils/api';
+
+const BACKEND = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 interface Contact {
   id: string;
   name: string;
-  role?: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  type?: 'general' | 'regional' | 'media' | string;
+  role: string;
+  phone: string;
+  email: string;
+  address: string;
+  type: 'general' | 'regional' | 'media';
 }
-
-const TYPE_COLORS: Record<string, string> = {
-  general: colors.primary,
-  regional: colors.secondary,
-  media: colors.accent,
-};
 
 const TYPE_LABELS: Record<string, string> = {
   general: 'Général',
@@ -44,443 +24,184 @@ const TYPE_LABELS: Record<string, string> = {
   media: 'Médias',
 };
 
+const TYPE_COLORS: Record<string, string> = {
+  general: '#1B5E20',
+  regional: '#1565C0',
+  media: '#E65100',
+};
+
 export default function ContactScreen() {
-  const [loading, setLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalMessage, setModalMessage] = useState('');
-  const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
-
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [contactsLoading, setContactsLoading] = useState(true);
-  const [contactsRefreshing, setContactsRefreshing] = useState(false);
-
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [senderName, setSenderName] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
-
-  const showModal = (title: string, msg: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
-    setModalTitle(title);
-    setModalMessage(msg);
-    setModalType(type);
-    setModalVisible(true);
-  };
+  const [sending, setSending] = useState(false);
 
   const loadContacts = useCallback(async () => {
     console.log('[Contact] GET /api/contacts');
     try {
-      const data = await apiGet<Contact[]>('/api/contacts');
-      console.log('[Contact] Contacts loaded:', Array.isArray(data) ? data.length : 0);
-      setContacts(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      console.error('[Contact] Error loading contacts:', err.message);
-      setContacts([]);
+      const res = await fetch(`${BACKEND}/api/contacts`);
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[Contact] Contacts loaded:', Array.isArray(data) ? data.length : 0);
+        setContacts(Array.isArray(data) ? data : []);
+      } else {
+        console.log('[Contact] contacts fetch failed, status:', res.status);
+      }
+    } catch (e) {
+      console.log('[Contact] contacts error', e);
     } finally {
-      setContactsLoading(false);
-      setContactsRefreshing(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadContacts();
-  }, [loadContacts]);
+  useEffect(() => { loadContacts(); }, [loadContacts]);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = () => {
     console.log('[Contact] Pull-to-refresh triggered');
-    setContactsRefreshing(true);
+    setRefreshing(true);
     loadContacts();
-  }, [loadContacts]);
+  };
 
   const handleSubmit = async () => {
     console.log('[Contact] User tapped Send Message button');
-
-    if (!senderName.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre nom', 'error');
+    if (!senderName.trim() || !senderEmail.trim() || !subject.trim() || !message.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs.');
       return;
     }
-    if (!senderEmail.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre email', 'error');
-      return;
-    }
-    if (!subject.trim()) {
-      showModal('Erreur', 'Veuillez entrer un sujet', 'error');
-      return;
-    }
-    if (!message.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre message', 'error');
-      return;
-    }
-
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-
-    setLoading(true);
-
-    const payload = {
-      senderName: senderName.trim(),
-      senderEmail: senderEmail.trim(),
-      subject: subject.trim(),
-      message: message.trim(),
-    };
-
-    console.log('[Contact] POST /api/messages with payload:', payload);
-
+    setSending(true);
+    const payload = { senderName, senderEmail, subject, message };
+    console.log('[Contact] POST /api/messages', payload);
     try {
-      const response = await apiPost('/api/messages', payload);
-      console.log('[Contact] Message sent successfully:', response);
-
-      showModal(
-        'Message Envoyé',
-        'Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.',
-        'success'
-      );
-
-      setSenderName('');
-      setSenderEmail('');
-      setSubject('');
-      setMessage('');
-    } catch (error: any) {
-      console.error('[Contact] Error sending message:', error);
-      showModal(
-        'Erreur',
-        error?.message || "Une erreur est survenue lors de l'envoi du message. Veuillez réessayer.",
-        'error'
-      );
+      const res = await fetch(`${BACKEND}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        console.log('[Contact] Message sent successfully');
+        Alert.alert('Succès', 'Votre message a été envoyé avec succès.');
+        setSenderName(''); setSenderEmail(''); setSubject(''); setMessage('');
+      } else {
+        const err = await res.text();
+        console.log('[Contact] Message send failed, status:', res.status, err);
+        Alert.alert('Erreur', err || "Échec de l'envoi du message.");
+      }
+    } catch (e) {
+      console.log('[Contact] Message send error', e);
+      Alert.alert('Erreur', 'Impossible d\'envoyer le message. Vérifiez votre connexion.');
     } finally {
-      setLoading(false);
+      setSending(false);
     }
-  };
-
-  const handleCall = (phone: string) => {
-    console.log('[Contact] User tapped call button:', phone);
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    Linking.openURL(`tel:${phone}`);
-  };
-
-  const handleEmail = (email: string) => {
-    console.log('[Contact] User tapped email button:', email);
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    Linking.openURL(`mailto:${email}`);
-  };
-
-  const headquarters: MapMarker = {
-    id: 'hq',
-    latitude: 12.6392,
-    longitude: -8.0029,
-    title: 'Siège A.R.M',
-    description: 'Rue 530, Porte 245, Sebenikoro, Bamako',
   };
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Contactez-nous',
-          headerShown: true,
-          headerBackTitle: 'Retour',
-          headerStyle: { backgroundColor: colors.primary },
-          headerTintColor: '#FFFFFF',
-        }}
-      />
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+    <>
+      <Stack.Screen options={{ title: 'Contact', headerShown: true }} />
+      <ScrollView
+        style={styles.container}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            <RefreshControl
-              refreshing={contactsRefreshing}
-              onRefresh={onRefresh}
-              colors={[colors.primary]}
-              tintColor={colors.primary}
-            />
-          }
-        >
-          {/* ── CONTACTS FROM API ── */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Nos Contacts</Text>
-            {contactsLoading ? (
-              <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
-            ) : contacts.length === 0 ? (
-              <Text style={styles.emptyText}>Aucun contact disponible.</Text>
-            ) : (
-              <View style={styles.contactsGrid}>
-                {contacts.map((contact) => {
-                  const typeColor = TYPE_COLORS[contact.type || ''] || colors.primary;
-                  const typeLabel = TYPE_LABELS[contact.type || ''] || contact.type;
-                  const initial = contact.name ? contact.name.charAt(0).toUpperCase() : '?';
-                  return (
-                    <View key={contact.id} style={styles.contactApiCard}>
-                      <View style={styles.contactApiAvatar}>
-                        <Text style={styles.contactApiAvatarText}>{initial}</Text>
-                      </View>
-                      <View style={styles.contactApiInfo}>
-                        <View style={styles.contactApiNameRow}>
-                          <Text style={styles.contactApiName}>{contact.name}</Text>
-                          {contact.type ? (
-                            <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
-                              <Text style={styles.typeBadgeText}>{typeLabel}</Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        {contact.role ? (
-                          <Text style={styles.contactApiRole}>{contact.role}</Text>
-                        ) : null}
-                        {contact.address ? (
-                          <Text style={styles.contactApiAddress}>{contact.address}</Text>
-                        ) : null}
-                        {contact.phone ? (
-                          <TouchableOpacity
-                            style={styles.contactApiAction}
-                            onPress={() => handleCall(contact.phone!)}
-                            activeOpacity={0.7}
-                          >
-                            <IconSymbol ios_icon_name="phone.fill" android_material_icon_name="phone" size={13} color={colors.primary} />
-                            <Text style={styles.contactApiActionText}>{contact.phone}</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {contact.email ? (
-                          <TouchableOpacity
-                            style={styles.contactApiAction}
-                            onPress={() => handleEmail(contact.email!)}
-                            activeOpacity={0.7}
-                          >
-                            <IconSymbol ios_icon_name="envelope.fill" android_material_icon_name="email" size={13} color={colors.primary} />
-                            <Text style={styles.contactApiActionText} numberOfLines={1}>{contact.email}</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-          </View>
+        <Text style={styles.sectionTitle}>Nos Contacts</Text>
 
-          {/* ── STATIC CONTACT INFO ── */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Informations de Contact</Text>
-
-            <View style={styles.contactCard}>
-              <View style={styles.contactItem}>
-                <IconSymbol ios_icon_name="building.2.fill" android_material_icon_name="location-city" size={24} color={colors.primary} />
-                <View style={styles.contactInfo}>
-                  <Text style={styles.contactLabel}>Siège</Text>
-                  <Text style={styles.contactValue}>Rue 530, Porte 245</Text>
-                  <Text style={styles.contactValue}>Sebenikoro, Bamako, Mali</Text>
+        {loading ? (
+          <ActivityIndicator color="#1B5E20" style={{ marginVertical: 20 }} />
+        ) : contacts.length === 0 ? (
+          <Text style={styles.emptyText}>Aucun contact disponible.</Text>
+        ) : (
+          contacts.map(c => {
+            const badgeColor = TYPE_COLORS[c.type] || '#1B5E20';
+            const badgeLabel = TYPE_LABELS[c.type] || c.type;
+            return (
+              <View key={c.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardName}>{c.name}</Text>
+                    <Text style={styles.cardRole}>{c.role}</Text>
+                  </View>
+                  <View style={[styles.badge, { backgroundColor: badgeColor }]}>
+                    <Text style={styles.badgeText}>{badgeLabel}</Text>
+                  </View>
+                </View>
+                {c.address ? <Text style={styles.cardAddress}>📍 {c.address}</Text> : null}
+                <View style={styles.cardActions}>
+                  {c.phone ? (
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => {
+                        console.log('[Contact] User tapped call:', c.phone);
+                        Linking.openURL('tel:' + c.phone);
+                      }}
+                    >
+                      <Text style={styles.actionBtnText}>📞 {c.phone}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {c.email ? (
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => {
+                        console.log('[Contact] User tapped email:', c.email);
+                        Linking.openURL('mailto:' + c.email);
+                      }}
+                    >
+                      <Text style={styles.actionBtnText}>✉️ {c.email}</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </View>
+            );
+          })
+        )}
 
-              <View style={styles.contactItem}>
-                <IconSymbol ios_icon_name="phone.fill" android_material_icon_name="phone" size={24} color={colors.primary} />
-                <View style={styles.contactInfo}>
-                  <Text style={styles.contactLabel}>Téléphone</Text>
-                  <TouchableOpacity onPress={() => handleCall('+34632607101')}>
-                    <Text style={styles.contactLink}>+34 632 607 101</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleCall('+22376304869')}>
-                    <Text style={styles.contactLink}>+223 76 30 48 69</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Envoyer un Message</Text>
 
-              <View style={styles.contactItem}>
-                <IconSymbol ios_icon_name="envelope.fill" android_material_icon_name="email" size={24} color={colors.primary} />
-                <View style={styles.contactInfo}>
-                  <Text style={styles.contactLabel}>Email</Text>
-                  <TouchableOpacity onPress={() => handleEmail('contact@arm-mali.org')}>
-                    <Text style={styles.contactLink}>contact@arm-mali.org</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
+        <View style={styles.form}>
+          <Text style={styles.label}>Nom complet *</Text>
+          <TextInput style={styles.input} value={senderName} onChangeText={setSenderName} placeholder="Votre nom" />
 
-          {/* ── MAP ── */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Notre Localisation</Text>
-            <View style={styles.mapContainer}>
-              <Map
-                markers={[headquarters]}
-                initialRegion={{
-                  latitude: 12.6392,
-                  longitude: -8.0029,
-                  latitudeDelta: 0.05,
-                  longitudeDelta: 0.05,
-                }}
-                style={styles.map}
-              />
-            </View>
-          </View>
+          <Text style={styles.label}>Email *</Text>
+          <TextInput style={styles.input} value={senderEmail} onChangeText={setSenderEmail} placeholder="votre@email.com" keyboardType="email-address" autoCapitalize="none" />
 
-          {/* ── CONTACT FORM ── */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Envoyez-nous un Message</Text>
+          <Text style={styles.label}>Sujet *</Text>
+          <TextInput style={styles.input} value={subject} onChangeText={setSubject} placeholder="Sujet de votre message" />
 
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Nom *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Votre nom complet"
-                  placeholderTextColor={colors.textSecondary}
-                  value={senderName}
-                  onChangeText={setSenderName}
-                  autoCapitalize="words"
-                />
-              </View>
+          <Text style={styles.label}>Message *</Text>
+          <TextInput style={[styles.input, styles.textarea]} value={message} onChangeText={setMessage} placeholder="Votre message..." multiline numberOfLines={5} textAlignVertical="top" />
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="votre.email@exemple.com"
-                  placeholderTextColor={colors.textSecondary}
-                  value={senderEmail}
-                  onChangeText={setSenderEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
+          <TouchableOpacity style={[styles.submitBtn, sending && { opacity: 0.6 }]} onPress={handleSubmit} disabled={sending}>
+            <Text style={styles.submitBtnText}>{sending ? 'Envoi en cours...' : 'Envoyer le Message'}</Text>
+          </TouchableOpacity>
+        </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Sujet *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Sujet de votre message"
-                  placeholderTextColor={colors.textSecondary}
-                  value={subject}
-                  onChangeText={setSubject}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Message *</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Votre message..."
-                  placeholderTextColor={colors.textSecondary}
-                  value={message}
-                  onChangeText={setMessage}
-                  multiline
-                  numberOfLines={6}
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-                onPress={handleSubmit}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <>
-                    <IconSymbol ios_icon_name="paperplane.fill" android_material_icon_name="send" size={20} color={colors.background} />
-                    <Text style={styles.submitButtonText}>Envoyer</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      <Modal
-        visible={modalVisible}
-        title={modalTitle}
-        message={modalMessage}
-        type={modalType}
-        onClose={() => setModalVisible(false)}
-      />
-    </View>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  keyboardView: { flex: 1 },
-  scrollView: { flex: 1 },
-  contentContainer: { paddingTop: Platform.OS === 'android' ? 16 : 0, paddingBottom: 40 },
-  section: { paddingHorizontal: 20, marginTop: 24 },
-  sectionTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 16 },
-  emptyText: { color: colors.textSecondary, textAlign: 'center', marginVertical: 16, fontSize: 15 },
-
-  // API contacts grid
-  contactsGrid: { gap: 12 },
-  contactApiCard: {
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  contactApiAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary + '20',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  contactApiAvatarText: { fontSize: 18, fontWeight: '700', color: colors.primary },
-  contactApiInfo: { flex: 1 },
-  contactApiNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 2 },
-  contactApiName: { fontSize: 16, fontWeight: '700', color: colors.text },
-  typeBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  typeBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  contactApiRole: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
-  contactApiAddress: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
-  contactApiAction: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  contactApiActionText: { fontSize: 14, color: colors.primary, fontWeight: '500', flex: 1 },
-
-  // Static contact card
-  contactCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  contactItem: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  contactInfo: { flex: 1, marginLeft: 16 },
-  contactLabel: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
-  contactValue: { fontSize: 15, color: colors.text, marginBottom: 2 },
-  contactLink: { fontSize: 15, color: colors.primary, fontWeight: '600', marginBottom: 2 },
-
-  // Map
-  mapContainer: { height: 250, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
-  map: { flex: 1 },
-
-  // Form
-  form: { backgroundColor: colors.card, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 8 },
-  input: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: colors.text },
-  textArea: { minHeight: 120, textAlignVertical: 'top' },
-  submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 12, marginTop: 8, shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitButtonText: { fontSize: 17, fontWeight: 'bold', color: colors.background, marginLeft: 8 },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: '#1B5E20', marginHorizontal: 16, marginTop: 20, marginBottom: 12 },
+  emptyText: { textAlign: 'center', color: '#888', marginVertical: 20, fontSize: 14 },
+  card: { backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 12, borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3 },
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+  cardName: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
+  cardRole: { fontSize: 13, color: '#666', marginTop: 2 },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  cardAddress: { fontSize: 13, color: '#555', marginBottom: 8 },
+  cardActions: { gap: 6 },
+  actionBtn: { paddingVertical: 6 },
+  actionBtnText: { fontSize: 14, color: '#1B5E20', fontWeight: '500' },
+  form: { backgroundColor: '#fff', marginHorizontal: 16, borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3 },
+  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 6, marginTop: 12 },
+  input: { borderWidth: 1, borderColor: '#DDD', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, backgroundColor: '#FAFAFA' },
+  textarea: { height: 120, paddingTop: 10 },
+  submitBtn: { backgroundColor: '#1B5E20', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
+  submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
