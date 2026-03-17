@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet, BACKEND_URL } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 import {
   View,
   Text,
@@ -29,14 +29,14 @@ interface ProgramItem {
 }
 
 const CATEGORIES = [
+  'Gouvernance',
   'Économie',
   'Sécurité',
   'Éducation',
   'Santé',
-  'Agriculture',
   'Infrastructure',
-  'Gouvernance',
-  'Social',
+  'Agriculture',
+  'Diplomatie',
 ];
 
 async function getAdminPassword(): Promise<string> {
@@ -91,7 +91,12 @@ export default function AdminProgramScreen() {
   const loadPrograms = async () => {
     console.log('[AdminProgram] Loading programs from GET /api/program');
     try {
-      const data = await apiGet<ProgramItem[]>('/api/program');
+      const res = await fetch(`${BACKEND_URL}/api/program`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Erreur ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
       console.log('[AdminProgram] Programs loaded:', data?.length ?? 0);
       setPrograms(Array.isArray(data) ? data : []);
     } catch (error: any) {
@@ -104,6 +109,7 @@ export default function AdminProgramScreen() {
   };
 
   const onRefresh = useCallback(() => {
+    console.log('[AdminProgram] Pull-to-refresh triggered');
     setRefreshing(true);
     loadPrograms();
   }, []);
@@ -122,29 +128,31 @@ export default function AdminProgramScreen() {
   };
 
   const handleAdd = () => {
-    console.log('[AdminProgram] Opening add program form');
+    console.log('[AdminProgram] User tapped Ajouter program');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingProgram(null);
     setFormCategory('');
     setFormTitle('');
     setFormDescription('');
     setFormOrder('');
+    setShowCategoryPicker(false);
     setShowEditModal(true);
   };
 
   const handleEdit = (item: ProgramItem) => {
-    console.log('[AdminProgram] Opening edit form for program:', item.id);
+    console.log('[AdminProgram] User tapped Modifier program:', item.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingProgram(item);
     setFormCategory(item.category);
     setFormTitle(item.title);
     setFormDescription(item.description);
     setFormOrder(item.order?.toString() || '');
+    setShowCategoryPicker(false);
     setShowEditModal(true);
   };
 
   const handleCancel = () => {
-    console.log('[AdminProgram] Cancelling form');
+    console.log('[AdminProgram] User tapped Annuler form');
     setShowEditModal(false);
     setEditingProgram(null);
     setShowCategoryPicker(false);
@@ -156,6 +164,7 @@ export default function AdminProgramScreen() {
       return;
     }
 
+    console.log('[AdminProgram] User tapped save program, editing:', editingProgram?.id ?? 'new');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
@@ -188,8 +197,8 @@ export default function AdminProgramScreen() {
       const successMessage = editingProgram ? 'Programme modifié avec succès!' : 'Programme ajouté avec succès!';
       setShowEditModal(false);
       setEditingProgram(null);
-      showModalFunc('Succès', successMessage, 'success');
       await loadPrograms();
+      showModalFunc('Succès', successMessage, 'success');
     } catch (error: any) {
       console.error('[AdminProgram] Error submitting program:', error);
       showModalFunc('Erreur', error.message || 'Impossible de sauvegarder le programme.', 'error');
@@ -199,7 +208,7 @@ export default function AdminProgramScreen() {
   };
 
   const handleDelete = (id: string) => {
-    console.log('[AdminProgram] Requesting delete confirmation for program:', id);
+    console.log('[AdminProgram] User tapped Supprimer program:', id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showModalFunc(
       'Confirmer la suppression',
@@ -210,8 +219,8 @@ export default function AdminProgramScreen() {
         try {
           await adminFetch(`/api/program/${id}`, { method: 'DELETE', body: JSON.stringify({}) });
           console.log('[AdminProgram] Program deleted successfully');
-          showModalFunc('Succès', 'Programme supprimé avec succès!', 'success');
           await loadPrograms();
+          showModalFunc('Succès', 'Programme supprimé avec succès!', 'success');
         } catch (error: any) {
           console.error('[AdminProgram] Error deleting program:', error);
           showModalFunc('Erreur', error.message || 'Impossible de supprimer le programme.', 'error');
@@ -310,7 +319,10 @@ export default function AdminProgramScreen() {
               <Text style={styles.inputLabel}>Catégorie *</Text>
               <TouchableOpacity
                 style={[styles.input, styles.categorySelector]}
-                onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+                onPress={() => {
+                  console.log('[AdminProgram] User tapped category picker');
+                  setShowCategoryPicker(!showCategoryPicker);
+                }}
               >
                 <Text style={formCategory ? styles.categorySelectorText : styles.categorySelectorPlaceholder}>
                   {formCategory || 'Sélectionner une catégorie'}
@@ -338,13 +350,34 @@ export default function AdminProgramScreen() {
               )}
 
               <Text style={styles.inputLabel}>Titre *</Text>
-              <TextInput style={styles.input} value={formTitle} onChangeText={setFormTitle} placeholder="Titre du programme" placeholderTextColor={colors.textSecondary} />
+              <TextInput
+                style={styles.input}
+                value={formTitle}
+                onChangeText={setFormTitle}
+                placeholder="Titre du programme"
+                placeholderTextColor={colors.textSecondary}
+              />
 
               <Text style={styles.inputLabel}>Description *</Text>
-              <TextInput style={[styles.input, styles.textArea]} value={formDescription} onChangeText={setFormDescription} placeholder="Description détaillée du programme" placeholderTextColor={colors.textSecondary} multiline numberOfLines={6} />
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={formDescription}
+                onChangeText={setFormDescription}
+                placeholder="Description détaillée du programme"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={6}
+              />
 
               <Text style={styles.inputLabel}>Ordre d'affichage</Text>
-              <TextInput style={styles.input} value={formOrder} onChangeText={setFormOrder} placeholder="1, 2, 3..." placeholderTextColor={colors.textSecondary} keyboardType="number-pad" />
+              <TextInput
+                style={styles.input}
+                value={formOrder}
+                onChangeText={setFormOrder}
+                placeholder="1, 2, 3..."
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="number-pad"
+              />
 
               <View style={styles.modalActions}>
                 <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel} disabled={submitting}>

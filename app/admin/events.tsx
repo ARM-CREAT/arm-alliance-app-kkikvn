@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet, BACKEND_URL } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 import {
   View,
   Text,
@@ -82,7 +82,12 @@ export default function AdminEventsScreen() {
   const loadEvents = async () => {
     console.log('[AdminEvents] Loading events from GET /api/events');
     try {
-      const data = await apiGet<EventItem[]>('/api/events');
+      const res = await fetch(`${BACKEND_URL}/api/events`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Erreur ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
       console.log('[AdminEvents] Events loaded:', data?.length ?? 0);
       setEvents(Array.isArray(data) ? data : []);
     } catch (error: any) {
@@ -95,6 +100,7 @@ export default function AdminEventsScreen() {
   };
 
   const onRefresh = useCallback(() => {
+    console.log('[AdminEvents] Pull-to-refresh triggered');
     setRefreshing(true);
     loadEvents();
   }, []);
@@ -113,7 +119,7 @@ export default function AdminEventsScreen() {
   };
 
   const handleAdd = () => {
-    console.log('[AdminEvents] Opening add event form');
+    console.log('[AdminEvents] User tapped Ajouter event');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingEvent(null);
     setFormTitle('');
@@ -125,7 +131,7 @@ export default function AdminEventsScreen() {
   };
 
   const handleEdit = (item: EventItem) => {
-    console.log('[AdminEvents] Opening edit form for event:', item.id);
+    console.log('[AdminEvents] User tapped Modifier event:', item.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingEvent(item);
     setFormTitle(item.title);
@@ -137,7 +143,7 @@ export default function AdminEventsScreen() {
   };
 
   const handleCancel = () => {
-    console.log('[AdminEvents] Cancelling form');
+    console.log('[AdminEvents] User tapped Annuler form');
     setShowEditModal(false);
     setEditingEvent(null);
   };
@@ -148,6 +154,7 @@ export default function AdminEventsScreen() {
       return;
     }
 
+    console.log('[AdminEvents] User tapped save event, editing:', editingEvent?.id ?? 'new');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
@@ -181,8 +188,8 @@ export default function AdminEventsScreen() {
       const successMessage = editingEvent ? 'Événement modifié avec succès!' : 'Événement ajouté avec succès!';
       setShowEditModal(false);
       setEditingEvent(null);
-      showModalFunc('Succès', successMessage, 'success');
       await loadEvents();
+      showModalFunc('Succès', successMessage, 'success');
     } catch (error: any) {
       console.error('[AdminEvents] Error submitting event:', error);
       showModalFunc('Erreur', error.message || "Impossible de sauvegarder l'événement.", 'error');
@@ -192,7 +199,7 @@ export default function AdminEventsScreen() {
   };
 
   const handleDelete = (id: string) => {
-    console.log('[AdminEvents] Requesting delete confirmation for event:', id);
+    console.log('[AdminEvents] User tapped Supprimer event:', id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showModalFunc(
       'Confirmer la suppression',
@@ -203,8 +210,8 @@ export default function AdminEventsScreen() {
         try {
           await adminFetch(`/api/events/${id}`, { method: 'DELETE', body: JSON.stringify({}) });
           console.log('[AdminEvents] Event deleted successfully');
-          showModalFunc('Succès', 'Événement supprimé avec succès!', 'success');
           await loadEvents();
+          showModalFunc('Succès', 'Événement supprimé avec succès!', 'success');
         } catch (error: any) {
           console.error('[AdminEvents] Error deleting event:', error);
           showModalFunc('Erreur', error.message || "Impossible de supprimer l'événement.", 'error');
@@ -323,19 +330,53 @@ export default function AdminEventsScreen() {
               </Text>
 
               <Text style={styles.inputLabel}>Titre *</Text>
-              <TextInput style={styles.input} value={formTitle} onChangeText={setFormTitle} placeholder="Titre de l'événement" placeholderTextColor={colors.textSecondary} />
+              <TextInput
+                style={styles.input}
+                value={formTitle}
+                onChangeText={setFormTitle}
+                placeholder="Titre de l'événement"
+                placeholderTextColor={colors.textSecondary}
+              />
 
               <Text style={styles.inputLabel}>Description *</Text>
-              <TextInput style={[styles.input, styles.textArea]} value={formDescription} onChangeText={setFormDescription} placeholder="Description de l'événement" placeholderTextColor={colors.textSecondary} multiline numberOfLines={4} />
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={formDescription}
+                onChangeText={setFormDescription}
+                placeholder="Description de l'événement"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={4}
+              />
 
-              <Text style={styles.inputLabel}>Date * (AAAA-MM-JJ)</Text>
-              <TextInput style={styles.input} value={formDate} onChangeText={setFormDate} placeholder="2024-12-31" placeholderTextColor={colors.textSecondary} />
+              <Text style={styles.inputLabel}>Date * (AAAA-MM-JJ HH:MM)</Text>
+              <TextInput
+                style={styles.input}
+                value={formDate}
+                onChangeText={setFormDate}
+                placeholder="2024-12-31 18:00"
+                placeholderTextColor={colors.textSecondary}
+              />
 
               <Text style={styles.inputLabel}>Lieu *</Text>
-              <TextInput style={styles.input} value={formLocation} onChangeText={setFormLocation} placeholder="Lieu de l'événement" placeholderTextColor={colors.textSecondary} />
+              <TextInput
+                style={styles.input}
+                value={formLocation}
+                onChangeText={setFormLocation}
+                placeholder="Lieu de l'événement"
+                placeholderTextColor={colors.textSecondary}
+              />
 
               <Text style={styles.inputLabel}>URL de l'image (optionnel)</Text>
-              <TextInput style={styles.input} value={formImageUrl} onChangeText={setFormImageUrl} placeholder="https://..." placeholderTextColor={colors.textSecondary} autoCapitalize="none" keyboardType="url" />
+              <TextInput
+                style={styles.input}
+                value={formImageUrl}
+                onChangeText={setFormImageUrl}
+                placeholder="https://..."
+                placeholderTextColor={colors.textSecondary}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
               {formImageUrl.trim().length > 0 && (
                 <Image source={{ uri: formImageUrl.trim() }} style={styles.imagePreview} resizeMode="cover" />
               )}
@@ -385,7 +426,7 @@ const styles = StyleSheet.create({
   deleteButtonText: { color: '#FF3B30' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
   emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginTop: 16 },
-  modalScroll: { maxHeight: 500 },
+  modalScroll: { maxHeight: 520 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },

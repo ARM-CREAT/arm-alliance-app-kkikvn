@@ -8,14 +8,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  TextInput,
   Platform,
   Linking,
-  Modal as RNModal,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { apiGet, apiPost } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -67,10 +65,8 @@ export default function CallScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showInitiateModal, setShowInitiateModal] = useState(false);
-  const [targetMemberId, setTargetMemberId] = useState('');
-  const [callType, setCallType] = useState<'audio' | 'video'>('video');
-  const [initiating, setInitiating] = useState(false);
+  const [initiatingAudio, setInitiatingAudio] = useState(false);
+  const [initiatingVideo, setInitiatingVideo] = useState(false);
 
   useEffect(() => {
     console.log('[Call] Screen opened');
@@ -81,7 +77,12 @@ export default function CallScreen() {
     console.log('[Call] GET /api/calls/active');
     setError(null);
     try {
-      const data = await apiGet<ActiveCall[]>('/api/calls/active');
+      const res = await fetch(`${BACKEND_URL}/api/calls/active`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Erreur ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
       console.log('[Call] Active calls loaded:', data?.length ?? 0);
       setActiveCalls(Array.isArray(data) ? data : []);
     } catch (err: any) {
@@ -94,37 +95,52 @@ export default function CallScreen() {
   };
 
   const onRefresh = useCallback(() => {
+    console.log('[Call] Pull-to-refresh triggered');
     setRefreshing(true);
     loadActiveCalls();
   }, []);
 
-  const handleInitiateCall = async () => {
-    if (!targetMemberId.trim()) return;
-    console.log('[Call] POST /api/calls/initiate with targetMemberId:', targetMemberId, 'callType:', callType);
+  const initiateCall = async (callType: 'audio' | 'video') => {
+    console.log('[Call] User tapped initiate call, type:', callType);
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    setInitiating(true);
+
+    if (callType === 'audio') setInitiatingAudio(true);
+    else setInitiatingVideo(true);
+
     try {
-      const result = await apiPost<InitiateCallResponse>('/api/calls/initiate', {
-        targetMemberId: targetMemberId.trim(),
-        callType,
+      console.log('[Call] POST /api/calls/initiate with targetMemberId: general, callType:', callType);
+      const res = await fetch(`${BACKEND_URL}/api/calls/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetMemberId: 'general', callType }),
       });
-      console.log('[Call] Call initiated, joinUrl:', result.joinUrl);
-      setShowInitiateModal(false);
-      setTargetMemberId('');
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Erreur ${res.status}: ${errText}`);
+      }
+
+      const result: InitiateCallResponse = await res.json();
+      console.log('[Call] Call initiated, callId:', result.callId, 'joinUrl:', result.joinUrl);
+
       if (result.joinUrl) {
         const canOpen = await Linking.canOpenURL(result.joinUrl);
         if (canOpen) {
           await Linking.openURL(result.joinUrl);
+        } else {
+          console.warn('[Call] Cannot open URL:', result.joinUrl);
         }
       }
+
       await loadActiveCalls();
     } catch (err: any) {
       console.error('[Call] Error initiating call:', err);
       setError(err.message || "Impossible d'initier l'appel.");
     } finally {
-      setInitiating(false);
+      setInitiatingAudio(false);
+      setInitiatingVideo(false);
     }
   };
 
@@ -165,37 +181,41 @@ export default function CallScreen() {
         }}
       />
 
-      {/* Initiate Call Hero */}
+      {/* Hero section with two big call buttons */}
       <View style={styles.heroSection}>
-        <View style={styles.heroContent}>
-          <Text style={styles.heroTitle}>Appeler un Membre</Text>
-          <Text style={styles.heroSubtitle}>Lancez un appel audio ou vidéo sécurisé</Text>
-          <View style={styles.heroButtons}>
-            <TouchableOpacity
-              style={[styles.heroBtn, styles.heroBtnVideo]}
-              onPress={() => {
-                console.log('[Call] User tapped initiate video call');
-                setCallType('video');
-                setShowInitiateModal(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.heroBtnIcon}>📹</Text>
-              <Text style={styles.heroBtnText}>Vidéo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.heroBtn, styles.heroBtnAudio]}
-              onPress={() => {
-                console.log('[Call] User tapped initiate audio call');
-                setCallType('audio');
-                setShowInitiateModal(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.heroBtnIcon}>📞</Text>
-              <Text style={styles.heroBtnText}>Audio</Text>
-            </TouchableOpacity>
-          </View>
+        <Text style={styles.heroTitle}>Appeler un Membre</Text>
+        <Text style={styles.heroSubtitle}>Lancez un appel audio ou vidéo sécurisé</Text>
+        <View style={styles.heroButtons}>
+          <TouchableOpacity
+            style={[styles.heroBtn, styles.heroBtnVideo]}
+            onPress={() => initiateCall('video')}
+            disabled={initiatingVideo || initiatingAudio}
+            activeOpacity={0.8}
+          >
+            {initiatingVideo ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <>
+                <Text style={styles.heroBtnIcon}>📹</Text>
+                <Text style={[styles.heroBtnText, { color: colors.primary }]}>Appel Vidéo</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.heroBtn, styles.heroBtnAudio]}
+            onPress={() => initiateCall('audio')}
+            disabled={initiatingAudio || initiatingVideo}
+            activeOpacity={0.8}
+          >
+            {initiatingAudio ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={styles.heroBtnIcon}>📞</Text>
+                <Text style={[styles.heroBtnText, { color: '#FFFFFF' }]}>Appel Audio</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -206,7 +226,7 @@ export default function CallScreen() {
         {error && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity onPress={loadActiveCalls}>
+            <TouchableOpacity onPress={() => { setError(null); loadActiveCalls(); }}>
               <Text style={styles.retryText}>Réessayer</Text>
             </TouchableOpacity>
           </View>
@@ -228,18 +248,16 @@ export default function CallScreen() {
             const statusLabel = getCallStatusLabel(call.status);
             const timeStr = formatTime(call.createdAt);
             const isActive = call.status === 'active' || call.status === 'initiating';
+            const callTypeLabel = call.callType === 'video' ? 'Appel Vidéo' : 'Appel Audio';
+            const callTypeIcon = call.callType === 'video' ? '📹' : '📞';
 
             return (
               <View key={call.id} style={styles.callCard}>
                 <View style={styles.callAvatarCircle}>
-                  <Text style={styles.callAvatarIcon}>
-                    {call.callType === 'video' ? '📹' : '📞'}
-                  </Text>
+                  <Text style={styles.callAvatarIcon}>{callTypeIcon}</Text>
                 </View>
                 <View style={styles.callInfo}>
-                  <Text style={styles.callType}>
-                    {call.callType === 'video' ? 'Appel Vidéo' : 'Appel Audio'}
-                  </Text>
+                  <Text style={styles.callTypeText}>{callTypeLabel}</Text>
                   <View style={styles.callStatusRow}>
                     <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
                     <Text style={[styles.callStatus, { color: statusColor }]}>{statusLabel}</Text>
@@ -260,67 +278,6 @@ export default function CallScreen() {
           })
         )}
       </ScrollView>
-
-      {/* Initiate Call Modal */}
-      <RNModal visible={showInitiateModal} transparent animationType="slide" onRequestClose={() => setShowInitiateModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {callType === 'video' ? '📹 Appel Vidéo' : '📞 Appel Audio'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowInitiateModal(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.inputLabel}>ID du membre à appeler</Text>
-            <TextInput
-              style={styles.input}
-              value={targetMemberId}
-              onChangeText={setTargetMemberId}
-              placeholder="Numéro ou ID du membre"
-              placeholderTextColor={colors.textSecondary}
-              autoCapitalize="none"
-            />
-
-            <Text style={styles.inputLabel}>Type d'appel</Text>
-            <View style={styles.callTypeRow}>
-              <TouchableOpacity
-                style={[styles.callTypeChip, callType === 'video' && styles.callTypeChipActive]}
-                onPress={() => setCallType('video')}
-              >
-                <Text style={styles.callTypeIcon}>📹</Text>
-                <Text style={[styles.callTypeText, callType === 'video' && styles.callTypeTextActive]}>Vidéo</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.callTypeChip, callType === 'audio' && styles.callTypeChipActive]}
-                onPress={() => setCallType('audio')}
-              >
-                <Text style={styles.callTypeIcon}>📞</Text>
-                <Text style={[styles.callTypeText, callType === 'audio' && styles.callTypeTextActive]}>Audio</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowInitiateModal(false)} disabled={initiating}>
-                <Text style={styles.cancelBtnText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.callBtn, !targetMemberId.trim() && styles.callBtnDisabled]}
-                onPress={handleInitiateCall}
-                disabled={initiating || !targetMemberId.trim()}
-              >
-                {initiating ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.callBtnText}>Appeler</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </RNModal>
     </View>
   );
 }
@@ -330,15 +287,14 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 16, fontSize: 16, color: colors.textSecondary },
   heroSection: { backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 24 },
-  heroContent: {},
   heroTitle: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 4 },
-  heroSubtitle: { fontSize: 14, color: '#FFFFFF', opacity: 0.85, marginBottom: 20 },
+  heroSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.85)', marginBottom: 20 },
   heroButtons: { flexDirection: 'row', gap: 12 },
-  heroBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 14, gap: 8 },
+  heroBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 14, gap: 8, minHeight: 56 },
   heroBtnVideo: { backgroundColor: '#FFFFFF' },
   heroBtnAudio: { backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
-  heroBtnIcon: { fontSize: 18 },
-  heroBtnText: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  heroBtnIcon: { fontSize: 20 },
+  heroBtnText: { fontSize: 15, fontWeight: '700' },
   listContent: { padding: 16, paddingBottom: 32 },
   errorBanner: { backgroundColor: colors.danger + '15', borderRadius: 12, padding: 16, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   errorText: { fontSize: 14, color: colors.danger, flex: 1 },
@@ -352,30 +308,11 @@ const styles = StyleSheet.create({
   callAvatarCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary + '18', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   callAvatarIcon: { fontSize: 22 },
   callInfo: { flex: 1 },
-  callType: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 4 },
+  callTypeText: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 4 },
   callStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   statusDot: { width: 7, height: 7, borderRadius: 3.5 },
   callStatus: { fontSize: 13, fontWeight: '500' },
   callTime: { fontSize: 12, color: colors.textSecondary },
   joinCallBtn: { backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
   joinCallBtnText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text },
-  modalClose: { fontSize: 20, color: colors.textSecondary, padding: 4 },
-  inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
-  input: { backgroundColor: colors.card, borderRadius: 10, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
-  callTypeRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  callTypeChip: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, gap: 8 },
-  callTypeChipActive: { backgroundColor: colors.primary + '15', borderColor: colors.primary },
-  callTypeIcon: { fontSize: 18 },
-  callTypeText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
-  callTypeTextActive: { color: colors.primary },
-  modalActions: { flexDirection: 'row', gap: 12, marginBottom: 8 },
-  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: colors.backgroundAlt },
-  cancelBtnText: { fontSize: 15, fontWeight: '600', color: colors.text },
-  callBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: colors.primary },
-  callBtnDisabled: { opacity: 0.5 },
-  callBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
 });

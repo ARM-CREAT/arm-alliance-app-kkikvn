@@ -14,11 +14,13 @@ import {
   Alert,
   Image,
   ImageSourcePropType,
+  ScrollView,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BACKEND_URL } from "@/utils/api-helpers";
 
 interface Message {
   id: string;
@@ -28,10 +30,12 @@ interface Message {
 }
 
 const QUICK_REPLIES = [
-  "Qui est Alliance ARM?",
-  "Programme politique",
-  "Comment adhérer?",
-  "Prochains événements",
+  "Notre programme",
+  "Adhérer au parti",
+  "Nos valeurs",
+  "Événements à venir",
+  "Contacter le parti",
+  "L'AES et le Mali",
 ];
 
 function resolveImageSource(
@@ -102,7 +106,7 @@ const typingStyles = StyleSheet.create({
   bubble: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.card,
+    backgroundColor: "#F0F0F0",
     borderRadius: 16,
     borderBottomLeftRadius: 4,
     paddingHorizontal: 14,
@@ -123,7 +127,6 @@ const typingStyles = StyleSheet.create({
 });
 
 export default function AIChatScreen() {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -168,8 +171,15 @@ export default function AIChatScreen() {
     setIsStreaming(true);
     scrollToBottom();
 
+    const assistantId = (Date.now() + 1).toString();
+    const assistantMessage: Message = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+
     try {
-      const { BACKEND_URL } = await import("@/utils/api");
       console.log("[AIChat] POST /api/ai/chat with message:", messageText);
 
       const response = await fetch(`${BACKEND_URL}/api/ai/chat`, {
@@ -184,31 +194,33 @@ export default function AIChatScreen() {
         throw new Error(`Erreur ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      const assistantId = (Date.now() + 1).toString();
-      let fullResponse = "";
+      const contentType = response.headers.get("content-type") || "";
+      const isSSE = contentType.includes("text/event-stream") || contentType.includes("text/plain");
 
-      const assistantMessage: Message = {
-        id: assistantId,
-        role: "assistant",
-        content: "",
-        timestamp: new Date(),
-      };
       setMessages((prev) => [...prev, assistantMessage]);
 
-      if (reader) {
+      if (isSSE && response.body) {
+        // Streaming SSE path
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = "";
+        let buffer = "";
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed === "data: [DONE]") continue;
+            if (trimmed.startsWith("data: ")) {
               try {
-                const data = JSON.parse(line.slice(6));
+                const jsonStr = trimmed.slice(6);
+                const data = JSON.parse(jsonStr);
                 if (data.text) {
                   fullResponse += data.text;
                   setMessages((prev) =>
@@ -220,27 +232,50 @@ export default function AIChatScreen() {
                   );
                   scrollToBottom();
                 }
-              } catch (e) {
+              } catch {
                 // ignore parse errors on partial chunks
               }
             }
           }
         }
+
+        console.log("[AIChat] SSE stream complete, length:", fullResponse.length);
+
+        // If we got nothing from SSE, try parsing as JSON fallback
+        if (!fullResponse) {
+          throw new Error("Empty SSE response");
+        }
+      } else {
+        // JSON fallback path
+        const data = await response.json();
+        const text = data.text || data.message || data.response || JSON.stringify(data);
+        console.log("[AIChat] JSON response received, length:", text.length);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId ? { ...msg, content: text } : msg
+          )
+        );
+        scrollToBottom();
       }
 
-      console.log("[AIChat] AI response complete, length:", fullResponse.length);
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (error: any) {
       console.error("[AIChat] Error:", error);
-      const errorMessage: Message = {
-        id: (Date.now() + 2).toString(),
-        role: "assistant",
-        content: "Désolé, une erreur s'est produite. Veuillez réessayer.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      // Remove the empty assistant message and add error message
+      setMessages((prev) => {
+        const filtered = prev.filter((m) => m.id !== assistantId);
+        return [
+          ...filtered,
+          {
+            id: (Date.now() + 2).toString(),
+            role: "assistant",
+            content: "Désolé, une erreur s'est produite. Veuillez réessayer.",
+            timestamp: new Date(),
+          },
+        ];
+      });
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
@@ -251,7 +286,7 @@ export default function AIChatScreen() {
   };
 
   const handleClearConversation = () => {
-    console.log("[AIChat] User tapped clear conversation");
+    console.log("[AIChat] User tapped Nouvelle conversation");
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -277,7 +312,7 @@ export default function AIChatScreen() {
   const charCountColor =
     charCount > 450 ? colors.danger : charCount > 400 ? colors.warning : colors.textSecondary;
 
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+  const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === "user";
     const timeStr = item.timestamp.toLocaleTimeString("fr-FR", {
       hour: "2-digit",
@@ -336,7 +371,7 @@ export default function AIChatScreen() {
     );
   };
 
-  const EmptyState = () => (
+  const WelcomeState = () => (
     <View style={styles.emptyState}>
       <Image
         source={resolveImageSource(
@@ -346,7 +381,7 @@ export default function AIChatScreen() {
       />
       <Text style={styles.emptyTitle}>Assistant A.R.M</Text>
       <Text style={styles.emptySubtitle}>
-        Posez vos questions sur l'Alliance pour le Rassemblement Malien
+        Bienvenue ! Je suis l'assistant IA de l'Alliance pour le Rassemblement Malien. Posez-moi vos questions sur le parti, son programme, ses valeurs ou comment adhérer.
       </Text>
     </View>
   );
@@ -361,15 +396,6 @@ export default function AIChatScreen() {
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: colors.background,
           headerTitleStyle: { fontWeight: "bold" },
-          headerRight: () =>
-            messages.length > 0 ? (
-              <TouchableOpacity
-                onPress={handleClearConversation}
-                style={styles.headerButton}
-              >
-                <Text style={styles.headerButtonText}>🗑</Text>
-              </TouchableOpacity>
-            ) : null,
         }}
       />
       <KeyboardAvoidingView
@@ -386,33 +412,48 @@ export default function AIChatScreen() {
             styles.messagesList,
             messages.length === 0 && styles.messagesListEmpty,
           ]}
-          ListEmptyComponent={<EmptyState />}
+          ListEmptyComponent={<WelcomeState />}
           ListFooterComponent={isStreaming ? <TypingIndicator /> : null}
           onContentSizeChange={scrollToBottom}
           onLayout={scrollToBottom}
         />
 
+        {/* Quick replies — always shown when no conversation started */}
         {!hasStarted && (
           <View style={styles.quickRepliesContainer}>
-            <FlatList
+            <ScrollView
               horizontal
-              data={QUICK_REPLIES}
-              keyExtractor={(item) => item}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.quickRepliesList}
-              renderItem={({ item }) => (
+            >
+              {QUICK_REPLIES.map((item) => (
                 <TouchableOpacity
+                  key={item}
                   style={styles.quickReplyChip}
                   onPress={() => handleQuickReply(item)}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.quickReplyText}>{item}</Text>
                 </TouchableOpacity>
-              )}
-            />
+              ))}
+            </ScrollView>
           </View>
         )}
 
+        {/* "Nouvelle conversation" button — shown when conversation has started */}
+        {hasStarted && (
+          <View style={styles.newConvBar}>
+            <TouchableOpacity
+              style={styles.newConvButton}
+              onPress={handleClearConversation}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.newConvButtonText}>+ Nouvelle conversation</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input area — always visible */}
         <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 8 }]}>
           <View style={styles.inputRow}>
             <TextInput
@@ -425,13 +466,21 @@ export default function AIChatScreen() {
               multiline
               maxLength={500}
               editable={!isStreaming}
+              returnKeyType="send"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                if (Platform.OS !== "web") handleSendMessage();
+              }}
             />
             <TouchableOpacity
               style={[
                 styles.sendButton,
                 (!inputText.trim() || isStreaming) && styles.sendButtonDisabled,
               ]}
-              onPress={() => handleSendMessage()}
+              onPress={() => {
+                console.log("[AIChat] User tapped send button");
+                handleSendMessage();
+              }}
               disabled={!inputText.trim() || isStreaming}
               activeOpacity={0.7}
             >
@@ -453,7 +502,7 @@ export default function AIChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: "#F8F9FA",
   },
   messagesList: {
     padding: 16,
@@ -526,11 +575,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   userBubble: {
-    backgroundColor: colors.primary,
+    backgroundColor: "#1B5E20",
     borderBottomRightRadius: 4,
   },
   assistantBubble: {
-    backgroundColor: colors.card,
+    backgroundColor: "#F0F0F0",
     borderBottomLeftRadius: 4,
   },
   messageText: {
@@ -565,16 +614,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   quickReplyChip: {
-    backgroundColor: colors.primary + "18",
+    backgroundColor: "#1B5E20" + "18",
     borderWidth: 1,
-    borderColor: colors.primary + "40",
+    borderColor: "#1B5E20" + "40",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   quickReplyText: {
     fontSize: 13,
-    color: colors.primary,
+    color: "#1B5E20",
+    fontWeight: "600",
+  },
+  newConvBar: {
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  newConvButton: {
+    backgroundColor: "#1B5E20" + "12",
+    borderWidth: 1,
+    borderColor: "#1B5E20" + "40",
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 7,
+  },
+  newConvButtonText: {
+    fontSize: 13,
+    color: "#1B5E20",
     fontWeight: "600",
   },
   inputContainer: {
@@ -598,6 +668,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
     maxHeight: 100,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -605,10 +676,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary,
+    backgroundColor: "#1B5E20",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: colors.primary,
+    shadowColor: "#1B5E20",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -629,12 +700,5 @@ const styles = StyleSheet.create({
     textAlign: "right",
     marginTop: 4,
     marginBottom: 2,
-  },
-  headerButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  headerButtonText: {
-    fontSize: 18,
   },
 });

@@ -14,15 +14,15 @@ import {
   Alert,
   ImageSourcePropType,
   Image,
+  RefreshControl,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { colors } from "@/styles/commonStyles";
 import * as Haptics from "expo-haptics";
 import { Modal } from "@/components/ui/Modal";
-import { apiGet } from "@/utils/api";
-import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BACKEND_URL } from "@/utils/api-helpers";
+import { getBearerToken } from "@/utils/api";
 
 // Try to import QRCode, fall back gracefully
 let QRCode: any = null;
@@ -32,15 +32,21 @@ try {
   // package not available
 }
 
+const DARK_GREEN = "#1B5E20";
+const GOLD = "#FFD700";
+const GOLD_DARK = "#B8860B";
+
 interface MemberCardData {
   id: string;
   fullName: string;
   membershipNumber: string;
   commune?: string;
   profession?: string;
+  phone?: string;
   status: "pending" | "active" | "suspended";
   role?: string;
   joinDate?: string;
+  joinedAt?: string;
   expiryDate?: string;
   createdAt: string;
 }
@@ -58,11 +64,11 @@ const CARD_WIDTH = width - 40;
 
 function getStatusColor(status: string) {
   const map: Record<string, string> = {
-    pending: colors.warning,
-    active: colors.success,
-    suspended: colors.danger,
+    pending: "#FF9500",
+    active: "#34C759",
+    suspended: "#FF3B30",
   };
-  return map[status] || colors.textSecondary;
+  return map[status] || "#8E8E93";
 }
 
 function getStatusText(status: string) {
@@ -93,6 +99,7 @@ export default function MemberCardScreen() {
   const insets = useSafeAreaInsets();
   const [memberData, setMemberData] = useState<MemberCardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
@@ -116,47 +123,82 @@ export default function MemberCardScreen() {
           storedNumber = (await AsyncStorage.getItem("membershipNumber")) || "";
         }
 
+        // Try authenticated endpoint first if we have a token
+        const token = await getBearerToken();
+        if (token) {
+          try {
+            console.log("[MemberCard] GET /api/membership/my-card (authenticated)");
+            const res = await fetch(`${BACKEND_URL}/api/membership/my-card`, {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            });
+            if (res.ok) {
+              const data: MemberCardData = await res.json();
+              console.log("[MemberCard] Authenticated card loaded:", data.membershipNumber);
+              setMemberData(data);
+              setShowInput(false);
+              if (data.membershipNumber) {
+                await AsyncStorage.setItem("membershipNumber", data.membershipNumber);
+              }
+              return;
+            }
+          } catch (authErr) {
+            console.warn("[MemberCard] Authenticated endpoint failed, trying public lookup");
+          }
+        }
+
+        // No token or auth failed — use public lookup
         if (!storedNumber) {
           console.log("[MemberCard] No membership number — showing input");
           setShowInput(true);
-          setLoading(false);
           return;
         }
 
-        console.log("[MemberCard] GET /api/membership/my-card");
-        // Try authenticated endpoint first, fall back to public lookup
-        let data: MemberCardData;
-        try {
-          data = await apiGet<MemberCardData>("/api/membership/my-card");
-        } catch {
-          console.log("[MemberCard] Falling back to /api/members/card/:number");
-          data = await apiGet<MemberCardData>(`/api/members/card/${storedNumber}`);
+        console.log("[MemberCard] GET /api/members/card/" + storedNumber);
+        const res = await fetch(`${BACKEND_URL}/api/members/card/${storedNumber}`, {
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error("[MemberCard] Public lookup error:", res.status, errText);
+          if (res.status === 404) {
+            showModal(
+              "Membre Non Trouvé",
+              "Aucun membre trouvé avec ce numéro. Vérifiez votre numéro ou inscrivez-vous."
+            );
+            setShowInput(true);
+          } else {
+            showModal("Erreur", "Impossible de charger votre carte. Veuillez réessayer.");
+          }
+          return;
         }
 
-        console.log("[MemberCard] Card data received:", data);
+        const data: MemberCardData = await res.json();
+        console.log("[MemberCard] Card data received:", data.membershipNumber);
         setMemberData(data);
         setShowInput(false);
         await AsyncStorage.setItem("membershipNumber", storedNumber);
       } catch (error: any) {
         console.error("[MemberCard] Error:", error);
-        const msg = String(error?.message || "");
-        if (msg.includes("404") || msg.includes("not found")) {
-          showModal(
-            "Membre Non Trouvé",
-            "Aucun membre trouvé avec ce numéro. Vérifiez votre numéro ou inscrivez-vous."
-          );
-          setShowInput(true);
-        } else {
-          showModal("Erreur", "Impossible de charger votre carte. Veuillez réessayer.");
-        }
+        showModal("Erreur", "Impossible de charger votre carte. Veuillez réessayer.");
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
     },
     [showModal]
   );
 
   useEffect(() => {
+    loadMemberCard();
+  }, [loadMemberCard]);
+
+  const onRefresh = useCallback(() => {
+    console.log("[MemberCard] Pull-to-refresh triggered");
+    setRefreshing(true);
     loadMemberCard();
   }, [loadMemberCard]);
 
@@ -182,33 +224,12 @@ export default function MemberCardScreen() {
     Alert.alert("Copié", "Numéro de membre copié dans le presse-papiers.");
   };
 
-  const handleShareCard = async () => {
-    console.log("[MemberCard] User tapped Partager la carte");
-    if (!memberData) return;
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    setSharing(true);
-    try {
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (isAvailable) {
-        // Share the membership number as text via a temp file approach
-        // Since we can't easily share a view snapshot, share the info as text
-        await Sharing.shareAsync(
-          `data:text/plain;base64,${btoa(
-            `Carte de Membre A.R.M\nNom: ${memberData.fullName}\nN°: ${memberData.membershipNumber}\nStatut: ${getStatusText(memberData.status)}`
-          )}`,
-          { mimeType: "text/plain", dialogTitle: "Partager ma carte A.R.M" }
-        );
-      } else {
-        showModal("Non disponible", "Le partage n'est pas disponible sur cet appareil.");
-      }
-    } catch (error: any) {
-      console.error("[MemberCard] Share error:", error);
-      showModal("Erreur", "Impossible de partager la carte.");
-    } finally {
-      setSharing(false);
-    }
+  const handleChangeMember = () => {
+    console.log("[MemberCard] User tapped Changer de membre");
+    setMemberData(null);
+    setInputValue("");
+    setShowInput(true);
+    AsyncStorage.removeItem("membershipNumber");
   };
 
   if (loading) {
@@ -217,7 +238,7 @@ export default function MemberCardScreen() {
         <Stack.Screen
           options={{ title: "Carte de Membre", headerShown: true, headerBackTitle: "Retour" }}
         />
-        <ActivityIndicator size="large" color={colors.primary} />
+        <ActivityIndicator size="large" color={DARK_GREEN} />
         <Text style={styles.loadingText}>Chargement de votre carte...</Text>
       </View>
     );
@@ -227,16 +248,34 @@ export default function MemberCardScreen() {
     return (
       <View style={styles.container}>
         <Stack.Screen
-          options={{ title: "Carte de Membre", headerShown: true, headerBackTitle: "Retour" }}
+          options={{
+            title: "Carte de Membre",
+            headerShown: true,
+            headerBackTitle: "Retour",
+            headerStyle: { backgroundColor: DARK_GREEN },
+            headerTintColor: "#FFFFFF",
+          }}
         />
         <ScrollView contentContainerStyle={styles.inputScreenContent}>
+          {/* Header Banner */}
+          <View style={styles.lookupBanner}>
+            <Image
+              source={resolveImageSource(
+                require("@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg")
+              )}
+              style={styles.lookupLogo}
+            />
+            <Text style={styles.lookupBannerTitle}>A.R.M</Text>
+            <Text style={styles.lookupBannerSubtitle}>Alliance pour le Rassemblement Malien</Text>
+          </View>
+
           <View style={styles.emptyState}>
             <View style={styles.emptyIconCircle}>
               <Text style={styles.emptyIconText}>🪪</Text>
             </View>
             <Text style={styles.emptyStateTitle}>Accéder à Ma Carte</Text>
             <Text style={styles.emptyStateText}>
-              Entrez votre numéro de membre pour accéder à votre carte digitale.
+              Entrez votre numéro de membre pour accéder à votre carte digitale. Aucune connexion requise.
             </Text>
 
             <View style={styles.inputBlock}>
@@ -244,17 +283,19 @@ export default function MemberCardScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Ex: ARM-2024-001"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor="#9E9E9E"
                 value={inputValue}
                 onChangeText={setInputValue}
                 autoCapitalize="characters"
+                returnKeyType="search"
+                onSubmitEditing={handleLookupCard}
               />
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={handleLookupCard}
                 activeOpacity={0.8}
               >
-                <Text style={styles.primaryButtonText}>Rechercher</Text>
+                <Text style={styles.primaryButtonText}>Rechercher ma carte</Text>
               </TouchableOpacity>
             </View>
 
@@ -266,7 +307,10 @@ export default function MemberCardScreen() {
 
             <TouchableOpacity
               style={styles.secondaryButton}
-              onPress={() => router.push("/member/register")}
+              onPress={() => {
+                console.log("[MemberCard] Navigate to register");
+                router.push("/member/register");
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.secondaryButtonText}>S'inscrire Maintenant</Text>
@@ -286,17 +330,30 @@ export default function MemberCardScreen() {
 
   const statusColor = getStatusColor(memberData.status);
   const statusLabel = getStatusText(memberData.status);
-  const joinDateStr = formatDate(memberData.joinDate || memberData.createdAt);
-  const expiryDateStr = formatDate(memberData.expiryDate);
+  const joinDateStr = formatDate(memberData.joinedAt || memberData.joinDate || memberData.createdAt);
   const qrValue = memberData.membershipNumber || memberData.id;
 
   return (
     <View style={styles.container}>
       <Stack.Screen
-        options={{ title: "Ma Carte de Membre", headerShown: true, headerBackTitle: "Retour" }}
+        options={{
+          title: "Ma Carte de Membre",
+          headerShown: true,
+          headerBackTitle: "Retour",
+          headerStyle: { backgroundColor: DARK_GREEN },
+          headerTintColor: "#FFFFFF",
+        }}
       />
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[DARK_GREEN]}
+            tintColor={DARK_GREEN}
+          />
+        }
       >
         {/* Digital Card */}
         <View style={styles.cardOuter}>
@@ -318,8 +375,8 @@ export default function MemberCardScreen() {
               </View>
             </View>
 
-            {/* Divider */}
-            <View style={styles.cardDivider} />
+            {/* Gold stripe */}
+            <View style={styles.goldStripe} />
 
             {/* Card Body */}
             <View style={styles.cardBody}>
@@ -332,25 +389,29 @@ export default function MemberCardScreen() {
                   {memberData.membershipNumber}
                 </Text>
 
-                <View style={styles.cardDates}>
-                  <View style={styles.cardDateItem}>
-                    <Text style={styles.cardLabel}>DATE D'ADHÉSION</Text>
-                    <Text style={styles.cardValue}>{joinDateStr}</Text>
-                  </View>
-                  {memberData.expiryDate && (
-                    <View style={styles.cardDateItem}>
-                      <Text style={styles.cardLabel}>EXPIRATION</Text>
-                      <Text style={styles.cardValue}>{expiryDateStr}</Text>
-                    </View>
-                  )}
-                </View>
-
-                {memberData.commune && (
+                {memberData.commune ? (
                   <>
                     <Text style={styles.cardLabel}>COMMUNE</Text>
                     <Text style={styles.cardValue}>{memberData.commune}</Text>
                   </>
-                )}
+                ) : null}
+
+                {memberData.profession ? (
+                  <>
+                    <Text style={styles.cardLabel}>PROFESSION</Text>
+                    <Text style={styles.cardValue}>{memberData.profession}</Text>
+                  </>
+                ) : null}
+
+                {memberData.phone ? (
+                  <>
+                    <Text style={styles.cardLabel}>TÉLÉPHONE</Text>
+                    <Text style={styles.cardValue}>{memberData.phone}</Text>
+                  </>
+                ) : null}
+
+                <Text style={styles.cardLabel}>DATE D'ADHÉSION</Text>
+                <Text style={styles.cardValue}>{joinDateStr}</Text>
               </View>
 
               {/* QR Code */}
@@ -359,7 +420,7 @@ export default function MemberCardScreen() {
                   <QRCode
                     value={qrValue}
                     size={90}
-                    color={colors.text}
+                    color={DARK_GREEN}
                     backgroundColor="transparent"
                   />
                 ) : (
@@ -373,7 +434,6 @@ export default function MemberCardScreen() {
 
             {/* Card Footer */}
             <View style={styles.cardFooter}>
-              <View style={styles.cardStripe} />
               <Text style={styles.cardFooterText}>
                 Fraternité • Liberté • Égalité
               </Text>
@@ -394,18 +454,11 @@ export default function MemberCardScreen() {
 
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnSecondary]}
-            onPress={handleShareCard}
-            disabled={sharing}
+            onPress={handleChangeMember}
             activeOpacity={0.8}
           >
-            {sharing ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <>
-                <Text style={styles.actionBtnIcon}>📤</Text>
-                <Text style={styles.actionBtnTextSecondary}>Partager la carte</Text>
-              </>
-            )}
+            <Text style={styles.actionBtnIcon}>🔄</Text>
+            <Text style={styles.actionBtnTextSecondary}>Changer</Text>
           </TouchableOpacity>
         </View>
 
@@ -466,32 +519,58 @@ export default function MemberCardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: "#F5F5F5",
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#FFFFFF",
     justifyContent: "center",
     alignItems: "center",
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: colors.textSecondary,
+    color: "#6C757D",
+  },
+  lookupBanner: {
+    backgroundColor: DARK_GREEN,
+    alignItems: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  lookupLogo: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: GOLD,
+    marginBottom: 12,
+  },
+  lookupBannerTitle: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: GOLD,
+    letterSpacing: 2,
+  },
+  lookupBannerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center",
+    marginTop: 4,
   },
   inputScreenContent: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 24,
   },
   emptyState: {
     alignItems: "center",
+    padding: 24,
   },
   emptyIconCircle: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: colors.primary + "18",
+    backgroundColor: DARK_GREEN + "18",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 20,
@@ -502,13 +581,13 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    color: colors.text,
+    color: "#1A1A1A",
     marginBottom: 10,
     textAlign: "center",
   },
   emptyStateText: {
     fontSize: 15,
-    color: colors.textSecondary,
+    color: "#6C757D",
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 32,
@@ -519,26 +598,26 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.text,
+    color: "#1A1A1A",
     marginBottom: 8,
   },
   input: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: DARK_GREEN + "60",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: colors.text,
+    color: "#1A1A1A",
     marginBottom: 16,
   },
   primaryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: DARK_GREEN,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
-    shadowColor: colors.primary,
+    shadowColor: DARK_GREEN,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -558,17 +637,17 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: "#DEE2E6",
   },
   dividerText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: "#6C757D",
     marginHorizontal: 16,
     fontWeight: "600",
   },
   secondaryButton: {
     borderWidth: 2,
-    borderColor: colors.primary,
+    borderColor: DARK_GREEN,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
@@ -577,7 +656,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: "bold",
-    color: colors.primary,
+    color: DARK_GREEN,
   },
   scrollContent: {
     padding: 20,
@@ -585,9 +664,9 @@ const styles = StyleSheet.create({
   cardOuter: {
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 16,
-    elevation: 10,
+    elevation: 12,
     borderRadius: 20,
     marginBottom: 20,
   },
@@ -597,12 +676,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: GOLD + "60",
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.primary,
+    backgroundColor: DARK_GREEN,
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 12,
@@ -612,20 +691,21 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 2,
-    borderColor: colors.secondary,
+    borderColor: GOLD,
   },
   cardHeaderText: {
     flex: 1,
   },
   cardPartyName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "900",
+    color: GOLD,
+    letterSpacing: 1,
   },
   cardPartyFull: {
-    fontSize: 10,
-    color: "#FFFFFF",
-    opacity: 0.85,
+    fontSize: 9,
+    color: "rgba(255,255,255,0.85)",
+    marginTop: 1,
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -637,9 +717,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-  cardDivider: {
-    height: 3,
-    backgroundColor: colors.secondary,
+  goldStripe: {
+    height: 4,
+    backgroundColor: GOLD,
   },
   cardBody: {
     flexDirection: "row",
@@ -652,28 +732,22 @@ const styles = StyleSheet.create({
   cardLabel: {
     fontSize: 9,
     fontWeight: "700",
-    color: colors.textSecondary,
+    color: DARK_GREEN,
     letterSpacing: 0.8,
     marginTop: 10,
     marginBottom: 2,
+    opacity: 0.7,
   },
   cardValue: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.text,
+    color: "#1A1A1A",
   },
   cardMemberNumber: {
     fontSize: 15,
     fontWeight: "800",
-    color: colors.primary,
+    color: DARK_GREEN,
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
-  },
-  cardDates: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  cardDateItem: {
-    flex: 1,
   },
   qrContainer: {
     alignItems: "center",
@@ -684,41 +758,37 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderWidth: 2,
-    borderColor: colors.border,
+    borderColor: DARK_GREEN + "40",
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
     padding: 6,
+    backgroundColor: DARK_GREEN + "08",
   },
   qrFallbackNumber: {
     fontSize: 9,
     fontWeight: "700",
-    color: colors.text,
+    color: DARK_GREEN,
     textAlign: "center",
     fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
   },
   qrLabel: {
     fontSize: 10,
-    color: colors.textSecondary,
+    color: "#6C757D",
     marginTop: 4,
   },
   cardFooter: {
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: DARK_GREEN,
     paddingVertical: 10,
     paddingHorizontal: 16,
     alignItems: "center",
   },
-  cardStripe: {
-    height: 2,
-    width: "100%",
-    backgroundColor: colors.primary + "30",
-    marginBottom: 6,
-  },
   cardFooterText: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: GOLD,
     fontStyle: "italic",
-    letterSpacing: 0.5,
+    letterSpacing: 1,
+    fontWeight: "600",
   },
   actionsRow: {
     flexDirection: "row",
@@ -735,17 +805,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionBtnPrimary: {
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
+    backgroundColor: DARK_GREEN,
+    shadowColor: DARK_GREEN,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 4,
   },
   actionBtnSecondary: {
-    backgroundColor: colors.card,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1.5,
-    borderColor: colors.primary,
+    borderColor: DARK_GREEN,
   },
   actionBtnIcon: {
     fontSize: 16,
@@ -758,10 +828,10 @@ const styles = StyleSheet.create({
   actionBtnTextSecondary: {
     fontSize: 14,
     fontWeight: "700",
-    color: colors.primary,
+    color: DARK_GREEN,
   },
   navSection: {
-    backgroundColor: colors.card,
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     overflow: "hidden",
     shadowColor: "#000",
@@ -776,7 +846,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: "#DEE2E6",
     gap: 12,
   },
   navItemIcon: {
@@ -785,12 +855,12 @@ const styles = StyleSheet.create({
   navItemText: {
     flex: 1,
     fontSize: 15,
-    color: colors.text,
+    color: "#1A1A1A",
     fontWeight: "500",
   },
   navItemChevron: {
     fontSize: 22,
-    color: colors.textSecondary,
+    color: "#6C757D",
     fontWeight: "300",
   },
 });

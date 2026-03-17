@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,24 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   Linking,
+  RefreshControl,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
-import { apiPost } from '@/utils/api';
 import { Modal } from '@/components/ui/Modal';
 import { Map, MapMarker } from '@/components/Map';
+import { BACKEND_URL } from '@/utils/api-helpers';
+
+interface Contact {
+  id: string;
+  name: string;
+  role?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+}
 
 export default function ContactScreen() {
   const [loading, setLoading] = useState(false);
@@ -26,6 +36,10 @@ export default function ContactScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [contactsRefreshing, setContactsRefreshing] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -42,10 +56,41 @@ export default function ContactScreen() {
     setModalVisible(true);
   };
 
+  const loadContacts = useCallback(async () => {
+    console.log('[Contact] GET /api/contacts');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/contacts`);
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn('[Contact] /api/contacts error:', res.status, errText);
+        setContacts([]);
+        return;
+      }
+      const data = await res.json();
+      console.log('[Contact] Contacts loaded:', data?.length ?? 0);
+      setContacts(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('[Contact] Error loading contacts:', err.message);
+      setContacts([]);
+    } finally {
+      setContactsLoading(false);
+      setContactsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  const onRefresh = useCallback(() => {
+    console.log('[Contact] Pull-to-refresh triggered');
+    setContactsRefreshing(true);
+    loadContacts();
+  }, [loadContacts]);
+
   const handleSubmit = async () => {
-    console.log('User tapped Send Message button');
-    
-    // Validation
+    console.log('[Contact] User tapped Send Message button');
+
     if (!formData.name.trim()) {
       showModal('Erreur', 'Veuillez entrer votre nom', 'error');
       return;
@@ -70,37 +115,45 @@ export default function ContactScreen() {
     setLoading(true);
 
     try {
-      console.log('[Contact] Submitting message:', formData);
-      
-      const response = await apiPost('/api/messages', {
-        senderName: formData.name,
-        senderEmail: formData.email || 'noemail@arm-mali.org',
-        subject: formData.subject,
-        message: formData.message,
+      const payload: any = {
+        senderName: formData.name.trim(),
+        senderEmail: formData.email.trim() || 'noemail@arm-mali.org',
+        subject: formData.subject.trim(),
+        message: formData.message.trim(),
+      };
+      if (formData.phone.trim()) {
+        payload.phone = formData.phone.trim();
+      }
+
+      console.log('[Contact] POST /api/messages with payload:', payload);
+
+      const res = await fetch(`${BACKEND_URL}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
-      
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('[Contact] POST /api/messages error:', res.status, errText);
+        throw new Error(`Erreur ${res.status}: ${errText}`);
+      }
+
+      const response = await res.json();
       console.log('[Contact] Message sent successfully:', response);
-      
+
       showModal(
         'Message Envoyé',
         'Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.',
         'success'
       );
-      
-      // Reset form
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        subject: '',
-        message: '',
-      });
-      
+
+      setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
     } catch (error: any) {
       console.error('[Contact] Error sending message:', error);
       showModal(
         'Erreur',
-        error?.message || 'Une erreur est survenue lors de l\'envoi du message. Veuillez réessayer.',
+        error?.message || "Une erreur est survenue lors de l'envoi du message. Veuillez réessayer.",
         'error'
       );
     } finally {
@@ -109,7 +162,7 @@ export default function ContactScreen() {
   };
 
   const handleCall = (phone: string) => {
-    console.log('User tapped call button:', phone);
+    console.log('[Contact] User tapped call button:', phone);
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -117,14 +170,13 @@ export default function ContactScreen() {
   };
 
   const handleEmail = (email: string) => {
-    console.log('User tapped email button:', email);
+    console.log('[Contact] User tapped email button:', email);
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     Linking.openURL(`mailto:${email}`);
   };
 
-  // Mali headquarters location
   const headquarters: MapMarker = {
     id: 'hq',
     latitude: 12.6392,
@@ -140,6 +192,8 @@ export default function ContactScreen() {
           title: 'Contactez-nous',
           headerShown: true,
           headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: '#FFFFFF',
         }}
       />
 
@@ -151,19 +205,70 @@ export default function ContactScreen() {
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={contactsRefreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
         >
-          {/* Contact Info */}
+          {/* ── CONTACTS FROM API ── */}
+          {(contactsLoading || contacts.length > 0) && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Nos Contacts</Text>
+              {contactsLoading ? (
+                <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
+              ) : (
+                <View style={styles.contactsGrid}>
+                  {contacts.map((contact) => (
+                    <View key={contact.id} style={styles.contactApiCard}>
+                      <View style={styles.contactApiAvatar}>
+                        <Text style={styles.contactApiAvatarText}>
+                          {contact.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.contactApiInfo}>
+                        <Text style={styles.contactApiName}>{contact.name}</Text>
+                        {contact.role ? (
+                          <Text style={styles.contactApiRole}>{contact.role}</Text>
+                        ) : null}
+                        {contact.phone ? (
+                          <TouchableOpacity
+                            style={styles.contactApiAction}
+                            onPress={() => handleCall(contact.phone!)}
+                            activeOpacity={0.7}
+                          >
+                            <IconSymbol ios_icon_name="phone.fill" android_material_icon_name="phone" size={13} color={colors.primary} />
+                            <Text style={styles.contactApiActionText}>{contact.phone}</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {contact.email ? (
+                          <TouchableOpacity
+                            style={styles.contactApiAction}
+                            onPress={() => handleEmail(contact.email!)}
+                            activeOpacity={0.7}
+                          >
+                            <IconSymbol ios_icon_name="envelope.fill" android_material_icon_name="email" size={13} color={colors.primary} />
+                            <Text style={styles.contactApiActionText} numberOfLines={1}>{contact.email}</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ── STATIC CONTACT INFO ── */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Informations de Contact</Text>
-            
+
             <View style={styles.contactCard}>
               <View style={styles.contactItem}>
-                <IconSymbol
-                  ios_icon_name="building.2.fill"
-                  android_material_icon_name="location-city"
-                  size={24}
-                  color={colors.primary}
-                />
+                <IconSymbol ios_icon_name="building.2.fill" android_material_icon_name="location-city" size={24} color={colors.primary} />
                 <View style={styles.contactInfo}>
                   <Text style={styles.contactLabel}>Siège</Text>
                   <Text style={styles.contactValue}>Rue 530, Porte 245</Text>
@@ -172,12 +277,7 @@ export default function ContactScreen() {
               </View>
 
               <View style={styles.contactItem}>
-                <IconSymbol
-                  ios_icon_name="phone.fill"
-                  android_material_icon_name="phone"
-                  size={24}
-                  color={colors.primary}
-                />
+                <IconSymbol ios_icon_name="phone.fill" android_material_icon_name="phone" size={24} color={colors.primary} />
                 <View style={styles.contactInfo}>
                   <Text style={styles.contactLabel}>Téléphone</Text>
                   <TouchableOpacity onPress={() => handleCall('+34632607101')}>
@@ -190,12 +290,7 @@ export default function ContactScreen() {
               </View>
 
               <View style={styles.contactItem}>
-                <IconSymbol
-                  ios_icon_name="envelope.fill"
-                  android_material_icon_name="email"
-                  size={24}
-                  color={colors.primary}
-                />
+                <IconSymbol ios_icon_name="envelope.fill" android_material_icon_name="email" size={24} color={colors.primary} />
                 <View style={styles.contactInfo}>
                   <Text style={styles.contactLabel}>Email</Text>
                   <TouchableOpacity onPress={() => handleEmail('contact@arm-mali.org')}>
@@ -206,7 +301,7 @@ export default function ContactScreen() {
             </View>
           </View>
 
-          {/* Map */}
+          {/* ── MAP ── */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Notre Localisation</Text>
             <View style={styles.mapContainer}>
@@ -223,10 +318,10 @@ export default function ContactScreen() {
             </View>
           </View>
 
-          {/* Contact Form */}
+          {/* ── CONTACT FORM ── */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Envoyez-nous un Message</Text>
-            
+
             <View style={styles.form}>
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Nom *</Text>
@@ -299,12 +394,7 @@ export default function ContactScreen() {
                   <ActivityIndicator color={colors.background} />
                 ) : (
                   <>
-                    <IconSymbol
-                      ios_icon_name="paperplane.fill"
-                      android_material_icon_name="send"
-                      size={20}
-                      color={colors.background}
-                    />
+                    <IconSymbol ios_icon_name="paperplane.fill" android_material_icon_name="send" size={20} color={colors.background} />
                     <Text style={styles.submitButtonText}>Envoyer</Text>
                   </>
                 )}
@@ -326,134 +416,43 @@ export default function ContactScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
-    paddingBottom: 40,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  contactCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  contactInfo: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  contactLabel: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  contactValue: {
-    fontSize: 15,
-    color: colors.text,
-    marginBottom: 2,
-  },
-  contactLink: {
-    fontSize: 15,
-    color: colors.primary,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  mapContainer: {
-    height: 250,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  map: {
-    flex: 1,
-  },
-  form: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-  },
-  textArea: {
-    minHeight: 120,
-    textAlignVertical: 'top',
-  },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: colors.background,
-    marginLeft: 8,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  keyboardView: { flex: 1 },
+  scrollView: { flex: 1 },
+  contentContainer: { paddingTop: Platform.OS === 'android' ? 16 : 0, paddingBottom: 40 },
+  section: { paddingHorizontal: 20, marginTop: 24 },
+  sectionTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 16 },
+
+  // API contacts grid
+  contactsGrid: { gap: 12 },
+  contactApiCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'flex-start', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
+  contactApiAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary + '20', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  contactApiAvatarText: { fontSize: 18, fontWeight: '700', color: colors.primary },
+  contactApiInfo: { flex: 1 },
+  contactApiName: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 2 },
+  contactApiRole: { fontSize: 13, color: colors.textSecondary, marginBottom: 6 },
+  contactApiAction: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  contactApiActionText: { fontSize: 14, color: colors.primary, fontWeight: '500', flex: 1 },
+
+  // Static contact card
+  contactCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
+  contactItem: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  contactInfo: { flex: 1, marginLeft: 16 },
+  contactLabel: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
+  contactValue: { fontSize: 15, color: colors.text, marginBottom: 2 },
+  contactLink: { fontSize: 15, color: colors.primary, fontWeight: '600', marginBottom: 2 },
+
+  // Map
+  mapContainer: { height: 250, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
+  map: { flex: 1 },
+
+  // Form
+  form: { backgroundColor: colors.card, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
+  inputGroup: { marginBottom: 16 },
+  label: { fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  input: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: colors.text },
+  textArea: { minHeight: 120, textAlignVertical: 'top' },
+  submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 12, marginTop: 8, shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  submitButtonDisabled: { opacity: 0.6 },
+  submitButtonText: { fontSize: 17, fontWeight: 'bold', color: colors.background, marginLeft: 8 },
 });
