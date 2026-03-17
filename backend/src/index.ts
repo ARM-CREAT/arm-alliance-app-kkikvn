@@ -77,8 +77,6 @@ settingsRoutes.register(app, app.fastify);
 
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);
-await ideologyRoutes.seedAppContent(app);
-await contactRoutes.seedContacts(app);
 await settingsRoutes.seedSettings(app);
 
 // Setup WebSocket signaling for conferences

@@ -3,175 +3,37 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
-interface CreateMemberBody {
-  name: string;
-  email: string;
-  phone: string;
-  region: string;
-  cercle?: string;
-  commune?: string;
+interface UpdateStatusBody {
+  status: 'approved' | 'rejected' | 'suspended';
 }
 
-interface UpdateStatusBody {
-  status: 'approved' | 'rejected';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
+  const password = request.headers['x-admin-password'];
+  if (!password || password !== ADMIN_PASSWORD) {
+    reply.status(401).send({ error: 'Unauthorized' });
+    return false;
+  }
+  return true;
+}
+
+function formatMemberCard(profile: any) {
+  return {
+    membershipNumber: profile.membershipNumber,
+    fullName: profile.fullName,
+    commune: profile.commune,
+    profession: profile.profession,
+    phone: profile.phone,
+    email: profile.email || null,
+    status: profile.status,
+    joinedAt: profile.createdAt.toISOString(),
+    photoUrl: null,
+  };
 }
 
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
-
-  // POST /api/membership - Create a new membership application
-  fastify.post<{ Body: CreateMemberBody }>(
-    '/api/membership',
-    {
-      schema: {
-        description: 'Create a new membership application',
-        tags: ['membership'],
-        body: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            email: { type: 'string' },
-            phone: { type: 'string' },
-            region: { type: 'string' },
-            cercle: { type: 'string' },
-            commune: { type: 'string' },
-          },
-          required: ['name', 'email', 'phone', 'region'],
-        },
-        response: {
-          200: { type: 'object' },
-        },
-      },
-    },
-    async (request, reply) => {
-      const { name, email, phone, region, cercle, commune } = request.body;
-      app.logger.info(
-        { email, region },
-        'Creating membership application'
-      );
-
-      try {
-        const result = await app.db
-          .insert(schema.members)
-          .values({
-            name,
-            email,
-            phone,
-            region,
-            cercle,
-            commune,
-          })
-          .returning();
-
-        app.logger.info(
-          { memberId: result[0].id },
-          'Membership application created'
-        );
-        return result[0];
-      } catch (error) {
-        app.logger.error(
-          { err: error, email },
-          'Failed to create membership application'
-        );
-        throw error;
-      }
-    }
-  );
-
-  // GET /api/membership - Get all members (admin only)
-  fastify.get<{ Querystring: { status?: string } }>(
-    '/api/membership',
-    {
-      schema: {
-        description: 'Get all members (admin only)',
-        tags: ['membership'],
-        querystring: {
-          type: 'object',
-          properties: {
-            status: { type: 'string' },
-          },
-        },
-        response: {
-          200: { type: 'array' },
-        },
-      },
-    },
-    async (request, reply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
-
-      const { status } = request.query;
-      app.logger.info({ status }, 'Fetching members');
-
-      try {
-        let query = app.db.select().from(schema.members);
-        if (status) {
-          query = query.where(eq(schema.members.status, status)) as any;
-        }
-        const result = await query;
-        app.logger.info({ count: result.length }, 'Members fetched successfully');
-        return result;
-      } catch (error) {
-        app.logger.error({ err: error }, 'Failed to fetch members');
-        throw error;
-      }
-    }
-  );
-
-  // PUT /api/membership/:id/status - Approve or reject membership (admin)
-  fastify.put<{ Params: { id: string }; Body: UpdateStatusBody }>(
-    '/api/membership/:id/status',
-    {
-      schema: {
-        description: 'Update membership status (admin only)',
-        tags: ['membership'],
-        params: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-          },
-        },
-        body: {
-          type: 'object',
-          properties: {
-            status: { type: 'string', enum: ['approved', 'rejected'] },
-          },
-          required: ['status'],
-        },
-        response: {
-          200: { type: 'object' },
-        },
-      },
-    },
-    async (request, reply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
-
-      const { id } = request.params;
-      const { status } = request.body;
-      app.logger.info({ memberId: id, status }, 'Updating membership status');
-
-      try {
-        const result = await app.db
-          .update(schema.members)
-          .set({ status })
-          .where(eq(schema.members.id, id))
-          .returning();
-
-        app.logger.info(
-          { memberId: id, status },
-          'Membership status updated'
-        );
-        return result[0];
-      } catch (error) {
-        app.logger.error(
-          { err: error, memberId: id },
-          'Failed to update membership status'
-        );
-        throw error;
-      }
-    }
-  );
 
   // GET /api/membership/my-card - Get authenticated member's card (authenticated)
   fastify.get(
@@ -192,7 +54,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!session) return;
 
       const userId = session.user.id;
-      app.logger.info({ userId }, 'Fetching member card');
+      app.logger.info({ userId }, 'Fetching authenticated member card');
 
       try {
         const result = await app.db
@@ -203,37 +65,120 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ userId }, 'Member profile not found');
           reply.status(404);
-          return { error: 'NotFound', message: 'Member profile not found' };
+          return { error: 'Not found' };
         }
 
-        const profile = result[0];
-        const joinDate = new Date(profile.createdAt);
-        const expiryDate = new Date(joinDate);
-        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-
-        const cardQrData = JSON.stringify({
-          membershipNumber: profile.membershipNumber,
-          fullName: profile.fullName,
-          status: profile.status,
-        });
-
-        app.logger.info(
-          { userId, membershipNumber: profile.membershipNumber },
-          'Member card fetched successfully'
-        );
-
-        return {
-          membershipNumber: profile.membershipNumber,
-          fullName: profile.fullName,
-          status: profile.status,
-          joinDate: joinDate.toISOString(),
-          expiryDate: expiryDate.toISOString(),
-          cardQrData,
-        };
+        app.logger.info({ userId }, 'Authenticated member card fetched');
+        return formatMemberCard(result[0]);
       } catch (error) {
         app.logger.error({ err: error, userId }, 'Failed to fetch member card');
         throw error;
       }
     }
   );
+
+  // GET /api/membership - Get all members (admin only)
+  fastify.get(
+    '/api/membership',
+    {
+      schema: {
+        description: 'Get all members (admin only)',
+        tags: ['membership'],
+        response: {
+          200: { type: 'array' },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
+      app.logger.info('Admin fetching all members');
+
+      reply.header('Cache-Control', 'no-store');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .orderBy(schema.memberProfiles.createdAt);
+
+        const formatted = result.map((p) => ({
+          id: p.id,
+          fullName: p.fullName,
+          email: p.email || null,
+          phone: p.phone,
+          commune: p.commune,
+          profession: p.profession,
+          status: p.status,
+          membershipNumber: p.membershipNumber,
+          joinedAt: p.createdAt.toISOString(),
+          nina: p.nina || null,
+        }));
+
+        app.logger.info({ count: formatted.length }, 'Admin members fetched');
+        return formatted;
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch members');
+        throw error;
+      }
+    }
+  );
+
+  // PUT /api/membership/:id/status - Update member status (admin only)
+  fastify.put<{ Params: { id: string }; Body: UpdateStatusBody }>(
+    '/api/membership/:id/status',
+    {
+      schema: {
+        description: 'Update member status (admin only)',
+        tags: ['membership'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['approved', 'rejected', 'suspended'] },
+          },
+          required: ['status'],
+        },
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!verifyAdminPassword(request, reply)) return;
+
+      const { id } = request.params;
+      const { status } = request.body;
+      app.logger.info({ memberId: id, status }, 'Updating member status');
+
+      try {
+        const result = await app.db
+          .update(schema.memberProfiles)
+          .set({ status })
+          .where(eq(schema.memberProfiles.id, id))
+          .returning();
+
+        if (result.length === 0) {
+          app.logger.warn({ memberId: id }, 'Member not found');
+          reply.status(404);
+          return { error: 'Not found' };
+        }
+
+        app.logger.info({ memberId: id, status }, 'Member status updated');
+        return { success: true, id, status };
+      } catch (error) {
+        app.logger.error({ err: error, memberId: id }, 'Failed to update member status');
+        throw error;
+      }
+    }
+  );
+
 }
