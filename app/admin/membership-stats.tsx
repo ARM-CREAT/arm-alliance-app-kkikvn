@@ -24,13 +24,14 @@ interface Member {
   fullName: string;
   membershipNumber: string;
   commune: string;
-  profession: string;
-  phone: string;
+  profession?: string;
+  phone?: string;
   email?: string;
   address?: string;
-  status: 'pending' | 'active' | 'suspended' | 'expired';
-  role: string;
-  createdAt: string;
+  status: string;
+  role?: string;
+  createdAt?: string;
+  joinedAt?: string;
 }
 
 interface Stats {
@@ -41,13 +42,20 @@ interface Stats {
   expired: number;
 }
 
+function normalizeStatus(status: string): 'pending' | 'active' | 'suspended' | 'expired' {
+  if (status === 'approved' || status === 'active') return 'active';
+  if (status === 'pending') return 'pending';
+  if (status === 'suspended' || status === 'rejected') return 'suspended';
+  return 'expired';
+}
+
 function computeStats(members: Member[]): Stats {
   return {
     total: members.length,
-    active: members.filter(m => m.status === 'active').length,
-    pending: members.filter(m => m.status === 'pending').length,
-    suspended: members.filter(m => m.status === 'suspended').length,
-    expired: members.filter(m => m.status === 'expired').length,
+    active: members.filter(m => normalizeStatus(m.status) === 'active').length,
+    pending: members.filter(m => normalizeStatus(m.status) === 'pending').length,
+    suspended: members.filter(m => normalizeStatus(m.status) === 'suspended').length,
+    expired: members.filter(m => normalizeStatus(m.status) === 'expired').length,
   };
 }
 
@@ -64,7 +72,8 @@ function formatDate(dateString: string): string {
 }
 
 function getStatusLabel(status: string): string {
-  switch (status) {
+  const n = normalizeStatus(status);
+  switch (n) {
     case 'active': return 'Actif';
     case 'pending': return 'En attente';
     case 'suspended': return 'Suspendu';
@@ -74,7 +83,8 @@ function getStatusLabel(status: string): string {
 }
 
 function getStatusColor(status: string): string {
-  switch (status) {
+  const n = normalizeStatus(status);
+  switch (n) {
     case 'active': return '#34C759';
     case 'pending': return '#FF9500';
     case 'suspended': return '#FF3B30';
@@ -135,7 +145,7 @@ export default function MembershipStatsScreen() {
       if (!result) {
         console.log('[MembershipStats] Falling back to GET /api/membership');
         const res = await fetch(`${BACKEND_URL}/api/membership`, {
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-admin-password': password },
         });
         if (res.ok) {
           const data = await res.json();
@@ -200,15 +210,16 @@ export default function MembershipStatsScreen() {
   const stats = computeStats(members);
 
   const filteredMembers = members.filter(m => {
-    const matchesFilter = filter === 'all' || m.status === filter;
+    const normalized = normalizeStatus(m.status);
+    const matchesFilter = filter === 'all' || normalized === filter;
     const q = search.toLowerCase().trim();
     const matchesSearch =
       !q ||
-      m.fullName.toLowerCase().includes(q) ||
+      (m.fullName ?? '').toLowerCase().includes(q) ||
       (m.email ?? '').toLowerCase().includes(q) ||
-      m.phone.includes(q) ||
-      m.commune.toLowerCase().includes(q) ||
-      m.membershipNumber.toLowerCase().includes(q);
+      (m.phone ?? '').includes(q) ||
+      (m.commune ?? '').toLowerCase().includes(q) ||
+      (m.membershipNumber ?? '').toLowerCase().includes(q);
     return matchesFilter && matchesSearch;
   });
 
@@ -379,7 +390,7 @@ export default function MembershipStatsScreen() {
           {!error && filteredMembers.map(member => {
             const statusColor = getStatusColor(member.status);
             const statusLabel = getStatusLabel(member.status);
-            const joinDate = formatDate(member.createdAt);
+            const joinDate = formatDate(member.joinedAt ?? member.createdAt ?? '');
 
             return (
               <View key={member.id} style={styles.memberCard}>
