@@ -20,6 +20,7 @@ import * as Haptics from 'expo-haptics';
 import { Modal } from '@/components/ui/Modal';
 import { Map, MapMarker } from '@/components/Map';
 import { BACKEND_URL } from '@/utils/api-helpers';
+import { apiGet, apiPost } from '@/utils/api';
 
 interface Contact {
   id: string;
@@ -28,7 +29,20 @@ interface Contact {
   phone?: string;
   email?: string;
   address?: string;
+  type?: 'general' | 'regional' | 'media' | string;
 }
+
+const TYPE_COLORS: Record<string, string> = {
+  general: colors.primary,
+  regional: colors.secondary,
+  media: colors.accent,
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  general: 'Général',
+  regional: 'Régional',
+  media: 'Médias',
+};
 
 export default function ContactScreen() {
   const [loading, setLoading] = useState(false);
@@ -41,17 +55,14 @@ export default function ContactScreen() {
   const [contactsLoading, setContactsLoading] = useState(true);
   const [contactsRefreshing, setContactsRefreshing] = useState(false);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    subject: '',
-    message: '',
-  });
+  const [senderName, setSenderName] = useState('');
+  const [senderEmail, setSenderEmail] = useState('');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
 
-  const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
+  const showModal = (title: string, msg: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
     setModalTitle(title);
-    setModalMessage(message);
+    setModalMessage(msg);
     setModalType(type);
     setModalVisible(true);
   };
@@ -59,15 +70,8 @@ export default function ContactScreen() {
   const loadContacts = useCallback(async () => {
     console.log('[Contact] GET /api/contacts');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/contacts`);
-      if (!res.ok) {
-        const errText = await res.text();
-        console.warn('[Contact] /api/contacts error:', res.status, errText);
-        setContacts([]);
-        return;
-      }
-      const data = await res.json();
-      console.log('[Contact] Contacts loaded:', data?.length ?? 0);
+      const data = await apiGet<Contact[]>('/api/contacts');
+      console.log('[Contact] Contacts loaded:', Array.isArray(data) ? data.length : 0);
       setContacts(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('[Contact] Error loading contacts:', err.message);
@@ -91,19 +95,19 @@ export default function ContactScreen() {
   const handleSubmit = async () => {
     console.log('[Contact] User tapped Send Message button');
 
-    if (!formData.name.trim()) {
+    if (!senderName.trim()) {
       showModal('Erreur', 'Veuillez entrer votre nom', 'error');
       return;
     }
-    if (!formData.email.trim() && !formData.phone.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre email ou téléphone', 'error');
+    if (!senderEmail.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre email', 'error');
       return;
     }
-    if (!formData.subject.trim()) {
+    if (!subject.trim()) {
       showModal('Erreur', 'Veuillez entrer un sujet', 'error');
       return;
     }
-    if (!formData.message.trim()) {
+    if (!message.trim()) {
       showModal('Erreur', 'Veuillez entrer votre message', 'error');
       return;
     }
@@ -114,32 +118,17 @@ export default function ContactScreen() {
 
     setLoading(true);
 
+    const payload = {
+      senderName: senderName.trim(),
+      senderEmail: senderEmail.trim(),
+      subject: subject.trim(),
+      message: message.trim(),
+    };
+
+    console.log('[Contact] POST /api/messages with payload:', payload);
+
     try {
-      const payload: any = {
-        senderName: formData.name.trim(),
-        senderEmail: formData.email.trim() || 'noemail@arm-mali.org',
-        subject: formData.subject.trim(),
-        message: formData.message.trim(),
-      };
-      if (formData.phone.trim()) {
-        payload.phone = formData.phone.trim();
-      }
-
-      console.log('[Contact] POST /api/messages with payload:', payload);
-
-      const res = await fetch(`${BACKEND_URL}/api/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error('[Contact] POST /api/messages error:', res.status, errText);
-        throw new Error(`Erreur ${res.status}: ${errText}`);
-      }
-
-      const response = await res.json();
+      const response = await apiPost('/api/messages', payload);
       console.log('[Contact] Message sent successfully:', response);
 
       showModal(
@@ -148,7 +137,10 @@ export default function ContactScreen() {
         'success'
       );
 
-      setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+      setSenderName('');
+      setSenderEmail('');
+      setSubject('');
+      setMessage('');
     } catch (error: any) {
       console.error('[Contact] Error sending message:', error);
       showModal(
@@ -215,24 +207,37 @@ export default function ContactScreen() {
           }
         >
           {/* ── CONTACTS FROM API ── */}
-          {(contactsLoading || contacts.length > 0) && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Nos Contacts</Text>
-              {contactsLoading ? (
-                <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
-              ) : (
-                <View style={styles.contactsGrid}>
-                  {contacts.map((contact) => (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Nos Contacts</Text>
+            {contactsLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
+            ) : contacts.length === 0 ? (
+              <Text style={styles.emptyText}>Aucun contact disponible.</Text>
+            ) : (
+              <View style={styles.contactsGrid}>
+                {contacts.map((contact) => {
+                  const typeColor = TYPE_COLORS[contact.type || ''] || colors.primary;
+                  const typeLabel = TYPE_LABELS[contact.type || ''] || contact.type;
+                  const initial = contact.name ? contact.name.charAt(0).toUpperCase() : '?';
+                  return (
                     <View key={contact.id} style={styles.contactApiCard}>
                       <View style={styles.contactApiAvatar}>
-                        <Text style={styles.contactApiAvatarText}>
-                          {contact.name.charAt(0).toUpperCase()}
-                        </Text>
+                        <Text style={styles.contactApiAvatarText}>{initial}</Text>
                       </View>
                       <View style={styles.contactApiInfo}>
-                        <Text style={styles.contactApiName}>{contact.name}</Text>
+                        <View style={styles.contactApiNameRow}>
+                          <Text style={styles.contactApiName}>{contact.name}</Text>
+                          {contact.type ? (
+                            <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
+                              <Text style={styles.typeBadgeText}>{typeLabel}</Text>
+                            </View>
+                          ) : null}
+                        </View>
                         {contact.role ? (
                           <Text style={styles.contactApiRole}>{contact.role}</Text>
+                        ) : null}
+                        {contact.address ? (
+                          <Text style={styles.contactApiAddress}>{contact.address}</Text>
                         ) : null}
                         {contact.phone ? (
                           <TouchableOpacity
@@ -256,11 +261,11 @@ export default function ContactScreen() {
                         ) : null}
                       </View>
                     </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
+                  );
+                })}
+              </View>
+            )}
+          </View>
 
           {/* ── STATIC CONTACT INFO ── */}
           <View style={styles.section}>
@@ -329,34 +334,22 @@ export default function ContactScreen() {
                   style={styles.input}
                   placeholder="Votre nom complet"
                   placeholderTextColor={colors.textSecondary}
-                  value={formData.name}
-                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  value={senderName}
+                  onChangeText={setSenderName}
                   autoCapitalize="words"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>Email *</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="votre.email@exemple.com"
                   placeholderTextColor={colors.textSecondary}
-                  value={formData.email}
-                  onChangeText={(text) => setFormData({ ...formData, email: text })}
+                  value={senderEmail}
+                  onChangeText={setSenderEmail}
                   keyboardType="email-address"
                   autoCapitalize="none"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Téléphone</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="+223 XX XX XX XX"
-                  placeholderTextColor={colors.textSecondary}
-                  value={formData.phone}
-                  onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                  keyboardType="phone-pad"
                 />
               </View>
 
@@ -366,8 +359,8 @@ export default function ContactScreen() {
                   style={styles.input}
                   placeholder="Sujet de votre message"
                   placeholderTextColor={colors.textSecondary}
-                  value={formData.subject}
-                  onChangeText={(text) => setFormData({ ...formData, subject: text })}
+                  value={subject}
+                  onChangeText={setSubject}
                 />
               </View>
 
@@ -377,8 +370,8 @@ export default function ContactScreen() {
                   style={[styles.input, styles.textArea]}
                   placeholder="Votre message..."
                   placeholderTextColor={colors.textSecondary}
-                  value={formData.message}
-                  onChangeText={(text) => setFormData({ ...formData, message: text })}
+                  value={message}
+                  onChangeText={setMessage}
                   multiline
                   numberOfLines={6}
                 />
@@ -422,20 +415,55 @@ const styles = StyleSheet.create({
   contentContainer: { paddingTop: Platform.OS === 'android' ? 16 : 0, paddingBottom: 40 },
   section: { paddingHorizontal: 20, marginTop: 24 },
   sectionTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 16 },
+  emptyText: { color: colors.textSecondary, textAlign: 'center', marginVertical: 16, fontSize: 15 },
 
   // API contacts grid
   contactsGrid: { gap: 12 },
-  contactApiCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'flex-start', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
-  contactApiAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary + '20', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  contactApiCard: {
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  contactApiAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   contactApiAvatarText: { fontSize: 18, fontWeight: '700', color: colors.primary },
   contactApiInfo: { flex: 1 },
-  contactApiName: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 2 },
-  contactApiRole: { fontSize: 13, color: colors.textSecondary, marginBottom: 6 },
+  contactApiNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 2 },
+  contactApiName: { fontSize: 16, fontWeight: '700', color: colors.text },
+  typeBadge: { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  typeBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  contactApiRole: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
+  contactApiAddress: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
   contactApiAction: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   contactApiActionText: { fontSize: 14, color: colors.primary, fontWeight: '500', flex: 1 },
 
   // Static contact card
-  contactCard: { backgroundColor: colors.card, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, elevation: 4 },
+  contactCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   contactItem: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   contactInfo: { flex: 1, marginLeft: 16 },
   contactLabel: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },

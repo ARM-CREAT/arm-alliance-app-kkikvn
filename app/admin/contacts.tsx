@@ -17,7 +17,7 @@ import { Stack, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/styles/commonStyles';
-import { BACKEND_URL } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 
 interface Contact {
   id: string;
@@ -63,7 +63,7 @@ export default function AdminContactsScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
 
   const checkAuth = useCallback(async () => {
@@ -73,7 +73,7 @@ export default function AdminContactsScreen() {
     }
   }, [router]);
 
-  const getAdminHeaders = async () => {
+  const getAdminHeaders = async (): Promise<Record<string, string>> => {
     const password = await AsyncStorage.getItem('admin_password');
     return {
       'Content-Type': 'application/json',
@@ -91,7 +91,7 @@ export default function AdminContactsScreen() {
         throw new Error(`Erreur ${response.status}: ${text}`);
       }
       const data = await response.json();
-      const list = Array.isArray(data) ? data : (data.contacts || []);
+      const list: Contact[] = Array.isArray(data) ? data : (data.contacts || []);
       setContacts(list);
       setError('');
     } catch (e: any) {
@@ -107,6 +107,7 @@ export default function AdminContactsScreen() {
   }, [fetchContacts]);
 
   const onRefresh = useCallback(async () => {
+    console.log('[Admin Contacts] Pull-to-refresh triggered');
     setRefreshing(true);
     await fetchContacts();
     setRefreshing(false);
@@ -121,7 +122,7 @@ export default function AdminContactsScreen() {
     console.log('[Admin Contacts] Open create modal');
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingContact(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm });
     setShowFormModal(true);
   };
 
@@ -147,6 +148,17 @@ export default function AdminContactsScreen() {
     setShowDeleteModal(true);
   };
 
+  const closeFormModal = () => {
+    setShowFormModal(false);
+    setEditingContact(null);
+    setForm({ ...emptyForm });
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setDeletingId(null);
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) {
       Alert.alert('Erreur', 'Le nom est requis');
@@ -158,11 +170,11 @@ export default function AdminContactsScreen() {
     try {
       const headers = await getAdminHeaders();
       const body = {
-        name: form.name,
-        role: form.role,
-        phone: form.phone,
-        email: form.email,
-        address: form.address,
+        name: form.name.trim(),
+        role: form.role.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        address: form.address.trim(),
         type: form.type,
       };
       if (editingContact) {
@@ -176,6 +188,7 @@ export default function AdminContactsScreen() {
           const text = await response.text();
           throw new Error(`Erreur ${response.status}: ${text}`);
         }
+        console.log('[Admin Contacts] Contact updated successfully');
       } else {
         console.log('[Admin Contacts] POST /api/admin/contacts');
         const response = await fetch(`${BACKEND_URL}/api/admin/contacts`, {
@@ -187,8 +200,9 @@ export default function AdminContactsScreen() {
           const text = await response.text();
           throw new Error(`Erreur ${response.status}: ${text}`);
         }
+        console.log('[Admin Contacts] Contact created successfully');
       }
-      setShowFormModal(false);
+      closeFormModal();
       await fetchContacts();
     } catch (e: any) {
       console.error('[Admin Contacts] Save error:', e.message);
@@ -212,8 +226,8 @@ export default function AdminContactsScreen() {
         const text = await response.text();
         throw new Error(`Erreur ${response.status}: ${text}`);
       }
-      setShowDeleteModal(false);
-      setDeletingId(null);
+      console.log('[Admin Contacts] Contact deleted successfully');
+      closeDeleteModal();
       await fetchContacts();
     } catch (e: any) {
       console.error('[Admin Contacts] Delete error:', e.message);
@@ -242,7 +256,14 @@ export default function AdminContactsScreen() {
         ) : (
           <ScrollView
             contentContainerStyle={styles.list}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[colors.primary]}
+                tintColor={colors.primary}
+              />
+            }
           >
             {error ? (
               <Text style={styles.errorText}>{error}</Text>
@@ -260,9 +281,10 @@ export default function AdminContactsScreen() {
                         <Text style={styles.badgeText}>{typeLabel}</Text>
                       </View>
                     </View>
-                    <Text style={styles.cardRole}>{contact.role}</Text>
-                    <Text style={styles.cardMeta}>{contact.phone}</Text>
-                    <Text style={styles.cardMeta}>{contact.email}</Text>
+                    {contact.role ? <Text style={styles.cardRole}>{contact.role}</Text> : null}
+                    {contact.phone ? <Text style={styles.cardMeta}>{contact.phone}</Text> : null}
+                    {contact.email ? <Text style={styles.cardMeta}>{contact.email}</Text> : null}
+                    {contact.address ? <Text style={styles.cardAddress}>{contact.address}</Text> : null}
                     <View style={styles.cardActions}>
                       <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(contact)}>
                         <Text style={styles.editBtnText}>Modifier</Text>
@@ -280,60 +302,68 @@ export default function AdminContactsScreen() {
       </View>
 
       {/* Form Modal */}
-      <Modal visible={showFormModal} animationType="slide" transparent>
+      <Modal visible={showFormModal} animationType="slide" transparent onRequestClose={closeFormModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>
               {editingContact ? 'Modifier le contact' : 'Nouveau contact'}
             </Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.label}>Nom *</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <Text style={styles.fieldLabel}>Nom *</Text>
               <TextInput
                 style={styles.input}
                 value={form.name}
                 onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
                 placeholder="Nom complet"
+                placeholderTextColor={colors.textSecondary}
               />
-              <Text style={styles.label}>Rôle</Text>
+              <Text style={styles.fieldLabel}>Rôle</Text>
               <TextInput
                 style={styles.input}
                 value={form.role}
                 onChangeText={(v) => setForm((f) => ({ ...f, role: v }))}
                 placeholder="Rôle / Fonction"
+                placeholderTextColor={colors.textSecondary}
               />
-              <Text style={styles.label}>Téléphone</Text>
+              <Text style={styles.fieldLabel}>Téléphone</Text>
               <TextInput
                 style={styles.input}
                 value={form.phone}
                 onChangeText={(v) => setForm((f) => ({ ...f, phone: v }))}
                 placeholder="+223 XX XX XX XX"
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="phone-pad"
               />
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.fieldLabel}>Email</Text>
               <TextInput
                 style={styles.input}
                 value={form.email}
                 onChangeText={(v) => setForm((f) => ({ ...f, email: v }))}
                 placeholder="email@exemple.com"
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              <Text style={styles.label}>Adresse</Text>
+              <Text style={styles.fieldLabel}>Adresse</Text>
               <TextInput
                 style={styles.input}
                 value={form.address}
                 onChangeText={(v) => setForm((f) => ({ ...f, address: v }))}
                 placeholder="Adresse"
+                placeholderTextColor={colors.textSecondary}
               />
-              <Text style={styles.label}>Type</Text>
+              <Text style={styles.fieldLabel}>Type</Text>
               <View style={styles.typeRow}>
                 {TYPE_OPTIONS.map((t) => {
                   const isSelected = form.type === t;
                   return (
                     <TouchableOpacity
                       key={t}
-                      style={[styles.typeChip, isSelected && styles.typeChipActive]}
-                      onPress={() => setForm((f) => ({ ...f, type: t }))}
+                      style={[styles.typeChip, isSelected && { backgroundColor: TYPE_COLORS[t], borderColor: TYPE_COLORS[t] }]}
+                      onPress={() => {
+                        console.log('[Admin Contacts] Type selected:', t);
+                        setForm((f) => ({ ...f, type: t }));
+                      }}
                     >
                       <Text style={[styles.typeChipText, isSelected && styles.typeChipTextActive]}>
                         {TYPE_LABELS[t]}
@@ -346,7 +376,7 @@ export default function AdminContactsScreen() {
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.cancelBtn}
-                onPress={() => setShowFormModal(false)}
+                onPress={closeFormModal}
                 disabled={saving}
               >
                 <Text style={styles.cancelBtnText}>Annuler</Text>
@@ -364,13 +394,13 @@ export default function AdminContactsScreen() {
       </Modal>
 
       {/* Delete Confirm Modal */}
-      <Modal visible={showDeleteModal} animationType="fade" transparent>
+      <Modal visible={showDeleteModal} animationType="fade" transparent onRequestClose={closeDeleteModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.confirmContainer}>
             <Text style={styles.modalTitle}>Supprimer ce contact ?</Text>
             <Text style={styles.confirmText}>Cette action est irréversible.</Text>
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowDeleteModal(false)}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={closeDeleteModal}>
                 <Text style={styles.cancelBtnText}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteConfirmBtn} onPress={handleDelete}>
@@ -387,8 +417,8 @@ export default function AdminContactsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   loader: { marginTop: 60 },
-  list: { padding: 16 },
-  errorText: { color: colors.error, textAlign: 'center', marginTop: 20 },
+  list: { padding: 16, paddingBottom: 40 },
+  errorText: { color: colors.error, textAlign: 'center', marginTop: 20, fontSize: 15 },
   emptyText: { color: colors.textSecondary, textAlign: 'center', marginTop: 40, fontSize: 16 },
   card: {
     backgroundColor: colors.card,
@@ -407,6 +437,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: colors.text, flex: 1, marginRight: 8 },
   cardRole: { fontSize: 14, fontWeight: '600', color: colors.primary, marginBottom: 4 },
   cardMeta: { fontSize: 13, color: colors.textSecondary, marginBottom: 2 },
+  cardAddress: { fontSize: 12, color: colors.textSecondary, marginBottom: 2, fontStyle: 'italic' },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   cardActions: { flexDirection: 'row', marginTop: 12, gap: 8 },
@@ -432,7 +463,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 16 },
   confirmText: { fontSize: 15, color: colors.textSecondary, marginBottom: 20 },
-  label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 4, marginTop: 12 },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 4, marginTop: 12 },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -445,7 +476,6 @@ const styles = StyleSheet.create({
   },
   typeRow: { flexDirection: 'row', gap: 8, marginTop: 4, flexWrap: 'wrap' },
   typeChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: colors.border },
-  typeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   typeChipText: { fontSize: 13, color: colors.textSecondary },
   typeChipTextActive: { color: '#fff', fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 20 },
