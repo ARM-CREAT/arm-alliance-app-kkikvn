@@ -57,6 +57,13 @@
       "when": 1773678609969,
       "tag": "20260316163009_fancy_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1773848009151,
+      "tag": "20260318153329_eager_riptide",
+      "breakpoints": true
     }
   ]
 }

@@ -12,56 +12,60 @@ interface UpdateStatusBody {
   status: 'active' | 'suspended';
 }
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+function formatAdminMember(member: any) {
+  return {
+    id: member.id,
+    fullName: member.fullName,
+    nina: member.nina || null,
+    commune: member.commune,
+    profession: member.profession,
+    phone: member.phone,
+    email: member.email || null,
+    membershipNumber: member.membershipNumber,
+    status: member.status,
+    role: member.role,
+    createdAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
+  };
+}
+
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/admin/members - Get all members (public)
-  fastify.get<{ Querystring: { status?: string; role?: string; region?: string } }>(
+  // GET /api/admin/members - Get all members (requires admin password)
+  fastify.get(
     '/api/admin/members',
     {
       schema: {
-        description: 'Get all members with filters',
+        description: 'Get all members (admin only)',
         tags: ['admin', 'members'],
-        querystring: {
-          type: 'object',
-          properties: {
-            status: { type: 'string' },
-            role: { type: 'string' },
-            region: { type: 'string' },
-          },
-        },
         response: {
-          200: { type: 'array' },
+          200: {
+            type: 'object',
+            properties: {
+              members: { type: 'array' },
+            },
+          },
+          401: { type: 'object' },
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Querystring: { status?: string; role?: string; region?: string } }>,
-      reply: FastifyReply
-    ) => {
-      const { status, role, region } = request.query;
-      app.logger.info(
-        { filters: { status, role, region } },
-        'Fetching members'
-      );
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const adminPassword = request.headers['x-admin-password'];
+      if (!adminPassword || adminPassword !== ADMIN_PASSWORD) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+
+      app.logger.info('Admin fetching all members');
 
       try {
-        let members = await app.db.select().from(schema.memberProfiles);
-
-        // Apply filters
-        if (status) {
-          members = members.filter(m => m.status === status);
-        }
-        if (role) {
-          members = members.filter(m => m.role === role);
-        }
-        if (region) {
-          members = members.filter(m => m.commune === region);
-        }
+        const members = await app.db.select().from(schema.memberProfiles);
 
         app.logger.info(
           { count: members.length },
           'Members fetched successfully'
         );
-        return members;
+        return { members: members.map(formatAdminMember) };
       } catch (error) {
         app.logger.error(
           { err: error },

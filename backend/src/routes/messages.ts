@@ -4,8 +4,8 @@ import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
 interface MessageBody {
-  senderName: string;
-  senderEmail: string;
+  name: string;
+  email: string;
   subject: string;
   message: string;
 }
@@ -27,12 +27,12 @@ export function register(app: App, fastify: FastifyInstance) {
         body: {
           type: 'object',
           properties: {
-            senderName: { type: 'string' },
-            senderEmail: { type: 'string' },
+            name: { type: 'string' },
+            email: { type: 'string' },
             subject: { type: 'string' },
             message: { type: 'string' },
           },
-          required: ['senderName', 'senderEmail', 'subject', 'message'],
+          required: ['name', 'email', 'subject', 'message'],
         },
         response: {
           201: { type: 'object' },
@@ -41,12 +41,12 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const { senderName, senderEmail, subject, message } = request.body;
+      const { name, email, subject, message } = request.body;
 
       // Validate required fields
-      if (!senderName || !senderEmail || !subject || !message) {
+      if (!name || !email || !subject || !message) {
         app.logger.warn(
-          { senderEmail, subject },
+          { email, subject },
           'Missing required fields in contact message'
         );
         reply.status(400);
@@ -54,7 +54,7 @@ export function register(app: App, fastify: FastifyInstance) {
       }
 
       app.logger.info(
-        { senderEmail, subject },
+        { email, subject },
         'Receiving contact message'
       );
 
@@ -62,8 +62,8 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await app.db
           .insert(schema.messages)
           .values({
-            senderName,
-            senderEmail,
+            senderName: name,
+            senderEmail: email,
             subject,
             message,
             status: 'unread',
@@ -78,7 +78,7 @@ export function register(app: App, fastify: FastifyInstance) {
         return { success: true, id: result[0].id };
       } catch (error) {
         app.logger.error(
-          { err: error, senderEmail },
+          { err: error, email },
           'Failed to create message'
         );
         throw error;

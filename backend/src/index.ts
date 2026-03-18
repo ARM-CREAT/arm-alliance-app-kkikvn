@@ -78,6 +78,8 @@ settingsRoutes.register(app, app.fastify);
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);
 await settingsRoutes.seedSettings(app);
+await eventRoutes.seedEvents(app);
+await leadershipRoutes.seedLeadership(app);
 
 // Setup WebSocket signaling for conferences
 import {

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -64,10 +64,12 @@ function formatContact(contact: any) {
     id: contact.id,
     name: contact.name,
     role: contact.role,
-    phone: contact.phone,
-    email: contact.email,
-    address: contact.address,
+    phone: contact.phone || null,
+    email: contact.email || null,
+    address: contact.address || null,
     type: contact.type,
+    createdAt: contact.createdAt instanceof Date ? contact.createdAt.toISOString() : new Date(contact.createdAt).toISOString(),
+    updatedAt: contact.updatedAt instanceof Date ? contact.updatedAt.toISOString() : new Date(contact.updatedAt).toISOString(),
   };
 }
 
@@ -80,7 +82,12 @@ export function register(app: App, fastify: FastifyInstance) {
         description: 'Get all contacts',
         tags: ['contacts'],
         response: {
-          200: { type: 'array' },
+          200: {
+            type: 'object',
+            properties: {
+              contacts: { type: 'array' },
+            },
+          },
         },
       },
     },
@@ -99,10 +106,10 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await app.db
           .select()
           .from(schema.contacts)
-          .orderBy(schema.contacts.createdAt);
+          .orderBy(desc(schema.contacts.createdAt));
 
         app.logger.info({ count: result.length }, 'Contacts fetched');
-        return result.map(formatContact);
+        return { contacts: result.map(formatContact) };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch contacts');
         throw error;
@@ -163,7 +170,7 @@ export function register(app: App, fastify: FastifyInstance) {
 
         app.logger.info({ contactId: result[0].id }, 'Contact created');
         reply.status(201);
-        return formatContact(result[0]);
+        return { contact: formatContact(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, name }, 'Failed to create contact');
         throw error;
@@ -224,7 +231,7 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info({ contactId: id }, 'Contact updated');
-        return formatContact(result[0]);
+        return { contact: formatContact(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, contactId: id }, 'Failed to update contact');
         throw error;

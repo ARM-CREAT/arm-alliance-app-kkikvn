@@ -1,34 +1,97 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
-import { verifyAdminAuth } from '../utils/adminAuth.js';
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+function formatMediaItem(item: any) {
+  let url = item.url;
+  if (!url) {
+    url = `/api/media/${item.id}/download`;
+  }
+  return {
+    id: item.id,
+    fileName: item.fileName,
+    mimeType: item.mimeType,
+    size: item.size,
+    url,
+    uploadedAt: item.uploadedAt instanceof Date ? item.uploadedAt.toISOString() : new Date(item.uploadedAt).toISOString(),
+  };
+}
 
 export function register(app: App, fastify: FastifyInstance) {
-  const requireAuth = app.requireAuth();
-
-  // POST /api/media/upload - Upload media file
-  fastify.post(
-    '/api/media/upload',
+  // GET /api/media - Get all media files (public)
+  fastify.get(
+    '/api/media',
     {
       schema: {
-        description: 'Upload a media file (image, video, document)',
+        description: 'Get all uploaded media files',
         tags: ['media'],
-        consumes: ['multipart/form-data'],
         response: {
           200: {
             type: 'object',
             properties: {
-              url: { type: 'string' },
-              key: { type: 'string' },
-              id: { type: 'string' },
-              downloadUrl: { type: 'string' },
+              media: { type: 'array' },
             },
           },
         },
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      app.logger.info('Fetching all media files');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.media)
+          .orderBy(desc(schema.media.uploadedAt));
+
+        app.logger.info(
+          { count: result.length },
+          'Media files fetched successfully'
+        );
+
+        return { media: result.map(formatMediaItem) };
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch media');
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/admin/media/upload - Upload media file (admin only)
+  fastify.post(
+    '/api/admin/media/upload',
+    {
+      schema: {
+        description: 'Upload a media file (admin only)',
+        tags: ['admin', 'media'],
+        consumes: ['multipart/form-data'],
+        response: {
+          201: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              fileName: { type: 'string' },
+              mimeType: { type: 'string' },
+              size: { type: 'number' },
+              uploadedAt: { type: 'string' },
+              url: { type: 'string' },
+            },
+          },
+          401: { type: 'object' },
+          400: { type: 'object' },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const adminPassword = request.headers['x-admin-password'];
+      if (!adminPassword || adminPassword !== ADMIN_PASSWORD) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
+
       const data = await request.file();
       if (!data) {
         return reply.status(400).send({ error: 'No file provided' });
@@ -51,7 +114,6 @@ export function register(app: App, fastify: FastifyInstance) {
       }
 
       try {
-        // Validate file
         if (buffer.length === 0) {
           return reply.status(400).send({ error: 'Empty file' });
         }
@@ -63,10 +125,8 @@ export function register(app: App, fastify: FastifyInstance) {
         // Upload to storage
         const uploadedKey = await app.storage.upload(key, buffer);
 
-        // Generate signed URL
-        const { url } = await app.storage.getSignedUrl(uploadedKey);
-
-        // Store metadata in database
+        // Store metadata in database with url field
+        const downloadUrl = `/api/media/{id}/download`; // Will be updated after insert
         const result = await app.db
           .insert(schema.media)
           .values({
@@ -74,19 +134,31 @@ export function register(app: App, fastify: FastifyInstance) {
             fileName: data.filename,
             mimeType: data.mimetype,
             size: buffer.length,
+            url: `/api/media/{id}/download`,
           })
           .returning();
 
+        // Update the URL with actual ID
+        const mediaId = result[0].id;
+        const finalUrl = `/api/media/${mediaId}/download`;
+        await app.db
+          .update(schema.media)
+          .set({ url: finalUrl })
+          .where(eq(schema.media.id, mediaId));
+
         app.logger.info(
-          { mediaId: result[0].id, filename: data.filename, size: buffer.length },
+          { mediaId, filename: data.filename, size: buffer.length },
           'File uploaded successfully'
         );
 
+        reply.status(201);
         return {
-          url,
-          key: uploadedKey,
-          id: result[0].id,
-          downloadUrl: `/api/media/${result[0].id}/download`,
+          id: mediaId,
+          fileName: data.filename,
+          mimeType: data.mimetype,
+          size: buffer.length,
+          uploadedAt: result[0].uploadedAt instanceof Date ? result[0].uploadedAt.toISOString() : new Date(result[0].uploadedAt).toISOString(),
+          url: finalUrl,
         };
       } catch (error) {
         app.logger.error(
@@ -98,48 +170,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/media - Get all uploaded media
-  fastify.get(
-    '/api/media',
-    {
-      schema: {
-        description: 'Get all uploaded media files',
-        tags: ['media'],
-        response: {
-          200: { type: 'array' },
-        },
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      app.logger.info({}, 'Fetching all media files');
-
-      try {
-        const result = await app.db
-          .select()
-          .from(schema.media)
-          .orderBy(schema.media.uploadedAt);
-
-        app.logger.info(
-          { count: result.length },
-          'Media files fetched successfully'
-        );
-
-        return result.map(m => ({
-          id: m.id,
-          fileName: m.fileName,
-          mimeType: m.mimeType,
-          size: m.size,
-          uploadedAt: m.uploadedAt,
-          key: m.key,
-        }));
-      } catch (error) {
-        app.logger.error({ err: error }, 'Failed to fetch media');
-        throw error;
-      }
-    }
-  );
-
-  // GET /api/media/:id/download - Download specific media file
+  // GET /api/media/:id/download - Download media file (public)
   fastify.get<{ Params: { id: string } }>(
     '/api/media/:id/download',
     {
@@ -149,15 +180,12 @@ export function register(app: App, fastify: FastifyInstance) {
         params: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
           },
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Params: { id: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       app.logger.info({ mediaId: id }, 'Downloading media file');
 
@@ -168,21 +196,28 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.media.id, id));
 
         if (result.length === 0) {
-          return reply.status(404).send({ error: 'Media not found' });
+          app.logger.warn({ mediaId: id }, 'Media not found');
+          reply.status(404);
+          return { error: 'Media not found' };
         }
 
         const media = result[0];
-        const { url } = await app.storage.getSignedUrl(media.key);
 
-        app.logger.info({ mediaId: id, fileName: media.fileName }, 'Media URL generated');
+        // Retrieve file from storage
+        try {
+          const fileBuffer = await app.storage.download(media.key);
 
-        // Return signed URL for download
-        return {
-          downloadUrl: url,
-          fileName: media.fileName,
-          mimeType: media.mimeType,
-          size: media.size,
-        };
+          // Set appropriate headers
+          reply.header('Content-Type', media.mimeType);
+          reply.header('Content-Disposition', `attachment; filename="${media.fileName}"`);
+
+          app.logger.info({ mediaId: id, fileName: media.fileName }, 'Media file served');
+          return reply.send(fileBuffer);
+        } catch (storageError) {
+          app.logger.error({ err: storageError, mediaId: id, key: media.key }, 'File not found in storage');
+          reply.status(404);
+          return { error: 'File not found' };
+        }
       } catch (error) {
         app.logger.error({ err: error, mediaId: id }, 'Failed to download media');
         throw error;
@@ -190,97 +225,64 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/admin/media/upload - Upload media file (admin only)
-  fastify.post(
-    '/api/admin/media/upload',
+  // DELETE /api/admin/media/:id - Delete media file (admin only)
+  fastify.delete<{ Params: { id: string } }>(
+    '/api/admin/media/:id',
     {
       schema: {
-        description: 'Upload a media file (admin only)',
+        description: 'Delete a media file (admin only)',
         tags: ['admin', 'media'],
-        consumes: ['multipart/form-data'],
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              url: { type: 'string' },
-              id: { type: 'string' },
-              filename: { type: 'string' },
-              type: { type: 'string' },
-              size: { type: 'number' },
-            },
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
           },
+        },
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
-      const data = await request.file();
-      if (!data) {
-        return reply.status(400).send({ error: 'No file provided' });
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const adminPassword = request.headers['x-admin-password'];
+      if (!adminPassword || adminPassword !== ADMIN_PASSWORD) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
       }
 
-      app.logger.info(
-        { filename: data.filename, adminId: admin.userId },
-        'Admin processing file upload'
-      );
-
-      let buffer: Buffer;
-      try {
-        buffer = await data.toBuffer();
-      } catch (err) {
-        app.logger.error(
-          { err, filename: data.filename, adminId: admin.userId },
-          'File size limit exceeded'
-        );
-        return reply.status(413).send({ error: 'File too large' });
-      }
+      const { id } = request.params;
+      app.logger.info({ mediaId: id }, 'Deleting media file');
 
       try {
-        // Validate file
-        if (buffer.length === 0) {
-          return reply.status(400).send({ error: 'Empty file' });
+        const result = await app.db
+          .select()
+          .from(schema.media)
+          .where(eq(schema.media.id, id));
+
+        if (result.length === 0) {
+          app.logger.warn({ mediaId: id }, 'Media not found');
+          reply.status(404);
+          return { error: 'Not found' };
         }
 
-        // Generate storage key
-        const timestamp = Date.now();
-        const key = `media/${timestamp}-${data.filename}`;
+        const media = result[0];
 
-        // Upload to storage
-        const uploadedKey = await app.storage.upload(key, buffer);
+        // Delete from storage
+        try {
+          await app.storage.delete(media.key);
+        } catch (storageError) {
+          app.logger.warn({ err: storageError, mediaId: id, key: media.key }, 'File already deleted from storage or missing');
+        }
 
-        // Generate signed URL
-        const { url } = await app.storage.getSignedUrl(uploadedKey);
+        // Delete from database
+        await app.db.delete(schema.media).where(eq(schema.media.id, id));
 
-        // Store metadata in database
-        const result = await app.db
-          .insert(schema.media)
-          .values({
-            key: uploadedKey,
-            fileName: data.filename,
-            mimeType: data.mimetype,
-            size: buffer.length,
-          })
-          .returning();
-
-        app.logger.info(
-          { mediaId: result[0].id, filename: data.filename, adminId: admin.userId, size: buffer.length },
-          'File uploaded successfully by admin'
-        );
-
-        return {
-          url,
-          id: result[0].id,
-          filename: data.filename,
-          type: data.mimetype,
-          size: buffer.length,
-        };
+        app.logger.info({ mediaId: id, fileName: media.fileName }, 'Media file deleted');
+        return { success: true };
       } catch (error) {
-        app.logger.error(
-          { err: error, filename: data.filename, adminId: admin.userId },
-          'Failed to upload file'
-        );
+        app.logger.error({ err: error, mediaId: id }, 'Failed to delete media');
         throw error;
       }
     }

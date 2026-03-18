@@ -27,8 +27,10 @@ export const leadership = pgTable('leadership', {
   name: text('name').notNull(),
   position: text('position').notNull(), // président, vice-président, secrétaire général, etc.
   phone: text('phone'),
+  email: text('email'),
   address: text('address'),
   location: text('location'),
+  photoUrl: text('photo_url'),
   order: integer('order').notNull().default(0),
   createdBy: text('created_by'),
 });
@@ -113,6 +115,7 @@ export const media = pgTable('media', {
   fileName: text('file_name').notNull(),
   mimeType: text('mime_type').notNull(),
   size: integer('size').notNull(),
+  url: text('url'),
   uploadedAt: timestamp('uploaded_at').notNull().defaultNow(),
 });
 

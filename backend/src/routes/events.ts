@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -8,14 +8,6 @@ interface EventBody {
   description: string;
   date: string;
   location: string;
-  imageUrl?: string;
-}
-
-interface EventUpdateBody {
-  title?: string;
-  description?: string;
-  date?: string;
-  location?: string;
   imageUrl?: string;
 }
 
@@ -35,11 +27,56 @@ function formatEvent(event: any) {
     id: event.id,
     title: event.title,
     description: event.description,
-    date: event.date.toISOString(),
+    date: event.date instanceof Date ? event.date.toISOString() : new Date(event.date).toISOString(),
     location: event.location,
-    imageUrl: event.imageUrl,
-    createdAt: event.createdAt.toISOString(),
+    imageUrl: event.imageUrl || null,
+    createdAt: event.createdAt instanceof Date ? event.createdAt.toISOString() : new Date(event.createdAt).toISOString(),
+    createdBy: event.createdBy || null,
   };
+}
+
+export async function seedEvents(app: App) {
+  app.logger.info('Checking events table for seeding');
+  try {
+    const existing = await app.db.select().from(schema.events).limit(1);
+    if (existing.length > 0) {
+      app.logger.info('Events table already has data, skipping seed');
+      return;
+    }
+
+    const sampleEvents = [
+      {
+        title: 'Congrès National de l\'Alliance ARM',
+        description: 'Grand rassemblement des membres de l\'Alliance ARM pour discuter des orientations politiques.',
+        date: new Date('2025-03-15'),
+        location: 'Bamako, Mali',
+        imageUrl: 'https://picsum.photos/seed/event1/800/400',
+        createdBy: 'system',
+      },
+      {
+        title: 'Meeting Régional de Sikasso',
+        description: 'Rencontre des membres de la région de Sikasso pour renforcer l\'organisation locale.',
+        date: new Date('2025-04-20'),
+        location: 'Sikasso, Mali',
+        imageUrl: 'https://picsum.photos/seed/event2/800/400',
+        createdBy: 'system',
+      },
+      {
+        title: 'Forum des Jeunes Alliance ARM',
+        description: 'Forum dédié à la jeunesse militante de l\'Alliance ARM.',
+        date: new Date('2025-05-10'),
+        location: 'Mopti, Mali',
+        imageUrl: 'https://picsum.photos/seed/event3/800/400',
+        createdBy: 'system',
+      },
+    ];
+
+    await app.db.insert(schema.events).values(sampleEvents);
+    app.logger.info({ count: sampleEvents.length }, 'Events seeded successfully');
+  } catch (error) {
+    app.logger.error({ err: error }, 'Failed to seed events');
+    throw error;
+  }
 }
 
 export function register(app: App, fastify: FastifyInstance) {
@@ -51,7 +88,12 @@ export function register(app: App, fastify: FastifyInstance) {
         description: 'Get all events',
         tags: ['events'],
         response: {
-          200: { type: 'array' },
+          200: {
+            type: 'object',
+            properties: {
+              events: { type: 'array' },
+            },
+          },
         },
       },
     },
@@ -62,10 +104,10 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await app.db
           .select()
           .from(schema.events)
-          .orderBy(schema.events.date);
+          .orderBy(desc(schema.events.date));
 
         app.logger.info({ count: result.length }, 'Events fetched');
-        return result.map(formatEvent);
+        return { events: result.map(formatEvent) };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch events');
         throw error;
@@ -118,14 +160,14 @@ export function register(app: App, fastify: FastifyInstance) {
             description,
             date: new Date(date),
             location,
-            imageUrl,
+            imageUrl: imageUrl || null,
             createdBy: 'admin',
           })
           .returning();
 
         app.logger.info({ eventId: result[0].id }, 'Event created');
         reply.status(201);
-        return formatEvent(result[0]);
+        return { event: formatEvent(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create event');
         throw error;
@@ -134,7 +176,7 @@ export function register(app: App, fastify: FastifyInstance) {
   );
 
   // PUT /api/events/:id - Update event (admin only)
-  fastify.put<{ Params: { id: string }; Body: EventUpdateBody }>(
+  fastify.put<{ Params: { id: string }; Body: Partial<EventBody> }>(
     '/api/events/:id',
     {
       schema: {
@@ -167,10 +209,13 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
-      const updates = {
-        ...request.body,
-        ...(request.body.date && { date: new Date(request.body.date) }),
-      };
+      const updates: any = {};
+
+      if (request.body.title) updates.title = request.body.title;
+      if (request.body.description) updates.description = request.body.description;
+      if (request.body.date) updates.date = new Date(request.body.date);
+      if (request.body.location) updates.location = request.body.location;
+      if (request.body.imageUrl !== undefined) updates.imageUrl = request.body.imageUrl;
 
       app.logger.info({ eventId: id }, 'Updating event');
 
@@ -188,7 +233,7 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info({ eventId: id }, 'Event updated');
-        return formatEvent(result[0]);
+        return { event: formatEvent(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to update event');
         throw error;

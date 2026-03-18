@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
@@ -8,11 +8,8 @@ import { getParticipants } from '../utils/conferenceStore.js';
 interface ConferenceBody {
   title: string;
   description?: string;
-  scheduledAt: string;
-  duration?: number;
-  hostName: string;
-  status?: string;
-  joinUrl?: string;
+  date: string;
+  roomCode: string;
 }
 
 interface JoinConferenceBody {
@@ -59,20 +56,22 @@ function generateARMRoomCode(): string {
 }
 
 function formatConference(conf: any) {
+  const isLive = conf.status === 'live' || conf.status === 'active';
   return {
     id: conf.id,
     title: conf.title,
-    description: conf.description,
-    scheduledAt: conf.scheduledAt.toISOString(),
+    description: conf.description || null,
+    date: conf.scheduledAt instanceof Date ? conf.scheduledAt.toISOString() : new Date(conf.scheduledAt).toISOString(),
     duration: conf.duration,
     hostName: conf.hostName,
     roomCode: conf.roomCode,
     joinUrl: conf.joinUrl,
     status: conf.status,
     participantCount: conf.participantCount,
-    startedAt: conf.startedAt ? conf.startedAt.toISOString() : null,
-    endedAt: conf.endedAt ? conf.endedAt.toISOString() : null,
-    createdAt: conf.createdAt.toISOString(),
+    isLive,
+    startedAt: conf.startedAt ? (conf.startedAt instanceof Date ? conf.startedAt.toISOString() : new Date(conf.startedAt).toISOString()) : null,
+    endedAt: conf.endedAt ? (conf.endedAt instanceof Date ? conf.endedAt.toISOString() : new Date(conf.endedAt).toISOString()) : null,
+    createdAt: conf.createdAt instanceof Date ? conf.createdAt.toISOString() : new Date(conf.createdAt).toISOString(),
   };
 }
 
@@ -124,7 +123,7 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await app.db
           .select()
           .from(schema.conferences)
-          .orderBy(schema.conferences.scheduledAt);
+          .orderBy(desc(schema.conferences.scheduledAt));
 
         app.logger.info(
           { count: result.length },
@@ -194,13 +193,10 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: {
             title: { type: 'string' },
             description: { type: 'string' },
-            scheduledAt: { type: 'string', format: 'date-time' },
-            duration: { type: 'number' },
-            hostName: { type: 'string' },
-            status: { type: 'string' },
-            joinUrl: { type: 'string' },
+            date: { type: 'string', format: 'date-time' },
+            roomCode: { type: 'string' },
           },
-          required: ['title', 'scheduledAt', 'hostName'],
+          required: ['title', 'date', 'roomCode'],
         },
         response: {
           201: { type: 'object' },
@@ -212,15 +208,14 @@ export function register(app: App, fastify: FastifyInstance) {
     async (request, reply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { title, description, scheduledAt, duration, hostName, status, joinUrl } = request.body;
+      const { title, description, date, roomCode } = request.body;
 
-      if (!title) {
+      if (!title || !date || !roomCode) {
         reply.status(400);
-        return { error: 'BadRequest', message: 'Title is required' };
+        return { error: 'Missing required fields: title, date, roomCode' };
       }
 
-      const roomCode = generateRoomCode();
-      const finalJoinUrl = joinUrl || `https://meet.jit.si/AllianceARM-${roomCode}`;
+      const joinUrl = `https://meet.jit.si/${roomCode}`;
 
       app.logger.info({ title, roomCode }, 'Creating conference');
 
@@ -229,13 +224,13 @@ export function register(app: App, fastify: FastifyInstance) {
           .insert(schema.conferences)
           .values({
             title,
-            description,
-            scheduledAt: new Date(scheduledAt),
-            duration: duration || 60,
-            hostName,
+            description: description || null,
+            scheduledAt: new Date(date),
+            duration: 60,
+            hostName: 'Alliance ARM',
             roomCode,
-            joinUrl: finalJoinUrl,
-            status: status || 'scheduled',
+            joinUrl,
+            status: 'scheduled',
             participantCount: 0,
           })
           .returning();
