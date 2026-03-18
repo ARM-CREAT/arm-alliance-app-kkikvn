@@ -39,7 +39,7 @@ export default function MembershipScreen() {
 
     try {
       const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall('/api/membership', {
+      await apiCall('/api/membership', {
         method: 'POST',
         body: JSON.stringify({
           name,
@@ -52,11 +52,6 @@ export default function MembershipScreen() {
       });
 
       setLoading(false);
-
-      if (error) {
-        Alert.alert('Erreur', `Impossible d'envoyer votre demande: ${error}`);
-        return;
-      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
