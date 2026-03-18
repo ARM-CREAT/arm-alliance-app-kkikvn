@@ -124,26 +124,27 @@ export default function HomeScreen() {
   useEffect(() => {
     console.log('[HomeScreen iOS] Component mounted, loading data');
     
-    // Set a maximum loading time of 3 seconds
     const loadingTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn('[HomeScreen iOS] Loading timeout - showing content anyway');
-        setLoading(false);
-        setError('Chargement lent. Affichage du contenu par défaut.');
-        
-        // Fade in animation
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
-      }
+      setLoading(prev => {
+        if (prev) {
+          console.warn('[HomeScreen iOS] Loading timeout - showing content anyway');
+          setError('Chargement lent. Affichage du contenu par défaut.');
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }).start();
+          return false;
+        }
+        return prev;
+      });
     }, 3000);
     
     loadAllData();
     
     return () => clearTimeout(loadingTimeout);
-  }, [loadAllData, loading, fadeAnim]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadAllData]);
 
   const onRefresh = useCallback(async () => {
     console.log('User pulled to refresh');

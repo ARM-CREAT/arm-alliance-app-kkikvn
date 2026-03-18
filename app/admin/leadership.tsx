@@ -475,8 +475,16 @@ export default function AdminLeadershipScreen() {
         </ScrollView>
 
         <Modal
-          visible={showModal}
-          onClose={() => {
+          visible={showModal && modalType !== 'confirm'}
+          onClose={() => setShowModal(false)}
+          title={modalTitle}
+          message={modalMessage}
+          type={modalType}
+        />
+        <Modal
+          visible={showModal && modalType === 'confirm'}
+          onClose={() => setShowModal(false)}
+          onConfirm={() => {
             setShowModal(false);
             if (modalCallback) {
               modalCallback();
@@ -485,7 +493,9 @@ export default function AdminLeadershipScreen() {
           }}
           title={modalTitle}
           message={modalMessage}
-          type={modalType}
+          type="confirm"
+          confirmText="Confirmer"
+          cancelText="Annuler"
         />
 
         {/* Edit / Add inline modal */}

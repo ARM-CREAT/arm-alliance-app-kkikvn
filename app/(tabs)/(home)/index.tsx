@@ -119,23 +119,26 @@ export default function HomeScreen() {
     console.log('[HomeScreen] Composant monté, chargement des données');
     
     const loadingTimeout = setTimeout(() => {
-      if (loading) {
-        console.warn('[HomeScreen] Délai de chargement dépassé - affichage du contenu quand même');
-        setLoading(false);
-        setError('Chargement lent. Affichage du contenu par défaut.');
-        
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }).start();
-      }
+      setLoading(prev => {
+        if (prev) {
+          console.warn('[HomeScreen] Délai de chargement dépassé - affichage du contenu quand même');
+          setError('Chargement lent. Affichage du contenu par défaut.');
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }).start();
+          return false;
+        }
+        return prev;
+      });
     }, 3000);
     
     loadAllData();
     
     return () => clearTimeout(loadingTimeout);
-  }, [loadAllData, loading, fadeAnim]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadAllData]);
 
   const onRefresh = useCallback(async () => {
     console.log('L\'utilisateur a tiré pour actualiser');

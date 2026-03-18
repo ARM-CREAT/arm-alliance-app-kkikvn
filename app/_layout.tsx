@@ -292,24 +292,6 @@ export default function RootLayout() {
                       headerShown: false,
                     }} 
                   />
-                  <Stack.Screen 
-                    name="admin/leadership" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/events" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/media" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
                 </Stack>
                 <StatusBar style="auto" />
                 
