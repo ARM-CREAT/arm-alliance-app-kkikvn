@@ -239,12 +239,6 @@ export default function RootLayout() {
                     }} 
                   />
                   <Stack.Screen 
-                    name="admin/donations" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
                     name="admin/contacts" 
                     options={{ 
                       headerShown: false,
@@ -257,7 +251,7 @@ export default function RootLayout() {
                     }} 
                   />
                   <Stack.Screen 
-                    name="admin/diagnostic" 
+                    name="admin/membership-stats" 
                     options={{ 
                       headerShown: false,
                     }} 

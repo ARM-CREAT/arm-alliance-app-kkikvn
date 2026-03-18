@@ -362,22 +362,6 @@ export default function AdminDashboardScreen() {
 
               <TouchableOpacity 
                 style={styles.card}
-                onPress={() => handleNavigation('/admin/donations', 'Dons & Contributions')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="dollarsign.circle.fill" 
-                    android_material_icon_name="attach-money" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                </View>
-                <Text style={styles.cardTitle}>Dons</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.card}
                 onPress={() => handleNavigation('/admin/contacts', 'Contacts')}
                 activeOpacity={0.8}
               >
@@ -415,18 +399,18 @@ export default function AdminDashboardScreen() {
             <View style={styles.grid}>
               <TouchableOpacity 
                 style={styles.card}
-                onPress={() => handleNavigation('/admin/diagnostic', 'Diagnostic')}
+                onPress={() => handleNavigation('/admin/membership-stats', 'Stats Adhésion')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
                   <IconSymbol 
-                    ios_icon_name="stethoscope" 
-                    android_material_icon_name="healing" 
+                    ios_icon_name="chart.bar.fill" 
+                    android_material_icon_name="bar-chart" 
                     size={32} 
                     color={colors.accent} 
                   />
                 </View>
-                <Text style={styles.cardTitle}>Diagnostic</Text>
+                <Text style={styles.cardTitle}>Stats Adhésion</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
