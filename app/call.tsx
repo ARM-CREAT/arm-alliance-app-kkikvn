@@ -10,10 +10,11 @@ import {
   RefreshControl,
   Platform,
   Linking,
+  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -125,19 +126,26 @@ export default function CallScreen() {
       const result: InitiateCallResponse = await res.json();
       console.log('[Call] Call initiated, callId:', result.callId, 'joinUrl:', result.joinUrl);
 
-      if (result.joinUrl) {
-        const canOpen = await Linking.canOpenURL(result.joinUrl);
-        if (canOpen) {
-          await Linking.openURL(result.joinUrl);
-        } else {
-          console.warn('[Call] Cannot open URL:', result.joinUrl);
-        }
+      if (!result.joinUrl) {
+        Alert.alert('Appel', "L'appel a été initié mais aucun lien de connexion n'est disponible.");
+        await loadActiveCalls();
+        return;
+      }
+
+      const canOpen = await Linking.canOpenURL(result.joinUrl);
+      if (canOpen) {
+        await Linking.openURL(result.joinUrl);
+      } else {
+        console.warn('[Call] Cannot open URL:', result.joinUrl);
+        Alert.alert('Erreur', "Impossible d'ouvrir le lien d'appel: " + result.joinUrl);
       }
 
       await loadActiveCalls();
     } catch (err: any) {
       console.error('[Call] Error initiating call:', err);
-      setError(err.message || "Impossible d'initier l'appel.");
+      const msg = err.message || "Impossible d'initier l'appel.";
+      setError(msg);
+      Alert.alert('Erreur', msg);
     } finally {
       setInitiatingAudio(false);
       setInitiatingVideo(false);
@@ -149,14 +157,20 @@ export default function CallScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    if (!call.joinUrl) return;
+    if (!call.joinUrl) {
+      Alert.alert('Erreur', "Aucun lien de connexion disponible pour cet appel.");
+      return;
+    }
     try {
       const canOpen = await Linking.canOpenURL(call.joinUrl);
       if (canOpen) {
         await Linking.openURL(call.joinUrl);
+      } else {
+        Alert.alert('Erreur', "Impossible d'ouvrir le lien d'appel.");
       }
     } catch (err) {
       console.error('[Call] Error opening call URL:', err);
+      Alert.alert('Erreur', "Impossible d'ouvrir le lien d'appel.");
     }
   };
 

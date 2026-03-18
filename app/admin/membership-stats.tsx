@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 
 interface Member {
   id: string;
@@ -269,7 +269,7 @@ export default function MembershipStatsScreen() {
           }
           stickyHeaderIndices={[1]}
         >
-          {/* ── STATS BANNER ── */}
+          {/* STATS BANNER */}
           <View style={styles.statsBanner}>
             <View style={styles.totalBlock}>
               <Text style={styles.totalNumber}>{stats.total}</Text>
@@ -296,7 +296,7 @@ export default function MembershipStatsScreen() {
             </View>
           </View>
 
-          {/* ── STICKY SEARCH + FILTERS ── */}
+          {/* STICKY SEARCH + FILTERS */}
           <View style={styles.stickyBar}>
             <View style={styles.searchRow}>
               <IconSymbol
@@ -344,7 +344,7 @@ export default function MembershipStatsScreen() {
             </ScrollView>
           </View>
 
-          {/* ── ERROR STATE ── */}
+          {/* ERROR STATE */}
           {error && (
             <View style={styles.errorBox}>
               <IconSymbol
@@ -360,7 +360,7 @@ export default function MembershipStatsScreen() {
             </View>
           )}
 
-          {/* ── RESULTS COUNT ── */}
+          {/* RESULTS COUNT */}
           {!error && (
             <View style={styles.resultsHeader}>
               <Text style={styles.resultsCount}>
@@ -371,7 +371,7 @@ export default function MembershipStatsScreen() {
             </View>
           )}
 
-          {/* ── MEMBER CARDS ── */}
+          {/* MEMBER CARDS */}
           {!error && filteredMembers.length === 0 && (
             <View style={styles.emptyState}>
               <IconSymbol
@@ -391,13 +391,14 @@ export default function MembershipStatsScreen() {
             const statusColor = getStatusColor(member.status);
             const statusLabel = getStatusLabel(member.status);
             const joinDate = formatDate(member.joinedAt ?? member.createdAt ?? '');
+            const hasPhone = !!member.phone;
 
             return (
               <View key={member.id} style={styles.memberCard}>
                 <View style={styles.cardHeader}>
                   <View style={styles.avatarCircle}>
                     <Text style={styles.avatarInitial}>
-                      {member.fullName.charAt(0).toUpperCase()}
+                      {(member.fullName ?? '?').charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View style={styles.cardHeaderInfo}>
@@ -412,13 +413,15 @@ export default function MembershipStatsScreen() {
                 <View style={styles.divider} />
 
                 <View style={styles.contactGrid}>
-                  <View style={styles.contactRow}>
-                    <IconSymbol ios_icon_name="phone.fill" android_material_icon_name="phone" size={14} color={colors.primary} />
-                    <Text style={styles.contactValue}>{member.phone}</Text>
-                    <TouchableOpacity style={styles.contactAction} onPress={() => handleCall(member.phone)} activeOpacity={0.7}>
-                      <Text style={styles.contactActionText}>Appeler</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {hasPhone && (
+                    <View style={styles.contactRow}>
+                      <IconSymbol ios_icon_name="phone.fill" android_material_icon_name="phone" size={14} color={colors.primary} />
+                      <Text style={styles.contactValue}>{member.phone}</Text>
+                      <TouchableOpacity style={styles.contactAction} onPress={() => handleCall(member.phone!)} activeOpacity={0.7}>
+                        <Text style={styles.contactActionText}>Appeler</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
 
                   {member.email ? (
                     <View style={styles.contactRow}>
@@ -430,10 +433,12 @@ export default function MembershipStatsScreen() {
                     </View>
                   ) : null}
 
-                  <View style={styles.contactRow}>
-                    <IconSymbol ios_icon_name="location.fill" android_material_icon_name="location-on" size={14} color={colors.textSecondary} />
-                    <Text style={styles.contactValueSecondary}>{member.commune}</Text>
-                  </View>
+                  {member.commune ? (
+                    <View style={styles.contactRow}>
+                      <IconSymbol ios_icon_name="location.fill" android_material_icon_name="location-on" size={14} color={colors.textSecondary} />
+                      <Text style={styles.contactValueSecondary}>{member.commune}</Text>
+                    </View>
+                  ) : null}
 
                   {member.address ? (
                     <View style={styles.contactRow}>
@@ -442,10 +447,12 @@ export default function MembershipStatsScreen() {
                     </View>
                   ) : null}
 
-                  <View style={styles.contactRow}>
-                    <IconSymbol ios_icon_name="briefcase.fill" android_material_icon_name="work" size={14} color={colors.textSecondary} />
-                    <Text style={styles.contactValueSecondary}>{member.profession}</Text>
-                  </View>
+                  {member.profession ? (
+                    <View style={styles.contactRow}>
+                      <IconSymbol ios_icon_name="briefcase.fill" android_material_icon_name="work" size={14} color={colors.textSecondary} />
+                      <Text style={styles.contactValueSecondary}>{member.profession}</Text>
+                    </View>
+                  ) : null}
 
                   <View style={styles.contactRow}>
                     <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={14} color={colors.textSecondary} />

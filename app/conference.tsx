@@ -16,11 +16,11 @@ import {
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { apiGet } from '@/utils/api';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface Conference {
   id: string;
@@ -82,7 +82,8 @@ export default function ConferenceScreen() {
   // Form state
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formScheduledAt, setFormScheduledAt] = useState('');
+  const [formScheduledDate, setFormScheduledDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [formDuration, setFormDuration] = useState(60);
   const [formHostName, setFormHostName] = useState('');
 
@@ -101,7 +102,12 @@ export default function ConferenceScreen() {
     console.log('[Conference] GET /api/conferences');
     setError(null);
     try {
-      const data = await apiGet<Conference[]>('/api/conferences');
+      const res = await fetch(`${BACKEND_URL}/api/conferences`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Erreur ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
       console.log('[Conference] Conferences loaded:', data?.length ?? 0);
       setConferences(Array.isArray(data) ? data : []);
     } catch (err: any) {
@@ -114,6 +120,7 @@ export default function ConferenceScreen() {
   };
 
   const onRefresh = useCallback(() => {
+    console.log('[Conference] Pull-to-refresh triggered');
     setRefreshing(true);
     loadConferences();
   }, []);
@@ -147,14 +154,14 @@ export default function ConferenceScreen() {
     }
     setFormTitle('');
     setFormDescription('');
-    setFormScheduledAt('');
+    setFormScheduledDate(new Date());
     setFormDuration(60);
     setFormHostName('');
     setShowCreateModal(true);
   };
 
   const handleCreateConference = async () => {
-    if (!formTitle.trim() || !formScheduledAt.trim() || !formHostName.trim()) {
+    if (!formTitle.trim() || !formHostName.trim()) {
       return;
     }
     console.log('[Conference] POST /api/conferences');
@@ -164,6 +171,7 @@ export default function ConferenceScreen() {
     setSubmitting(true);
     try {
       const password = await AsyncStorage.getItem('admin_password');
+      const scheduledAt = formScheduledDate.toISOString();
       const response = await fetch(`${BACKEND_URL}/api/conferences`, {
         method: 'POST',
         headers: {
@@ -173,7 +181,7 @@ export default function ConferenceScreen() {
         body: JSON.stringify({
           title: formTitle.trim(),
           description: formDescription.trim() || undefined,
-          scheduledAt: formScheduledAt.trim(),
+          scheduledAt,
           duration: formDuration,
           hostName: formHostName.trim(),
         }),
@@ -192,6 +200,18 @@ export default function ConferenceScreen() {
       setSubmitting(false);
     }
   };
+
+  // Find the first active conference's roomCode for the "Rejoindre en direct" button
+  const activeConference = conferences.find(c => c.status === 'active');
+  const liveRoomCode = activeConference?.roomCode ?? 'ARM-0001';
+
+  const scheduledAtDisplay = formScheduledDate.toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   if (loading) {
     return (
@@ -222,7 +242,7 @@ export default function ConferenceScreen() {
                         params: {
                           title: 'Conférence ARM en Direct',
                           hostName: 'ARM',
-                          roomCode: 'ARM-0001',
+                          roomCode: liveRoomCode,
                           isHost: 'true',
                           participantName: 'ARM',
                         },
@@ -249,7 +269,7 @@ export default function ConferenceScreen() {
         <TouchableOpacity
           style={styles.joinLiveBtn}
           onPress={() => {
-            console.log('[Conference] User tapped Rejoindre en direct, roomCode: ARM-0001');
+            console.log('[Conference] User tapped Rejoindre en direct, roomCode:', liveRoomCode);
             if (Platform.OS !== 'web') {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             }
@@ -258,7 +278,7 @@ export default function ConferenceScreen() {
               params: {
                 title: 'Conférence ARM en Direct',
                 hostName: 'ARM',
-                roomCode: 'ARM-0001',
+                roomCode: liveRoomCode,
                 isHost: 'false',
                 participantName: 'Militant ARM',
               },
@@ -269,7 +289,7 @@ export default function ConferenceScreen() {
           <Text style={styles.joinLiveBtnIcon}>🔴</Text>
           <View style={styles.joinLiveBtnTextCol}>
             <Text style={styles.joinLiveBtnTitle}>Rejoindre en direct</Text>
-            <Text style={styles.joinLiveBtnSub}>Conférence ARM • ARM-0001</Text>
+            <Text style={styles.joinLiveBtnSub}>Conférence ARM • {liveRoomCode}</Text>
           </View>
           <Text style={styles.joinLiveBtnArrow}>›</Text>
         </TouchableOpacity>
@@ -297,6 +317,8 @@ export default function ConferenceScreen() {
             const statusLabel = getStatusLabel(conf.status);
             const dateStr = formatDateTime(conf.scheduledAt);
             const canJoin = conf.status === 'active' || conf.status === 'scheduled';
+            const rc = conf.roomCode ?? 'ARM-0001';
+            const hostIsAdmin = isAdmin;
 
             return (
               <View key={conf.id} style={styles.card}>
@@ -341,8 +363,7 @@ export default function ConferenceScreen() {
                     <TouchableOpacity
                       style={styles.liveButton}
                       onPress={() => {
-                        const rc = conf.roomCode ?? 'ARM-0001';
-                        console.log('[Conference] User tapped Démarrer en direct for:', conf.id, 'roomCode:', rc);
+                        console.log('[Conference] User tapped Démarrer en direct for:', conf.id, 'roomCode:', rc, 'isHost:', hostIsAdmin);
                         if (Platform.OS !== 'web') {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                         }
@@ -352,8 +373,8 @@ export default function ConferenceScreen() {
                             title: conf.title,
                             hostName: conf.hostName,
                             roomCode: rc,
-                            isHost: 'false',
-                            participantName: 'Militant ARM',
+                            isHost: hostIsAdmin ? 'true' : 'false',
+                            participantName: hostIsAdmin ? conf.hostName : 'Militant ARM',
                           },
                         });
                       }}
@@ -389,8 +410,37 @@ export default function ConferenceScreen() {
                 <Text style={styles.inputLabel}>Description</Text>
                 <TextInput style={[styles.input, styles.textArea]} value={formDescription} onChangeText={setFormDescription} placeholder="Description (optionnel)" placeholderTextColor={colors.textSecondary} multiline numberOfLines={3} />
 
-                <Text style={styles.inputLabel}>Date et heure * (AAAA-MM-JJTHH:MM)</Text>
-                <TextInput style={styles.input} value={formScheduledAt} onChangeText={setFormScheduledAt} placeholder="2024-12-31T14:00" placeholderTextColor={colors.textSecondary} />
+                <Text style={styles.inputLabel}>Date et heure *</Text>
+                <TouchableOpacity
+                  style={styles.datePickerBtn}
+                  onPress={() => {
+                    console.log('[Conference] User tapped date picker');
+                    setShowDatePicker(true);
+                  }}
+                >
+                  <Text style={styles.datePickerBtnText}>{scheduledAtDisplay}</Text>
+                  <Text style={styles.datePickerIcon}>📅</Text>
+                </TouchableOpacity>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={formScheduledDate}
+                    mode="datetime"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    onChange={(event, selectedDate) => {
+                      if (Platform.OS !== 'ios') setShowDatePicker(false);
+                      if (selectedDate) {
+                        console.log('[Conference] Date selected:', selectedDate.toISOString());
+                        setFormScheduledDate(selectedDate);
+                      }
+                    }}
+                    minimumDate={new Date()}
+                  />
+                )}
+                {Platform.OS === 'ios' && showDatePicker && (
+                  <TouchableOpacity style={styles.datePickerDoneBtn} onPress={() => setShowDatePicker(false)}>
+                    <Text style={styles.datePickerDoneText}>Confirmer</Text>
+                  </TouchableOpacity>
+                )}
 
                 <Text style={styles.inputLabel}>Durée</Text>
                 <View style={styles.durationRow}>
@@ -418,9 +468,9 @@ export default function ConferenceScreen() {
                     <Text style={styles.cancelBtnText}>Annuler</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.createBtn, (!formTitle.trim() || !formScheduledAt.trim() || !formHostName.trim()) && styles.createBtnDisabled]}
+                    style={[styles.createBtn, (!formTitle.trim() || !formHostName.trim()) && styles.createBtnDisabled]}
                     onPress={handleCreateConference}
-                    disabled={submitting || !formTitle.trim() || !formScheduledAt.trim() || !formHostName.trim()}
+                    disabled={submitting || !formTitle.trim() || !formHostName.trim()}
                   >
                     {submitting ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
@@ -465,10 +515,10 @@ const styles = StyleSheet.create({
   cardMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 },
   metaIcon: { fontSize: 14 },
   metaText: { fontSize: 13, color: colors.textSecondary },
-  joinButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, marginTop: 12, gap: 8, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3 },
+  joinButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, marginTop: 12, gap: 8 },
   joinButtonIcon: { fontSize: 16 },
   joinButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
-  liveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success, borderRadius: 10, paddingVertical: 12, marginTop: 8, gap: 8, shadowColor: colors.success, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 3 },
+  liveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success, borderRadius: 10, paddingVertical: 12, marginTop: 8, gap: 8 },
   liveButtonIcon: { fontSize: 14 },
   liveButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
@@ -480,6 +530,11 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 10, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
+  datePickerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
+  datePickerBtnText: { fontSize: 15, color: colors.text },
+  datePickerIcon: { fontSize: 16 },
+  datePickerDoneBtn: { alignSelf: 'flex-end', paddingHorizontal: 20, paddingVertical: 8, backgroundColor: colors.primary, borderRadius: 8, marginBottom: 16 },
+  datePickerDoneText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 },
   durationRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   durationChip: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center' },
   durationChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
@@ -501,11 +556,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(45,139,60,0.4)',
     gap: 12,
-    shadowColor: '#2D8B3C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
   },
   joinLiveBtnIcon: { fontSize: 20 },
   joinLiveBtnTextCol: { flex: 1 },

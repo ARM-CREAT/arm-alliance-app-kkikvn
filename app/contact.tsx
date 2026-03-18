@@ -5,8 +5,7 @@ import {
   StyleSheet, Alert, Linking, RefreshControl, ActivityIndicator
 } from 'react-native';
 import { Stack } from 'expo-router';
-
-const BACKEND = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+import { BACKEND_URL } from '@/utils/api';
 
 interface Contact {
   id: string;
@@ -34,6 +33,7 @@ export default function ContactScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [senderName, setSenderName] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
   const [subject, setSubject] = useState('');
@@ -42,17 +42,21 @@ export default function ContactScreen() {
 
   const loadContacts = useCallback(async () => {
     console.log('[Contact] GET /api/contacts');
+    setFetchError(null);
     try {
-      const res = await fetch(`${BACKEND}/api/contacts`);
+      const res = await fetch(`${BACKEND_URL}/api/contacts`);
       if (res.ok) {
         const data = await res.json();
         console.log('[Contact] Contacts loaded:', Array.isArray(data) ? data.length : 0);
         setContacts(Array.isArray(data) ? data : []);
       } else {
-        console.log('[Contact] contacts fetch failed, status:', res.status);
+        const errText = await res.text();
+        console.log('[Contact] contacts fetch failed, status:', res.status, errText);
+        setFetchError(`Impossible de charger les contacts (${res.status}).`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.log('[Contact] contacts error', e);
+      setFetchError('Impossible de charger les contacts. Vérifiez votre connexion.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -77,7 +81,7 @@ export default function ContactScreen() {
     const payload = { senderName, senderEmail, subject, message };
     console.log('[Contact] POST /api/messages', payload);
     try {
-      const res = await fetch(`${BACKEND}/api/messages`, {
+      const res = await fetch(`${BACKEND_URL}/api/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -93,7 +97,7 @@ export default function ContactScreen() {
       }
     } catch (e) {
       console.log('[Contact] Message send error', e);
-      Alert.alert('Erreur', 'Impossible d\'envoyer le message. Vérifiez votre connexion.');
+      Alert.alert('Erreur', "Impossible d'envoyer le message. Vérifiez votre connexion.");
     } finally {
       setSending(false);
     }
@@ -111,6 +115,13 @@ export default function ContactScreen() {
 
         {loading ? (
           <ActivityIndicator color="#1B5E20" style={{ marginVertical: 20 }} />
+        ) : fetchError ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{fetchError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); loadContacts(); }}>
+              <Text style={styles.retryBtnText}>Réessayer</Text>
+            </TouchableOpacity>
+          </View>
         ) : contacts.length === 0 ? (
           <Text style={styles.emptyText}>Aucun contact disponible.</Text>
         ) : (
@@ -188,6 +199,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
   sectionTitle: { fontSize: 20, fontWeight: '700', color: '#1B5E20', marginHorizontal: 16, marginTop: 20, marginBottom: 12 },
   emptyText: { textAlign: 'center', color: '#888', marginVertical: 20, fontSize: 14 },
+  errorContainer: { marginHorizontal: 16, marginVertical: 12, backgroundColor: '#FFF3F3', borderRadius: 10, padding: 16, alignItems: 'center', gap: 10 },
+  errorText: { color: '#DC3545', fontSize: 14, textAlign: 'center' },
+  retryBtn: { backgroundColor: '#1B5E20', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8 },
+  retryBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   card: { backgroundColor: '#fff', marginHorizontal: 16, marginBottom: 12, borderRadius: 12, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3 },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
   cardName: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },

@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ interface EventItem {
   date: string;
   location: string;
   imageUrl?: string;
+  image_url?: string;
 }
 
 async function getAdminPassword(): Promise<string> {
@@ -138,7 +139,7 @@ export default function AdminEventsScreen() {
     setFormDescription(item.description);
     setFormDate(item.date);
     setFormLocation(item.location);
-    setFormImageUrl(item.imageUrl || '');
+    setFormImageUrl(item.imageUrl || item.image_url || '');
     setShowEditModal(true);
   };
 
@@ -268,8 +269,8 @@ export default function AdminEventsScreen() {
           ) : (
             events.map((event) => (
               <View key={event.id} style={styles.eventCard}>
-                {event.imageUrl ? (
-                  <Image source={{ uri: event.imageUrl }} style={styles.eventImage} resizeMode="cover" />
+                {(event.imageUrl || event.image_url) ? (
+                  <Image source={{ uri: event.imageUrl || event.image_url }} style={styles.eventImage} resizeMode="cover" />
                 ) : null}
                 <Text style={styles.eventTitle}>{event.title}</Text>
                 <Text style={styles.eventDescription} numberOfLines={3}>{event.description}</Text>

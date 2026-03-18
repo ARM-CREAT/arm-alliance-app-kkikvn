@@ -14,8 +14,9 @@ import {
   TextInput,
 } from 'react-native';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet, apiPut } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
 import { colors } from '@/styles/commonStyles';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Member {
   id: string;
@@ -28,6 +29,11 @@ interface Member {
   status: 'pending' | 'active' | 'suspended';
   role: string;
   createdAt: string;
+}
+
+async function getAdminPassword(): Promise<string> {
+  const pw = await AsyncStorage.getItem('admin_password');
+  return pw || '';
 }
 
 export default function AdminMembersScreen() {
@@ -52,9 +58,20 @@ export default function AdminMembersScreen() {
   }, [members, searchQuery, statusFilter]);
 
   const loadMembers = async () => {
-    console.log('[AdminMembers] Loading members from GET /api/membership');
+    console.log('[AdminMembers] GET /api/membership');
     try {
-      const data = await apiGet<Member[]>('/api/membership');
+      const password = await getAdminPassword();
+      const res = await fetch(`${BACKEND_URL}/api/membership`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': password,
+        },
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Erreur ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
       console.log('[AdminMembers] Members loaded:', data?.length ?? 0);
       setMembers(Array.isArray(data) ? data : []);
     } catch (error: any) {
@@ -75,16 +92,17 @@ export default function AdminMembersScreen() {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (m) =>
-          m.fullName.toLowerCase().includes(query) ||
-          m.membershipNumber.toLowerCase().includes(query) ||
-          m.commune.toLowerCase().includes(query) ||
-          m.profession.toLowerCase().includes(query)
+          (m.fullName ?? '').toLowerCase().includes(query) ||
+          (m.membershipNumber ?? '').toLowerCase().includes(query) ||
+          (m.commune ?? '').toLowerCase().includes(query) ||
+          (m.profession ?? '').toLowerCase().includes(query)
       );
     }
     setFilteredMembers(filtered);
   };
 
   const onRefresh = useCallback(() => {
+    console.log('[AdminMembers] Pull-to-refresh triggered');
     setRefreshing(true);
     loadMembers();
   }, []);
@@ -104,7 +122,7 @@ export default function AdminMembersScreen() {
 
   const handleUpdateStatus = (memberId: string, newStatus: 'active' | 'suspended') => {
     const actionText = newStatus === 'active' ? 'activer' : 'suspendre';
-    console.log(`[AdminMembers] Requesting confirmation to ${actionText} member:`, memberId);
+    console.log(`[AdminMembers] User tapped ${actionText} for member:`, memberId);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     showModalFunc(
@@ -112,11 +130,22 @@ export default function AdminMembersScreen() {
       `Êtes-vous sûr de vouloir ${actionText} ce membre?`,
       'confirm',
       async () => {
-        console.log(`[AdminMembers] PUT /api/membership/${memberId}/status → ${newStatus}`);
+        const apiStatus = newStatus === 'active' ? 'approved' : 'rejected';
+        console.log(`[AdminMembers] PUT /api/membership/${memberId}/status → ${apiStatus}`);
         try {
-          await apiPut(`/api/membership/${memberId}/status`, {
-            status: newStatus === 'active' ? 'approved' : 'rejected',
+          const password = await getAdminPassword();
+          const res = await fetch(`${BACKEND_URL}/api/membership/${memberId}/status`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-admin-password': password,
+            },
+            body: JSON.stringify({ status: apiStatus }),
           });
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Erreur ${res.status}: ${errText}`);
+          }
           console.log('[AdminMembers] Member status updated successfully');
           showModalFunc(
             'Succès',
@@ -249,55 +278,71 @@ export default function AdminMembersScreen() {
               </Text>
             </View>
           ) : (
-            filteredMembers.map((member) => (
-              <View key={member.id} style={styles.memberCard}>
-                <View style={styles.memberHeader}>
-                  <Text style={styles.memberName}>{member.fullName}</Text>
-                  <View style={[styles.statusBadge, getStatusBadgeStyle(member.status)]}>
-                    <Text style={[styles.statusText, getStatusTextStyle(member.status)]}>
-                      {getStatusLabel(member.status)}
-                    </Text>
+            filteredMembers.map((member) => {
+              const statusLabel = getStatusLabel(member.status);
+              const joinDate = formatDate(member.createdAt);
+              return (
+                <View key={member.id} style={styles.memberCard}>
+                  <View style={styles.memberHeader}>
+                    <Text style={styles.memberName}>{member.fullName}</Text>
+                    <View style={[styles.statusBadge, getStatusBadgeStyle(member.status)]}>
+                      <Text style={[styles.statusText, getStatusTextStyle(member.status)]}>
+                        {statusLabel}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.memberNumber}>N° {member.membershipNumber}</Text>
+
+                  {member.profession ? (
+                    <View style={styles.memberInfo}>
+                      <IconSymbol ios_icon_name="briefcase" android_material_icon_name="work" size={14} color={colors.textSecondary} />
+                      <Text style={styles.memberInfoText}>{member.profession}</Text>
+                    </View>
+                  ) : null}
+                  {member.commune ? (
+                    <View style={styles.memberInfo}>
+                      <IconSymbol ios_icon_name="location" android_material_icon_name="location-on" size={14} color={colors.textSecondary} />
+                      <Text style={styles.memberInfoText}>{member.commune}</Text>
+                    </View>
+                  ) : null}
+                  {member.phone ? (
+                    <View style={styles.memberInfo}>
+                      <IconSymbol ios_icon_name="phone" android_material_icon_name="phone" size={14} color={colors.textSecondary} />
+                      <Text style={styles.memberInfoText}>{member.phone}</Text>
+                    </View>
+                  ) : null}
+                  {member.email ? (
+                    <View style={styles.memberInfo}>
+                      <IconSymbol ios_icon_name="envelope" android_material_icon_name="email" size={14} color={colors.textSecondary} />
+                      <Text style={styles.memberInfoText}>{member.email}</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.memberInfo}>
+                    <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={14} color={colors.textSecondary} />
+                    <Text style={styles.memberInfoText}>Inscrit le {joinDate}</Text>
+                  </View>
+
+                  <View style={styles.memberActions}>
+                    {member.status === 'pending' && (
+                      <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => handleUpdateStatus(member.id, 'active')}>
+                        <Text style={[styles.actionButtonText, styles.approveButtonText]}>Approuver</Text>
+                      </TouchableOpacity>
+                    )}
+                    {member.status === 'active' && (
+                      <TouchableOpacity style={[styles.actionButton, styles.suspendButton]} onPress={() => handleUpdateStatus(member.id, 'suspended')}>
+                        <Text style={[styles.actionButtonText, styles.suspendButtonText]}>Suspendre</Text>
+                      </TouchableOpacity>
+                    )}
+                    {member.status === 'suspended' && (
+                      <TouchableOpacity style={[styles.actionButton, styles.activateButton]} onPress={() => handleUpdateStatus(member.id, 'active')}>
+                        <Text style={[styles.actionButtonText, styles.activateButtonText]}>Réactiver</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
-
-                <Text style={styles.memberNumber}>N° {member.membershipNumber}</Text>
-
-                <View style={styles.memberInfo}>
-                  <IconSymbol ios_icon_name="briefcase" android_material_icon_name="work" size={14} color={colors.textSecondary} />
-                  <Text style={styles.memberInfoText}>{member.profession}</Text>
-                </View>
-                <View style={styles.memberInfo}>
-                  <IconSymbol ios_icon_name="location" android_material_icon_name="location-on" size={14} color={colors.textSecondary} />
-                  <Text style={styles.memberInfoText}>{member.commune}</Text>
-                </View>
-                <View style={styles.memberInfo}>
-                  <IconSymbol ios_icon_name="phone" android_material_icon_name="phone" size={14} color={colors.textSecondary} />
-                  <Text style={styles.memberInfoText}>{member.phone}</Text>
-                </View>
-                <View style={styles.memberInfo}>
-                  <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={14} color={colors.textSecondary} />
-                  <Text style={styles.memberInfoText}>Inscrit le {formatDate(member.createdAt)}</Text>
-                </View>
-
-                <View style={styles.memberActions}>
-                  {member.status === 'pending' && (
-                    <TouchableOpacity style={[styles.actionButton, styles.approveButton]} onPress={() => handleUpdateStatus(member.id, 'active')}>
-                      <Text style={[styles.actionButtonText, styles.approveButtonText]}>Approuver</Text>
-                    </TouchableOpacity>
-                  )}
-                  {member.status === 'active' && (
-                    <TouchableOpacity style={[styles.actionButton, styles.suspendButton]} onPress={() => handleUpdateStatus(member.id, 'suspended')}>
-                      <Text style={[styles.actionButtonText, styles.suspendButtonText]}>Suspendre</Text>
-                    </TouchableOpacity>
-                  )}
-                  {member.status === 'suspended' && (
-                    <TouchableOpacity style={[styles.actionButton, styles.activateButton]} onPress={() => handleUpdateStatus(member.id, 'active')}>
-                      <Text style={[styles.actionButtonText, styles.activateButtonText]}>Réactiver</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
 

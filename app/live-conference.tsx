@@ -1,4 +1,6 @@
 
+// NOTE: This is a signaling-only implementation using WebSocket for chat and participant tracking.
+// Real WebRTC peer video streams are not implemented — only the local camera feed is shown.
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -16,22 +18,12 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
-import {
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  FlipHorizontal,
-  PhoneOff,
-  ChevronLeft,
-  Camera,
-  MessageCircle,
-  Users,
-  X,
-  Send,
-} from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { BACKEND_URL } from '@/utils/api';
 
-const WS_BASE = 'wss://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+// Derive WS base from BACKEND_URL (replace http(s) with ws(s))
+const WS_BASE = BACKEND_URL.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://');
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface ChatMessage {
@@ -324,11 +316,11 @@ export default function LiveConferenceScreen() {
     return (
       <View style={[styles.permissionContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <TouchableOpacity style={[styles.permissionBackBtn, { top: insets.top + 12 }]} onPress={handleBack}>
-          <ChevronLeft size={24} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.permissionContent}>
           <View style={styles.permissionIconCircle}>
-            <Camera size={36} color="#FFFFFF" strokeWidth={1.5} />
+            <Ionicons name="camera-outline" size={36} color="#FFFFFF" />
           </View>
           <Text style={styles.permissionTitle}>Accès requis</Text>
           <Text style={styles.permissionMessage}>
@@ -349,13 +341,13 @@ export default function LiveConferenceScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Camera layer */}
+      {/* Camera layer — mute prop removed (not a valid CameraView prop) */}
       {!cameraOff ? (
-        <CameraView style={StyleSheet.absoluteFill} facing={facing} mute={micMuted} />
+        <CameraView style={StyleSheet.absoluteFill} facing={facing} />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.cameraOffBg]}>
           <View style={styles.cameraOffIconCircle}>
-            <VideoOff size={40} color="rgba(255,255,255,0.45)" strokeWidth={1.5} />
+            <Ionicons name="videocam-off-outline" size={40} color="rgba(255,255,255,0.45)" />
           </View>
           <Text style={styles.cameraOffText}>Caméra désactivée</Text>
         </View>
@@ -364,7 +356,7 @@ export default function LiveConferenceScreen() {
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity style={styles.topBarBtn} onPress={handleBack} activeOpacity={0.8} accessibilityLabel="Retour">
-          <ChevronLeft size={22} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         <View style={styles.topBarCenter}>
@@ -417,7 +409,7 @@ export default function LiveConferenceScreen() {
                     <Text style={styles.panelCountText}>{participantCount}</Text>
                   </View>
                   <TouchableOpacity onPress={handleToggleChat} style={styles.panelCloseBtn} accessibilityLabel="Fermer le chat">
-                    <X size={20} color="rgba(255,255,255,0.7)" />
+                    <Ionicons name="close" size={20} color="rgba(255,255,255,0.7)" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -475,7 +467,7 @@ export default function LiveConferenceScreen() {
                   disabled={!chatInput.trim()}
                   accessibilityLabel="Envoyer le message"
                 >
-                  <Send size={18} color="#FFFFFF" />
+                  <Ionicons name="send" size={18} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
             </KeyboardAvoidingView>
@@ -485,15 +477,13 @@ export default function LiveConferenceScreen() {
             <View style={styles.panelInner}>
               {/* Participants header */}
               <View style={styles.panelHeader}>
-                <Text style={styles.panelTitle}>
-                  Participants
-                </Text>
+                <Text style={styles.panelTitle}>Participants</Text>
                 <View style={styles.panelHeaderRight}>
                   <View style={styles.panelCountBadge}>
                     <Text style={styles.panelCountText}>{participantCount}</Text>
                   </View>
                   <TouchableOpacity onPress={handleToggleParticipants} style={styles.panelCloseBtn} accessibilityLabel="Fermer les participants">
-                    <X size={20} color="rgba(255,255,255,0.7)" />
+                    <Ionicons name="close" size={20} color="rgba(255,255,255,0.7)" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -552,7 +542,7 @@ export default function LiveConferenceScreen() {
           activeOpacity={0.8}
           accessibilityLabel={micMuted ? 'Activer le microphone' : 'Désactiver le microphone'}
         >
-          {micMuted ? <MicOff size={22} color="#FFFFFF" /> : <Mic size={22} color="#FFFFFF" />}
+          <Ionicons name={micMuted ? 'mic-off' : 'mic'} size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         {/* Camera */}
@@ -562,7 +552,7 @@ export default function LiveConferenceScreen() {
           activeOpacity={0.8}
           accessibilityLabel={cameraOff ? 'Activer la caméra' : 'Désactiver la caméra'}
         >
-          {cameraOff ? <VideoOff size={22} color="#FFFFFF" /> : <Video size={22} color="#FFFFFF" />}
+          <Ionicons name={cameraOff ? 'videocam-off' : 'videocam'} size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         {/* Flip */}
@@ -572,7 +562,7 @@ export default function LiveConferenceScreen() {
           activeOpacity={0.8}
           accessibilityLabel="Retourner la caméra"
         >
-          <FlipHorizontal size={22} color="#FFFFFF" />
+          <Ionicons name="camera-reverse-outline" size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         {/* Chat */}
@@ -582,7 +572,7 @@ export default function LiveConferenceScreen() {
           activeOpacity={0.8}
           accessibilityLabel="Ouvrir le chat"
         >
-          <MessageCircle size={22} color="#FFFFFF" />
+          <Ionicons name="chatbubble-outline" size={22} color="#FFFFFF" />
           {unreadCount > 0 && !showChat && (
             <View style={styles.unreadBadge}>
               <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : String(unreadCount)}</Text>
@@ -597,7 +587,7 @@ export default function LiveConferenceScreen() {
           activeOpacity={0.8}
           accessibilityLabel="Voir les participants"
         >
-          <Users size={22} color="#FFFFFF" />
+          <Ionicons name="people-outline" size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
         {/* End call */}
@@ -607,7 +597,7 @@ export default function LiveConferenceScreen() {
           activeOpacity={0.85}
           accessibilityLabel="Terminer l'appel"
         >
-          <PhoneOff size={24} color="#FFFFFF" />
+          <Ionicons name="call" size={24} color="#FFFFFF" style={{ transform: [{ rotate: '135deg' }] }} />
         </TouchableOpacity>
       </View>
     </View>
@@ -615,462 +605,73 @@ export default function LiveConferenceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-
-  // Camera off
-  cameraOffBg: {
-    backgroundColor: '#1A1A1A',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cameraOffIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cameraOffText: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.4)',
-    fontWeight: '500',
-  },
-
-  // Top bar
-  topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    gap: 12,
-  },
-  topBarBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  topBarCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  topBarTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: -0.2,
-  },
-  topBarSubtitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 2,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#EF4444',
-  },
-  topBarSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
-  },
-  topBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  timerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 5,
-  },
-  timerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#EF4444',
-  },
-  timerText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    fontVariant: ['tabular-nums'],
-  },
-  wsIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-
-  // Badges
-  hostBadge: {
-    position: 'absolute',
-    left: 16,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  hostBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  participantBadge: {
-    position: 'absolute',
-    right: 16,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  participantBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-
-  // Bottom bar
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    gap: 12,
-  },
-  controlBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  controlBtnMuted: {
-    backgroundColor: 'rgba(220,38,38,0.85)',
-  },
-  controlBtnBlue: {
-    backgroundColor: 'rgba(37,99,235,0.85)',
-  },
-  endCallBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#DC2626',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#DC2626',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  unreadBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#EF4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 3,
-  },
-  unreadBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-
-  // Panel
-  panel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.48,
-    backgroundColor: 'rgba(15,15,15,0.92)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-  },
-  panelInner: {
-    flex: 1,
-  },
-  panelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  panelTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  panelHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  panelCountBadge: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  panelCountText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
-  },
-  panelCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Chat
-  chatScroll: {
-    flex: 1,
-  },
-  chatScrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 8,
-  },
-  chatEmpty: {
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.3)',
-    fontSize: 14,
-    marginTop: 20,
-    fontStyle: 'italic',
-  },
-  systemMsgRow: {
-    alignItems: 'center',
-    marginVertical: 4,
-  },
-  systemMsgText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
-  chatMsgRow: {
-    marginBottom: 4,
-  },
-  chatMsgBubble: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 12,
-    padding: 10,
-  },
-  chatMsgHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  chatMsgSender: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  chatMsgTime: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.35)',
-  },
-  chatMsgText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    lineHeight: 20,
-  },
-  chatInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  chatInput: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#FFFFFF',
-    minHeight: 44,
-  },
-  chatSendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#2D8B3C',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  chatSendBtnDisabled: {
-    opacity: 0.4,
-  },
-
-  // Participants
-  participantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-    gap: 12,
-  },
-  participantAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(45,139,60,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  participantAvatarText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#4ADE80',
-  },
-  participantInfo: {
-    flex: 1,
-  },
-  participantName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  participantJoined: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    marginTop: 2,
-  },
-  hostTag: {
-    backgroundColor: 'rgba(45,139,60,0.3)',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(45,139,60,0.5)',
-  },
-  hostTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#4ADE80',
-  },
-
-  // Permissions
-  permissionContainer: {
-    flex: 1,
-    backgroundColor: '#0D0D0D',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  permissionLoadingText: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.5)',
-  },
-  permissionBackBtn: {
-    position: 'absolute',
-    left: 20,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  permissionContent: {
-    alignItems: 'center',
-    maxWidth: 320,
-  },
-  permissionIconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 28,
-    backgroundColor: 'rgba(45,139,60,0.25)',
-    borderWidth: 1,
-    borderColor: 'rgba(45,139,60,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  permissionTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 12,
-    letterSpacing: -0.3,
-  },
-  permissionMessage: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.6)',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-  },
-  permissionButton: {
-    backgroundColor: '#2D8B3C',
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#2D8B3C',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  permissionButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  permissionCancelBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  permissionCancelText: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.45)',
-    fontWeight: '500',
-  },
+  container: { flex: 1, backgroundColor: '#000000' },
+  cameraOffBg: { backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' },
+  cameraOffIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  cameraOffText: { fontSize: 15, color: 'rgba(255,255,255,0.4)', fontWeight: '500' },
+  topBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16, backgroundColor: 'rgba(0,0,0,0.65)', gap: 12 },
+  topBarBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  topBarCenter: { flex: 1, alignItems: 'center' },
+  topBarTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.2 },
+  topBarSubtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },
+  topBarSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.65)' },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  timerBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, gap: 5 },
+  timerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' },
+  timerText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+  wsIndicator: { width: 8, height: 8, borderRadius: 4 },
+  hostBadge: { position: 'absolute', left: 16, backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  hostBadgeText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+  participantBadge: { position: 'absolute', right: 16, backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  participantBadgeText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingTop: 20, backgroundColor: 'rgba(0,0,0,0.65)', gap: 12 },
+  controlBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  controlBtnMuted: { backgroundColor: 'rgba(220,38,38,0.85)' },
+  controlBtnBlue: { backgroundColor: 'rgba(37,99,235,0.85)' },
+  endCallBtn: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#DC2626', justifyContent: 'center', alignItems: 'center', shadowColor: '#DC2626', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 6 },
+  unreadBadge: { position: 'absolute', top: 6, right: 6, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  unreadBadgeText: { fontSize: 9, fontWeight: '700', color: '#FFFFFF' },
+  panel: { position: 'absolute', bottom: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.48, backgroundColor: 'rgba(15,15,15,0.92)', borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+  panelInner: { flex: 1 },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  panelTitle: { fontSize: 17, fontWeight: '700', color: '#FFFFFF' },
+  panelHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  panelCountBadge: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  panelCountText: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.7)' },
+  panelCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
+  chatScroll: { flex: 1 },
+  chatScrollContent: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  chatEmpty: { textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 14, marginTop: 20, fontStyle: 'italic' },
+  systemMsgRow: { alignItems: 'center', marginVertical: 4 },
+  systemMsgText: { fontSize: 12, color: 'rgba(255,255,255,0.4)', fontStyle: 'italic', textAlign: 'center' },
+  chatMsgRow: { marginBottom: 4 },
+  chatMsgBubble: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 12, padding: 10 },
+  chatMsgHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  chatMsgSender: { fontSize: 13, fontWeight: '700' },
+  chatMsgTime: { fontSize: 11, color: 'rgba(255,255,255,0.35)' },
+  chatMsgText: { fontSize: 14, color: 'rgba(255,255,255,0.9)', lineHeight: 20 },
+  chatInputRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, gap: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
+  chatInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, color: '#FFFFFF', minHeight: 44 },
+  chatSendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2D8B3C', justifyContent: 'center', alignItems: 'center' },
+  chatSendBtnDisabled: { opacity: 0.4 },
+  participantRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)', gap: 12 },
+  participantAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(45,139,60,0.35)', justifyContent: 'center', alignItems: 'center' },
+  participantAvatarText: { fontSize: 16, fontWeight: '700', color: '#4ADE80' },
+  participantInfo: { flex: 1 },
+  participantName: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
+  participantJoined: { fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 },
+  hostTag: { backgroundColor: 'rgba(45,139,60,0.3)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(45,139,60,0.5)' },
+  hostTagText: { fontSize: 11, fontWeight: '700', color: '#4ADE80' },
+  permissionContainer: { flex: 1, backgroundColor: '#0D0D0D', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  permissionLoadingText: { fontSize: 15, color: 'rgba(255,255,255,0.5)' },
+  permissionBackBtn: { position: 'absolute', left: 20, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  permissionContent: { alignItems: 'center', maxWidth: 320 },
+  permissionIconCircle: { width: 88, height: 88, borderRadius: 28, backgroundColor: 'rgba(45,139,60,0.25)', borderWidth: 1, borderColor: 'rgba(45,139,60,0.4)', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  permissionTitle: { fontSize: 24, fontWeight: '700', color: '#FFFFFF', marginBottom: 12, letterSpacing: -0.3 },
+  permissionMessage: { fontSize: 15, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+  permissionButton: { backgroundColor: '#2D8B3C', borderRadius: 14, paddingVertical: 16, paddingHorizontal: 32, width: '100%', alignItems: 'center', marginBottom: 12 },
+  permissionButtonText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  permissionCancelBtn: { paddingVertical: 12, paddingHorizontal: 24 },
+  permissionCancelText: { fontSize: 15, color: 'rgba(255,255,255,0.45)', fontWeight: '500' },
 });
