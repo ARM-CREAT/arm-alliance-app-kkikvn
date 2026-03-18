@@ -94,7 +94,7 @@ export default function CotisationScreen() {
       // Convert amount to XOF for backend
       const amountInXOF = Math.round(convertCurrency(amountValue, currency, 'XOF'));
 
-      const response = await authenticatedPost('/api/cotisations/initiate', {
+      const response = await authenticatedPost<any>('/api/cotisations/initiate', {
         amount: amountInXOF,
         type: selectedType,
         paymentMethod: selectedPaymentMethod,

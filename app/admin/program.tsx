@@ -309,93 +309,96 @@ export default function AdminProgramScreen() {
           cancelText="Annuler"
         />
 
-        <Modal visible={showEditModal} onClose={handleCancel} title="" message="" type="info">
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalTitle}>
-                {editingProgram ? 'Modifier le programme' : 'Nouveau programme'}
-              </Text>
-
-              <Text style={styles.inputLabel}>Catégorie *</Text>
-              <TouchableOpacity
-                style={[styles.input, styles.categorySelector]}
-                onPress={() => {
-                  console.log('[AdminProgram] User tapped category picker');
-                  setShowCategoryPicker(!showCategoryPicker);
-                }}
-              >
-                <Text style={formCategory ? styles.categorySelectorText : styles.categorySelectorPlaceholder}>
-                  {formCategory || 'Sélectionner une catégorie'}
+        {/* Edit / Add inline modal */}
+        {showEditModal && (
+          <View style={styles.editModalOverlay}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.editModalWrapper}>
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <Text style={styles.modalTitle}>
+                  {editingProgram ? 'Modifier le programme' : 'Nouveau programme'}
                 </Text>
-                <Text style={styles.categorySelectorArrow}>{showCategoryPicker ? '▲' : '▼'}</Text>
-              </TouchableOpacity>
-              {showCategoryPicker && (
-                <View style={styles.categoryList}>
-                  {CATEGORIES.map((cat) => (
-                    <TouchableOpacity
-                      key={cat}
-                      style={[styles.categoryOption, formCategory === cat && styles.categoryOptionSelected]}
-                      onPress={() => {
-                        console.log('[AdminProgram] Category selected:', cat);
-                        setFormCategory(cat);
-                        setShowCategoryPicker(false);
-                      }}
-                    >
-                      <Text style={[styles.categoryOptionText, formCategory === cat && styles.categoryOptionTextSelected]}>
-                        {cat}
+
+                <Text style={styles.inputLabel}>Catégorie *</Text>
+                <TouchableOpacity
+                  style={[styles.input, styles.categorySelector]}
+                  onPress={() => {
+                    console.log('[AdminProgram] User tapped category picker');
+                    setShowCategoryPicker(!showCategoryPicker);
+                  }}
+                >
+                  <Text style={formCategory ? styles.categorySelectorText : styles.categorySelectorPlaceholder}>
+                    {formCategory || 'Sélectionner une catégorie'}
+                  </Text>
+                  <Text style={styles.categorySelectorArrow}>{showCategoryPicker ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {showCategoryPicker && (
+                  <View style={styles.categoryList}>
+                    {CATEGORIES.map((cat) => (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[styles.categoryOption, formCategory === cat && styles.categoryOptionSelected]}
+                        onPress={() => {
+                          console.log('[AdminProgram] Category selected:', cat);
+                          setFormCategory(cat);
+                          setShowCategoryPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.categoryOptionText, formCategory === cat && styles.categoryOptionTextSelected]}>
+                          {cat}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                <Text style={styles.inputLabel}>Titre *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formTitle}
+                  onChangeText={setFormTitle}
+                  placeholder="Titre du programme"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.inputLabel}>Description *</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formDescription}
+                  onChangeText={setFormDescription}
+                  placeholder="Description détaillée du programme"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={6}
+                />
+
+                <Text style={styles.inputLabel}>Ordre d'affichage</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formOrder}
+                  onChangeText={setFormOrder}
+                  placeholder="1, 2, 3..."
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel} disabled={submitting}>
+                    <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.modalButton, styles.submitButton]} onPress={handleSubmit} disabled={submitting}>
+                    {submitting ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={[styles.modalButtonText, styles.submitButtonText]}>
+                        {editingProgram ? 'Modifier' : 'Ajouter'}
                       </Text>
-                    </TouchableOpacity>
-                  ))}
+                    )}
+                  </TouchableOpacity>
                 </View>
-              )}
-
-              <Text style={styles.inputLabel}>Titre *</Text>
-              <TextInput
-                style={styles.input}
-                value={formTitle}
-                onChangeText={setFormTitle}
-                placeholder="Titre du programme"
-                placeholderTextColor={colors.textSecondary}
-              />
-
-              <Text style={styles.inputLabel}>Description *</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={formDescription}
-                onChangeText={setFormDescription}
-                placeholder="Description détaillée du programme"
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={6}
-              />
-
-              <Text style={styles.inputLabel}>Ordre d'affichage</Text>
-              <TextInput
-                style={styles.input}
-                value={formOrder}
-                onChangeText={setFormOrder}
-                placeholder="1, 2, 3..."
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="number-pad"
-              />
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel} disabled={submitting}>
-                  <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Annuler</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.modalButton, styles.submitButton]} onPress={handleSubmit} disabled={submitting}>
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={[styles.modalButtonText, styles.submitButtonText]}>
-                      {editingProgram ? 'Modifier' : 'Ajouter'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </Modal>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </View>
+        )}
       </View>
     </>
   );
@@ -423,7 +426,9 @@ const styles = StyleSheet.create({
   deleteButtonText: { color: '#FF3B30' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
   emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginTop: 16 },
-  modalScroll: { maxHeight: 520 },
+  editModalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 999 },
+  editModalWrapper: { justifyContent: 'flex-end' },
+  modalScroll: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' as any, padding: 24 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },

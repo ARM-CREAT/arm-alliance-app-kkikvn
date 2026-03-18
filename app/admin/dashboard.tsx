@@ -173,7 +173,7 @@ export default function AdminDashboardScreen() {
     }
 
     try {
-      await AsyncStorage.removeItem('admin_authenticated');
+      await AsyncStorage.removeItem('admin_password');
       router.replace('/admin/login');
     } catch (error) {
       console.error('Erreur lors de la déconnexion:', error);

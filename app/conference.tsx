@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { apiGet, BACKEND_URL } from '@/utils/api';
+import { apiGet } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

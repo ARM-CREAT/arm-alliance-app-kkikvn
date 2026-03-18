@@ -88,7 +88,7 @@ export default function ElectionResultsScreen() {
         votesNuls: parseInt(formData.votesNuls) || 0,
       };
 
-      const response = await authenticatedPost('/api/elections/submit-results', {
+      const response = await authenticatedPost<any>('/api/elections/submit-results', {
         electionType: formData.electionType,
         region: formData.region,
         cercle: formData.cercle,

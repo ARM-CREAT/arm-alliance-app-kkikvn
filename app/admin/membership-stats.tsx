@@ -203,7 +203,7 @@ export default function MembershipStatsScreen() {
 
   const handleFilterPress = (key: FilterStatus) => {
     console.log('[MembershipStats] Filter changed to:', key);
-    if (Platform.OS === 'ios') Haptics.selectionAsync();
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setFilter(key);
   };
 

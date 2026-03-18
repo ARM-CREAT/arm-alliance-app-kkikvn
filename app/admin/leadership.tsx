@@ -205,6 +205,26 @@ const styles = StyleSheet.create({
   submitButtonText: {
     color: '#FFFFFF',
   },
+  editModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    zIndex: 999,
+  },
+  editModalWrapper: {
+    justifyContent: 'flex-end',
+  },
+  editModalScroll: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    padding: 24,
+  },
 });
 
 export default function AdminLeadershipScreen() {
@@ -468,101 +488,100 @@ export default function AdminLeadershipScreen() {
           type={modalType}
         />
 
-        <Modal
-          visible={showEditModal}
-          onClose={handleCancel}
-          title=""
-          message=""
-          type="info"
-        >
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
-                {editingMember ? 'Modifier le membre' : 'Nouveau membre'}
-              </Text>
+        {/* Edit / Add inline modal */}
+        {showEditModal && (
+          <View style={styles.editModalOverlay}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.editModalWrapper}>
+              <ScrollView style={styles.editModalScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>
+                    {editingMember ? 'Modifier le membre' : 'Nouveau membre'}
+                  </Text>
 
-              <Text style={styles.inputLabel}>Nom complet *</Text>
-              <TextInput
-                style={styles.input}
-                value={formName}
-                onChangeText={setFormName}
-                placeholder="Nom du membre"
-                placeholderTextColor={colors.textSecondary}
-              />
+                  <Text style={styles.inputLabel}>Nom complet *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formName}
+                    onChangeText={setFormName}
+                    placeholder="Nom du membre"
+                    placeholderTextColor={colors.textSecondary}
+                  />
 
-              <Text style={styles.inputLabel}>Poste *</Text>
-              <TextInput
-                style={styles.input}
-                value={formPosition}
-                onChangeText={setFormPosition}
-                placeholder="Président, Vice-président, etc."
-                placeholderTextColor={colors.textSecondary}
-              />
+                  <Text style={styles.inputLabel}>Poste *</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formPosition}
+                    onChangeText={setFormPosition}
+                    placeholder="Président, Vice-président, etc."
+                    placeholderTextColor={colors.textSecondary}
+                  />
 
-              <Text style={styles.inputLabel}>Téléphone</Text>
-              <TextInput
-                style={styles.input}
-                value={formPhone}
-                onChangeText={setFormPhone}
-                placeholder="+223 XX XX XX XX"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="phone-pad"
-              />
+                  <Text style={styles.inputLabel}>Téléphone</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formPhone}
+                    onChangeText={setFormPhone}
+                    placeholder="+223 XX XX XX XX"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="phone-pad"
+                  />
 
-              <Text style={styles.inputLabel}>Lieu</Text>
-              <TextInput
-                style={styles.input}
-                value={formLocation}
-                onChangeText={setFormLocation}
-                placeholder="Bamako, Mali"
-                placeholderTextColor={colors.textSecondary}
-              />
+                  <Text style={styles.inputLabel}>Lieu</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formLocation}
+                    onChangeText={setFormLocation}
+                    placeholder="Bamako, Mali"
+                    placeholderTextColor={colors.textSecondary}
+                  />
 
-              <Text style={styles.inputLabel}>Adresse</Text>
-              <TextInput
-                style={styles.input}
-                value={formAddress}
-                onChangeText={setFormAddress}
-                placeholder="Adresse complète"
-                placeholderTextColor={colors.textSecondary}
-              />
+                  <Text style={styles.inputLabel}>Adresse</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formAddress}
+                    onChangeText={setFormAddress}
+                    placeholder="Adresse complète"
+                    placeholderTextColor={colors.textSecondary}
+                  />
 
-              <Text style={styles.inputLabel}>Ordre d'affichage</Text>
-              <TextInput
-                style={styles.input}
-                value={formOrder}
-                onChangeText={setFormOrder}
-                placeholder="1, 2, 3..."
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="number-pad"
-              />
+                  <Text style={styles.inputLabel}>Ordre d'affichage</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={formOrder}
+                    onChangeText={setFormOrder}
+                    placeholder="1, 2, 3..."
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="number-pad"
+                  />
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={handleCancel}
-                  disabled={submitting}
-                >
-                  <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Annuler</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.submitButton]}
-                  onPress={handleSubmit}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={[styles.modalButtonText, styles.submitButtonText]}>
-                      {editingMember ? 'Modifier' : 'Ajouter'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.cancelButton]}
+                      onPress={handleCancel}
+                      disabled={submitting}
+                    >
+                      <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Annuler</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.submitButton]}
+                      onPress={handleSubmit}
+                      disabled={submitting}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={[styles.modalButtonText, styles.submitButtonText]}>
+                          {editingMember ? 'Modifier' : 'Ajouter'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </View>
+        )}
       </View>
     </>
   );

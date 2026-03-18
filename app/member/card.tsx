@@ -10,12 +10,12 @@ import {
   ActivityIndicator,
   Dimensions,
   TextInput,
-  Clipboard,
   Alert,
   ImageSourcePropType,
   Image,
   RefreshControl,
 } from "react-native";
+import * as Clipboard from 'expo-clipboard';
 import { Stack, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Modal } from "@/components/ui/Modal";
@@ -220,7 +220,7 @@ export default function MemberCardScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    Clipboard.setString(memberData.membershipNumber);
+    Clipboard.setStringAsync(memberData.membershipNumber);
     Alert.alert("Copié", "Numéro de membre copié dans le presse-papiers.");
   };
 

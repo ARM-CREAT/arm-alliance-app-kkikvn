@@ -50,12 +50,18 @@ export default function MemberMessagesScreen() {
 
     try {
       const response = await authenticatedGet('/api/messages/my-messages');
-      console.log('[MemberMessages] Messages loaded:', response);
-      setMessages(response);
+      console.log('[MemberMessages] Messages loaded:', Array.isArray(response) ? response.length : 0);
+      setMessages(Array.isArray(response) ? response : []);
     } catch (error: any) {
       console.error('[MemberMessages] Error loading messages:', error);
-      setErrorMessage(error?.message || 'Impossible de charger les messages');
-      setErrorModalVisible(true);
+      // If unauthenticated, show empty state instead of crashing
+      if (error?.message?.includes('Authentication token not found') || error?.message?.includes('401')) {
+        console.log('[MemberMessages] Not authenticated — showing empty state');
+        setMessages([]);
+      } else {
+        setErrorMessage(error?.message || 'Impossible de charger les messages');
+        setErrorModalVisible(true);
+      }
     } finally {
       setLoading(false);
     }

@@ -10,12 +10,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  Clipboard,
   Alert,
   Image,
   ImageSourcePropType,
   ScrollView,
 } from "react-native";
+import * as Clipboard from 'expo-clipboard';
 import { Stack } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import * as Haptics from "expo-haptics";
@@ -299,7 +299,7 @@ export default function AIChatScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    Clipboard.setString(content);
+    Clipboard.setStringAsync(content);
     Alert.alert("Copié", "Le message a été copié dans le presse-papiers.");
   };
 

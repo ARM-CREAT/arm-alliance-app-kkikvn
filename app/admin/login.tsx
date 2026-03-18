@@ -408,7 +408,7 @@ export default function AdminLoginScreen() {
         showModal(
           'Serveur non disponible',
           'Le serveur backend n\'est pas accessible actuellement.\n\n' +
-          'Utilisez le bouton "Connexion hors ligne" ci-dessous pour accéder au tableau de bord sans connexion au serveur.\n\n' +
+          'Utilisez le bouton "Connexion hors ligne" ci-dessous pour accéder au tableau de bord sans connexion au serveur.',
           'warning'
         );
       } else if (

@@ -321,83 +321,85 @@ export default function AdminEventsScreen() {
           cancelText="Annuler"
         />
 
-        {/* Edit / Add modal */}
-        <Modal visible={showEditModal} onClose={handleCancel} title="" message="" type="info">
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalTitle}>
-                {editingEvent ? "Modifier l'événement" : 'Nouvel événement'}
-              </Text>
+        {/* Edit / Add inline modal */}
+        {showEditModal && (
+          <View style={styles.editModalOverlay}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.editModalWrapper}>
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <Text style={styles.modalTitle}>
+                  {editingEvent ? "Modifier l'événement" : 'Nouvel événement'}
+                </Text>
 
-              <Text style={styles.inputLabel}>Titre *</Text>
-              <TextInput
-                style={styles.input}
-                value={formTitle}
-                onChangeText={setFormTitle}
-                placeholder="Titre de l'événement"
-                placeholderTextColor={colors.textSecondary}
-              />
+                <Text style={styles.inputLabel}>Titre *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formTitle}
+                  onChangeText={setFormTitle}
+                  placeholder="Titre de l'événement"
+                  placeholderTextColor={colors.textSecondary}
+                />
 
-              <Text style={styles.inputLabel}>Description *</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={formDescription}
-                onChangeText={setFormDescription}
-                placeholder="Description de l'événement"
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={4}
-              />
+                <Text style={styles.inputLabel}>Description *</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formDescription}
+                  onChangeText={setFormDescription}
+                  placeholder="Description de l'événement"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={4}
+                />
 
-              <Text style={styles.inputLabel}>Date * (AAAA-MM-JJ HH:MM)</Text>
-              <TextInput
-                style={styles.input}
-                value={formDate}
-                onChangeText={setFormDate}
-                placeholder="2024-12-31 18:00"
-                placeholderTextColor={colors.textSecondary}
-              />
+                <Text style={styles.inputLabel}>Date * (AAAA-MM-JJ HH:MM)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formDate}
+                  onChangeText={setFormDate}
+                  placeholder="2024-12-31 18:00"
+                  placeholderTextColor={colors.textSecondary}
+                />
 
-              <Text style={styles.inputLabel}>Lieu *</Text>
-              <TextInput
-                style={styles.input}
-                value={formLocation}
-                onChangeText={setFormLocation}
-                placeholder="Lieu de l'événement"
-                placeholderTextColor={colors.textSecondary}
-              />
+                <Text style={styles.inputLabel}>Lieu *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formLocation}
+                  onChangeText={setFormLocation}
+                  placeholder="Lieu de l'événement"
+                  placeholderTextColor={colors.textSecondary}
+                />
 
-              <Text style={styles.inputLabel}>URL de l'image (optionnel)</Text>
-              <TextInput
-                style={styles.input}
-                value={formImageUrl}
-                onChangeText={setFormImageUrl}
-                placeholder="https://..."
-                placeholderTextColor={colors.textSecondary}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
-              {formImageUrl.trim().length > 0 && (
-                <Image source={{ uri: formImageUrl.trim() }} style={styles.imagePreview} resizeMode="cover" />
-              )}
+                <Text style={styles.inputLabel}>URL de l'image (optionnel)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formImageUrl}
+                  onChangeText={setFormImageUrl}
+                  placeholder="https://..."
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
+                {formImageUrl.trim().length > 0 && (
+                  <Image source={{ uri: formImageUrl.trim() }} style={styles.imagePreview} resizeMode="cover" />
+                )}
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel} disabled={submitting}>
-                  <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Annuler</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.modalButton, styles.submitButton]} onPress={handleSubmit} disabled={submitting}>
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={[styles.modalButtonText, styles.submitButtonText]}>
-                      {editingEvent ? 'Modifier' : 'Ajouter'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </Modal>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel} disabled={submitting}>
+                    <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.modalButton, styles.submitButton]} onPress={handleSubmit} disabled={submitting}>
+                    {submitting ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={[styles.modalButtonText, styles.submitButtonText]}>
+                        {editingEvent ? 'Modifier' : 'Ajouter'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </View>
+        )}
       </View>
     </>
   );
@@ -426,7 +428,9 @@ const styles = StyleSheet.create({
   deleteButtonText: { color: '#FF3B30' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
   emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginTop: 16 },
-  modalScroll: { maxHeight: 520 },
+  editModalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 999 },
+  editModalWrapper: { justifyContent: 'flex-end' },
+  modalScroll: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%', padding: 24 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
