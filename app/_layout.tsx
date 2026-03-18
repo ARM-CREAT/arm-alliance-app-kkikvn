@@ -208,12 +208,6 @@ export default function RootLayout() {
                     }} 
                   />
                   <Stack.Screen 
-                    name="admin/members" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
                     name="admin/program" 
                     options={{ 
                       headerShown: false,
@@ -251,12 +245,6 @@ export default function RootLayout() {
                     }} 
                   />
                   <Stack.Screen 
-                    name="admin/ideology" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
                     name="admin/contacts" 
                     options={{ 
                       headerShown: false,
@@ -282,12 +270,6 @@ export default function RootLayout() {
                   />
                   <Stack.Screen 
                     name="admin/quick-setup" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/membership-stats" 
                     options={{ 
                       headerShown: false,
                     }} 

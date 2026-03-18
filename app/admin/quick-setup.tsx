@@ -366,10 +366,6 @@ export default function QuickSetupScreen() {
                   <Text style={styles.infoBullet}>•</Text>
                   <Text style={styles.infoText}>Programme : Détaillez votre programme politique</Text>
                 </View>
-                <View style={styles.infoItem}>
-                  <Text style={styles.infoBullet}>•</Text>
-                  <Text style={styles.infoText}>Membres : Gérez les adhésions au parti</Text>
-                </View>
               </View>
               <TouchableOpacity 
                 style={styles.button}
