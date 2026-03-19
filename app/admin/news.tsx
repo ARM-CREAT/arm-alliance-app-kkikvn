@@ -215,15 +215,17 @@ export default function AdminNewsScreen() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const loadNews = useCallback(async () => {
-    console.log('Admin News - Loading news');
+    console.log('Admin News - Loading news from GET /api/news');
     try {
       const response = await fetch(`${BACKEND_URL}/api/news`);
       if (!response.ok) {
-        throw new Error('Failed to load news');
+        const errText = await response.text();
+        throw new Error(`Erreur ${response.status}: ${errText}`);
       }
       const data = await response.json();
-      console.log('Admin News - Loaded news:', data.length);
-      setNews(data);
+      const list: NewsItem[] = Array.isArray(data) ? data : (Array.isArray(data?.news) ? data.news : []);
+      console.log('Admin News - Loaded news:', list.length);
+      setNews(list);
     } catch (error: any) {
       console.error('Admin News - Load error:', error);
       showModal('Erreur', 'Impossible de charger les actualités.', 'error');
@@ -359,11 +361,14 @@ export default function AdminNewsScreen() {
         throw new Error('Not authenticated');
       }
 
+      console.log('Admin News - DELETE /api/admin/news/' + id);
       const response = await fetch(`${BACKEND_URL}/api/admin/news/${id}`, {
         method: 'DELETE',
         headers: {
+          'Content-Type': 'application/json',
           'x-admin-password': adminPassword,
         },
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -382,14 +387,15 @@ export default function AdminNewsScreen() {
     }
   };
 
-  const formatDate = (dateString: string): string => {
+  const formatDate = (dateString: string | undefined | null): string => {
+    if (!dateString) return '';
     const date = new Date(dateString);
-    const formatted = date.toLocaleDateString('fr-FR', {
+    if (isNaN(date.getTime())) return dateString;
+    return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
       month: 'long',
       year: 'numeric',
     });
-    return formatted;
   };
 
   if (loading) {
