@@ -13,11 +13,10 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/styles/commonStyles';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { apiGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 
 interface Contact {
   id: string;
@@ -25,7 +24,6 @@ interface Contact {
   role: string;
   phone: string;
   email: string;
-  address: string;
   type: string;
 }
 
@@ -48,12 +46,10 @@ const emptyForm = {
   role: '',
   phone: '',
   email: '',
-  address: '',
   type: 'general',
 };
 
 export default function AdminContactsScreen() {
-  const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -66,36 +62,16 @@ export default function AdminContactsScreen() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
 
-  const checkAuth = useCallback(async () => {
-    const password = await AsyncStorage.getItem('admin_password');
-    if (!password) {
-      router.replace('/admin/login');
-    }
-  }, [router]);
-
-  const getAdminHeaders = async (): Promise<Record<string, string>> => {
-    const password = await AsyncStorage.getItem('admin_password');
-    return {
-      'Content-Type': 'application/json',
-      'x-admin-password': password || '',
-    };
-  };
-
   const fetchContacts = useCallback(async () => {
-    console.log('[Admin Contacts] GET /api/contacts');
+    console.log('[AdminContacts] GET /api/contacts');
     try {
-      const headers = await getAdminHeaders();
-      const response = await fetch(`${BACKEND_URL}/api/contacts`, { headers });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Erreur ${response.status}: ${text}`);
-      }
-      const data = await response.json();
-      const list: Contact[] = Array.isArray(data) ? data : (data.contacts || []);
+      const data = await apiGet<Contact[]>('/api/contacts');
+      const list: Contact[] = Array.isArray(data) ? data : [];
+      console.log('[AdminContacts] Contacts loaded:', list.length);
       setContacts(list);
       setError('');
     } catch (e: any) {
-      console.error('[Admin Contacts] Fetch error:', e.message);
+      console.error('[AdminContacts] Fetch error:', e.message);
       setError(e.message);
     }
   }, []);
@@ -107,19 +83,18 @@ export default function AdminContactsScreen() {
   }, [fetchContacts]);
 
   const onRefresh = useCallback(async () => {
-    console.log('[Admin Contacts] Pull-to-refresh triggered');
+    console.log('[AdminContacts] Pull-to-refresh triggered');
     setRefreshing(true);
     await fetchContacts();
     setRefreshing(false);
   }, [fetchContacts]);
 
   useEffect(() => {
-    checkAuth();
     loadData();
-  }, [checkAuth, loadData]);
+  }, [loadData]);
 
   const openCreate = () => {
-    console.log('[Admin Contacts] Open create modal');
+    console.log('[AdminContacts] User tapped Créer contact');
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingContact(null);
     setForm({ ...emptyForm });
@@ -127,7 +102,7 @@ export default function AdminContactsScreen() {
   };
 
   const openEdit = (contact: Contact) => {
-    console.log('[Admin Contacts] Open edit modal for id:', contact.id);
+    console.log('[AdminContacts] User tapped Modifier contact:', contact.id);
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingContact(contact);
     setForm({
@@ -135,14 +110,13 @@ export default function AdminContactsScreen() {
       role: contact.role || '',
       phone: contact.phone || '',
       email: contact.email || '',
-      address: contact.address || '',
       type: contact.type || 'general',
     });
     setShowFormModal(true);
   };
 
   const openDelete = (id: string) => {
-    console.log('[Admin Contacts] Open delete confirm for id:', id);
+    console.log('[AdminContacts] User tapped Supprimer contact:', id);
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDeletingId(id);
     setShowDeleteModal(true);
@@ -164,48 +138,30 @@ export default function AdminContactsScreen() {
       Alert.alert('Erreur', 'Le nom est requis');
       return;
     }
-    console.log('[Admin Contacts] Saving contact, editing:', editingContact?.id || 'new');
+    console.log('[AdminContacts] Saving contact, editing:', editingContact?.id || 'new');
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSaving(true);
     try {
-      const headers = await getAdminHeaders();
       const body = {
         name: form.name.trim(),
         role: form.role.trim(),
         phone: form.phone.trim(),
         email: form.email.trim(),
-        address: form.address.trim(),
         type: form.type,
       };
       if (editingContact) {
-        console.log('[Admin Contacts] PUT /api/admin/contacts/' + editingContact.id);
-        const response = await fetch(`${BACKEND_URL}/api/admin/contacts/${editingContact.id}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`Erreur ${response.status}: ${text}`);
-        }
-        console.log('[Admin Contacts] Contact updated successfully');
+        console.log('[AdminContacts] PUT /api/contacts/' + editingContact.id);
+        await authenticatedPut(`/api/contacts/${editingContact.id}`, body);
+        console.log('[AdminContacts] Contact updated successfully');
       } else {
-        console.log('[Admin Contacts] POST /api/admin/contacts');
-        const response = await fetch(`${BACKEND_URL}/api/admin/contacts`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        });
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`Erreur ${response.status}: ${text}`);
-        }
-        console.log('[Admin Contacts] Contact created successfully');
+        console.log('[AdminContacts] POST /api/contacts');
+        await authenticatedPost('/api/contacts', body);
+        console.log('[AdminContacts] Contact created successfully');
       }
       closeFormModal();
       await fetchContacts();
     } catch (e: any) {
-      console.error('[Admin Contacts] Save error:', e.message);
+      console.error('[AdminContacts] Save error:', e.message);
       Alert.alert('Erreur', e.message);
     } finally {
       setSaving(false);
@@ -214,23 +170,15 @@ export default function AdminContactsScreen() {
 
   const handleDelete = async () => {
     if (!deletingId) return;
-    console.log('[Admin Contacts] DELETE /api/admin/contacts/' + deletingId);
+    console.log('[AdminContacts] DELETE /api/contacts/' + deletingId);
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     try {
-      const headers = await getAdminHeaders();
-      const response = await fetch(`${BACKEND_URL}/api/admin/contacts/${deletingId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Erreur ${response.status}: ${text}`);
-      }
-      console.log('[Admin Contacts] Contact deleted successfully');
+      await authenticatedDelete(`/api/contacts/${deletingId}`);
+      console.log('[AdminContacts] Contact deleted successfully');
       closeDeleteModal();
       await fetchContacts();
     } catch (e: any) {
-      console.error('[Admin Contacts] Delete error:', e.message);
+      console.error('[AdminContacts] Delete error:', e.message);
       Alert.alert('Erreur', e.message);
     }
   };
@@ -266,7 +214,12 @@ export default function AdminContactsScreen() {
             }
           >
             {error ? (
-              <Text style={styles.errorText}>{error}</Text>
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={loadData}>
+                  <Text style={styles.retryBtnText}>Réessayer</Text>
+                </TouchableOpacity>
+              </View>
             ) : contacts.length === 0 ? (
               <Text style={styles.emptyText}>Aucun contact. Créez-en un !</Text>
             ) : (
@@ -284,7 +237,6 @@ export default function AdminContactsScreen() {
                     {contact.role ? <Text style={styles.cardRole}>{contact.role}</Text> : null}
                     {contact.phone ? <Text style={styles.cardMeta}>{contact.phone}</Text> : null}
                     {contact.email ? <Text style={styles.cardMeta}>{contact.email}</Text> : null}
-                    {contact.address ? <Text style={styles.cardAddress}>{contact.address}</Text> : null}
                     <View style={styles.cardActions}>
                       <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(contact)}>
                         <Text style={styles.editBtnText}>Modifier</Text>
@@ -344,14 +296,6 @@ export default function AdminContactsScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              <Text style={styles.fieldLabel}>Adresse</Text>
-              <TextInput
-                style={styles.input}
-                value={form.address}
-                onChangeText={(v) => setForm((f) => ({ ...f, address: v }))}
-                placeholder="Adresse"
-                placeholderTextColor={colors.textSecondary}
-              />
               <Text style={styles.fieldLabel}>Type</Text>
               <View style={styles.typeRow}>
                 {TYPE_OPTIONS.map((t) => {
@@ -361,7 +305,7 @@ export default function AdminContactsScreen() {
                       key={t}
                       style={[styles.typeChip, isSelected && { backgroundColor: TYPE_COLORS[t], borderColor: TYPE_COLORS[t] }]}
                       onPress={() => {
-                        console.log('[Admin Contacts] Type selected:', t);
+                        console.log('[AdminContacts] Type selected:', t);
                         setForm((f) => ({ ...f, type: t }));
                       }}
                     >
@@ -374,11 +318,7 @@ export default function AdminContactsScreen() {
               </View>
             </ScrollView>
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={closeFormModal}
-                disabled={saving}
-              >
+              <TouchableOpacity style={styles.cancelBtn} onPress={closeFormModal} disabled={saving}>
                 <Text style={styles.cancelBtnText}>Annuler</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
@@ -418,7 +358,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   loader: { marginTop: 60 },
   list: { padding: 16, paddingBottom: 40 },
-  errorText: { color: colors.error, textAlign: 'center', marginTop: 20, fontSize: 15 },
+  errorContainer: { marginVertical: 12, backgroundColor: '#FFF3F3', borderRadius: 10, padding: 16, alignItems: 'center', gap: 10 },
+  errorText: { color: colors.error, fontSize: 14, textAlign: 'center' },
+  retryBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8 },
+  retryBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   emptyText: { color: colors.textSecondary, textAlign: 'center', marginTop: 40, fontSize: 16 },
   card: {
     backgroundColor: colors.card,
@@ -437,7 +380,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: colors.text, flex: 1, marginRight: 8 },
   cardRole: { fontSize: 14, fontWeight: '600', color: colors.primary, marginBottom: 4 },
   cardMeta: { fontSize: 13, color: colors.textSecondary, marginBottom: 2 },
-  cardAddress: { fontSize: 12, color: colors.textSecondary, marginBottom: 2, fontStyle: 'italic' },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   cardActions: { flexDirection: 'row', marginTop: 12, gap: 8 },

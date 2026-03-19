@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api';
+import { apiGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import {
   View,
   Text,
@@ -17,9 +17,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  ImageSourcePropType,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface EventItem {
   id: string;
@@ -31,30 +31,9 @@ interface EventItem {
   image_url?: string;
 }
 
-async function getAdminPassword(): Promise<string> {
-  const pw = await AsyncStorage.getItem('admin_password');
-  return pw || '';
-}
-
-async function adminFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
-  const password = await getAdminPassword();
-  const url = `${BACKEND_URL}${endpoint}`;
-  console.log('[AdminEvents] Fetch:', options.method || 'GET', url);
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-password': password,
-      ...(options.headers || {}),
-    },
-  });
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('[AdminEvents] API error:', response.status, errText);
-    throw new Error(`Erreur ${response.status}: ${errText}`);
-  }
-  const text = await response.text();
-  return text ? JSON.parse(text) : {};
+function resolveImageSource(source: string | undefined): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  return { uri: source };
 }
 
 export default function AdminEventsScreen() {
@@ -81,21 +60,15 @@ export default function AdminEventsScreen() {
   }, []);
 
   const loadEvents = async () => {
-    console.log('[AdminEvents] Loading events from GET /api/events');
+    console.log('[AdminEvents] GET /api/events');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/events`);
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Erreur ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-      // API returns { events: [...] } — unwrap the array
-      const list = Array.isArray(data) ? data : (Array.isArray(data?.events) ? data.events : []);
+      const data = await apiGet<EventItem[]>('/api/events');
+      const list = Array.isArray(data) ? data : [];
       console.log('[AdminEvents] Events loaded:', list.length);
       setEvents(list);
     } catch (error: any) {
       console.error('[AdminEvents] Error loading events:', error);
-      showModalFunc('Erreur', 'Impossible de charger les événements.', 'error');
+      showModalFunc('Erreur', 'Impossible de charger les événements: ' + error.message, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -137,10 +110,16 @@ export default function AdminEventsScreen() {
     console.log('[AdminEvents] User tapped Modifier event:', item.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingEvent(item);
-    setFormTitle(item.title);
-    setFormDescription(item.description);
-    setFormDate(item.date);
-    setFormLocation(item.location);
+    setFormTitle(item.title || '');
+    setFormDescription(item.description || '');
+    // Pre-fill date as YYYY-MM-DD HH:MM for easy editing
+    const d = new Date(item.date);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const localDate = isNaN(d.getTime())
+      ? item.date
+      : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    setFormDate(localDate);
+    setFormLocation(item.location || '');
     setFormImageUrl(item.imageUrl || item.image_url || '');
     setShowEditModal(true);
   };
@@ -152,8 +131,8 @@ export default function AdminEventsScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!formTitle.trim() || !formDescription.trim() || !formDate.trim() || !formLocation.trim()) {
-      showModalFunc('Erreur', 'Veuillez remplir tous les champs obligatoires.', 'warning');
+    if (!formTitle.trim() || !formDate.trim()) {
+      showModalFunc('Erreur', 'Le titre et la date sont obligatoires.', 'warning');
       return;
     }
 
@@ -161,14 +140,11 @@ export default function AdminEventsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
-    // Convert user-entered date (YYYY-MM-DD HH:MM or YYYY-MM-DD) to ISO 8601
     const rawDate = formDate.trim();
     let isoDate: string;
     try {
       const parsed = new Date(rawDate);
-      if (isNaN(parsed.getTime())) {
-        throw new Error('Date invalide');
-      }
+      if (isNaN(parsed.getTime())) throw new Error('Date invalide');
       isoDate = parsed.toISOString();
       console.log('[AdminEvents] Date converted:', rawDate, '->', isoDate);
     } catch {
@@ -177,7 +153,7 @@ export default function AdminEventsScreen() {
       return;
     }
 
-    const eventData: any = {
+    const eventData: Record<string, string> = {
       title: formTitle.trim(),
       description: formDescription.trim(),
       date: isoDate,
@@ -191,17 +167,11 @@ export default function AdminEventsScreen() {
     try {
       if (editingEvent) {
         console.log('[AdminEvents] PUT /api/events/' + editingEvent.id);
-        await adminFetch(`/api/events/${editingEvent.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(eventData),
-        });
+        await authenticatedPut(`/api/events/${editingEvent.id}`, eventData);
         console.log('[AdminEvents] Event updated successfully');
       } else {
         console.log('[AdminEvents] POST /api/events');
-        await adminFetch('/api/events', {
-          method: 'POST',
-          body: JSON.stringify(eventData),
-        });
+        await authenticatedPost('/api/events', eventData);
         console.log('[AdminEvents] Event created successfully');
       }
 
@@ -228,7 +198,7 @@ export default function AdminEventsScreen() {
       async () => {
         console.log('[AdminEvents] DELETE /api/events/' + id);
         try {
-          await adminFetch(`/api/events/${id}`, { method: 'DELETE', body: JSON.stringify({}) });
+          await authenticatedDelete(`/api/events/${id}`);
           console.log('[AdminEvents] Event deleted successfully');
           await loadEvents();
           showModalFunc('Succès', 'Événement supprimé avec succès!', 'success');
@@ -263,6 +233,8 @@ export default function AdminEventsScreen() {
     );
   }
 
+  const imageUrl = formImageUrl.trim();
+
   return (
     <>
       <Stack.Screen options={{ headerShown: true, title: 'Gestion des Événements', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#FFFFFF' }} />
@@ -286,33 +258,37 @@ export default function AdminEventsScreen() {
               <Text style={styles.emptyText}>Aucun événement pour le moment</Text>
             </View>
           ) : (
-            events.map((event) => (
-              <View key={event.id} style={styles.eventCard}>
-                {(event.imageUrl || event.image_url) ? (
-                  <Image source={{ uri: event.imageUrl || event.image_url }} style={styles.eventImage} resizeMode="cover" />
-                ) : null}
-                <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventDescription} numberOfLines={3}>{event.description}</Text>
-                <View style={styles.eventMeta}>
-                  <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={16} color={colors.textSecondary} />
-                  <Text style={styles.eventMetaText}>{formatDate(event.date)}</Text>
+            events.map((event) => {
+              const eventImageUrl = event.imageUrl || event.image_url;
+              const formattedDate = formatDate(event.date);
+              return (
+                <View key={event.id} style={styles.eventCard}>
+                  {eventImageUrl ? (
+                    <Image source={resolveImageSource(eventImageUrl)} style={styles.eventImage} resizeMode="cover" />
+                  ) : null}
+                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  <Text style={styles.eventDescription} numberOfLines={3}>{event.description}</Text>
+                  <View style={styles.eventMeta}>
+                    <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={16} color={colors.textSecondary} />
+                    <Text style={styles.eventMetaText}>{formattedDate}</Text>
+                  </View>
+                  <View style={styles.eventMeta}>
+                    <IconSymbol ios_icon_name="location" android_material_icon_name="location-on" size={16} color={colors.textSecondary} />
+                    <Text style={styles.eventMetaText}>{event.location}</Text>
+                  </View>
+                  <View style={styles.eventActions}>
+                    <TouchableOpacity style={[styles.actionButton, styles.editButton]} onPress={() => handleEdit(event)}>
+                      <IconSymbol ios_icon_name="pencil" android_material_icon_name="edit" size={16} color={colors.primary} />
+                      <Text style={[styles.actionButtonText, styles.editButtonText]}>Modifier</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={() => handleDelete(event.id)}>
+                      <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={16} color="#FF3B30" />
+                      <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Supprimer</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <View style={styles.eventMeta}>
-                  <IconSymbol ios_icon_name="location" android_material_icon_name="location-on" size={16} color={colors.textSecondary} />
-                  <Text style={styles.eventMetaText}>{event.location}</Text>
-                </View>
-                <View style={styles.eventActions}>
-                  <TouchableOpacity style={[styles.actionButton, styles.editButton]} onPress={() => handleEdit(event)}>
-                    <IconSymbol ios_icon_name="pencil" android_material_icon_name="edit" size={16} color={colors.primary} />
-                    <Text style={[styles.actionButtonText, styles.editButtonText]}>Modifier</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={() => handleDelete(event.id)}>
-                    <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={16} color="#FF3B30" />
-                    <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Supprimer</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
 
@@ -359,7 +335,7 @@ export default function AdminEventsScreen() {
                   placeholderTextColor={colors.textSecondary}
                 />
 
-                <Text style={styles.inputLabel}>Description *</Text>
+                <Text style={styles.inputLabel}>Description</Text>
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   value={formDescription}
@@ -379,7 +355,7 @@ export default function AdminEventsScreen() {
                   placeholderTextColor={colors.textSecondary}
                 />
 
-                <Text style={styles.inputLabel}>Lieu *</Text>
+                <Text style={styles.inputLabel}>Lieu</Text>
                 <TextInput
                   style={styles.input}
                   value={formLocation}
@@ -398,8 +374,8 @@ export default function AdminEventsScreen() {
                   autoCapitalize="none"
                   keyboardType="url"
                 />
-                {formImageUrl.trim().length > 0 && (
-                  <Image source={{ uri: formImageUrl.trim() }} style={styles.imagePreview} resizeMode="cover" />
+                {imageUrl.length > 0 && (
+                  <Image source={resolveImageSource(imageUrl)} style={styles.imagePreview} resizeMode="cover" />
                 )}
 
                 <View style={styles.modalActions}>
@@ -450,13 +426,13 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginTop: 16 },
   editModalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 999 },
   editModalWrapper: { justifyContent: 'flex-end' },
-  modalScroll: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%', padding: 24 },
+  modalScroll: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' as any, padding: 24 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   imagePreview: { width: '100%', height: 120, borderRadius: 8, marginBottom: 16 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8, marginBottom: 32 },
   modalButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
   cancelButton: { backgroundColor: colors.card },
   submitButton: { backgroundColor: colors.primary },

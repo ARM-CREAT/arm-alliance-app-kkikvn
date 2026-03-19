@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { apiGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import {
   View,
   Text,
@@ -18,13 +18,13 @@ import {
   Platform,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ProgramItem {
   id: string;
-  category: string;
+  category?: string;
   title: string;
   description: string;
+  orderIndex?: number;
   order?: number;
 }
 
@@ -38,32 +38,6 @@ const CATEGORIES = [
   'Agriculture',
   'Diplomatie',
 ];
-
-async function getAdminPassword(): Promise<string> {
-  const pw = await AsyncStorage.getItem('admin_password');
-  return pw || '';
-}
-
-async function adminFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
-  const password = await getAdminPassword();
-  const url = `${BACKEND_URL}${endpoint}`;
-  console.log('[AdminProgram] Fetch:', options.method || 'GET', url);
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-password': password,
-      ...(options.headers || {}),
-    },
-  });
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('[AdminProgram] API error:', response.status, errText);
-    throw new Error(`Erreur ${response.status}: ${errText}`);
-  }
-  const text = await response.text();
-  return text ? JSON.parse(text) : {};
-}
 
 export default function AdminProgramScreen() {
   const [loading, setLoading] = useState(true);
@@ -80,7 +54,7 @@ export default function AdminProgramScreen() {
   const [formCategory, setFormCategory] = useState('');
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formOrder, setFormOrder] = useState('');
+  const [formOrderIndex, setFormOrderIndex] = useState('');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -89,19 +63,14 @@ export default function AdminProgramScreen() {
   }, []);
 
   const loadPrograms = async () => {
-    console.log('[AdminProgram] Loading programs from GET /api/program');
+    console.log('[AdminProgram] GET /api/program');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/program`);
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Erreur ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-      console.log('[AdminProgram] Programs loaded:', data?.length ?? 0);
+      const data = await apiGet<ProgramItem[]>('/api/program');
+      console.log('[AdminProgram] Programs loaded:', Array.isArray(data) ? data.length : 0);
       setPrograms(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('[AdminProgram] Error loading programs:', error);
-      showModalFunc('Erreur', 'Impossible de charger le programme politique.', 'error');
+      showModalFunc('Erreur', 'Impossible de charger le programme: ' + error.message, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -134,7 +103,7 @@ export default function AdminProgramScreen() {
     setFormCategory('');
     setFormTitle('');
     setFormDescription('');
-    setFormOrder('');
+    setFormOrderIndex('');
     setShowCategoryPicker(false);
     setShowEditModal(true);
   };
@@ -143,10 +112,11 @@ export default function AdminProgramScreen() {
     console.log('[AdminProgram] User tapped Modifier program:', item.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingProgram(item);
-    setFormCategory(item.category);
-    setFormTitle(item.title);
-    setFormDescription(item.description);
-    setFormOrder(item.order?.toString() || '');
+    setFormCategory(item.category || '');
+    setFormTitle(item.title || '');
+    setFormDescription(item.description || '');
+    const orderVal = item.orderIndex ?? item.order;
+    setFormOrderIndex(orderVal !== undefined ? String(orderVal) : '');
     setShowCategoryPicker(false);
     setShowEditModal(true);
   };
@@ -159,8 +129,8 @@ export default function AdminProgramScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!formCategory.trim() || !formTitle.trim() || !formDescription.trim()) {
-      showModalFunc('Erreur', 'Veuillez remplir tous les champs obligatoires.', 'warning');
+    if (!formTitle.trim() || !formDescription.trim()) {
+      showModalFunc('Erreur', 'Le titre et la description sont obligatoires.', 'warning');
       return;
     }
 
@@ -168,29 +138,27 @@ export default function AdminProgramScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
-    const programData: any = {
-      category: formCategory.trim(),
+    const programData: Record<string, string | number> = {
       title: formTitle.trim(),
       description: formDescription.trim(),
     };
-    if (formOrder.trim()) {
-      programData.order = parseInt(formOrder.trim(), 10);
+    if (formCategory.trim()) {
+      programData.category = formCategory.trim();
     }
+    if (formOrderIndex.trim()) {
+      programData.orderIndex = parseInt(formOrderIndex.trim(), 10);
+    }
+
+    console.log('[AdminProgram] Submitting payload:', JSON.stringify(programData));
 
     try {
       if (editingProgram) {
         console.log('[AdminProgram] PUT /api/program/' + editingProgram.id);
-        await adminFetch(`/api/program/${editingProgram.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(programData),
-        });
+        await authenticatedPut(`/api/program/${editingProgram.id}`, programData);
         console.log('[AdminProgram] Program updated successfully');
       } else {
         console.log('[AdminProgram] POST /api/program');
-        await adminFetch('/api/program', {
-          method: 'POST',
-          body: JSON.stringify(programData),
-        });
+        await authenticatedPost('/api/program', programData);
         console.log('[AdminProgram] Program created successfully');
       }
 
@@ -217,7 +185,7 @@ export default function AdminProgramScreen() {
       async () => {
         console.log('[AdminProgram] DELETE /api/program/' + id);
         try {
-          await adminFetch(`/api/program/${id}`, { method: 'DELETE', body: JSON.stringify({}) });
+          await authenticatedDelete(`/api/program/${id}`);
           console.log('[AdminProgram] Program deleted successfully');
           await loadPrograms();
           showModalFunc('Succès', 'Programme supprimé avec succès!', 'success');
@@ -263,25 +231,30 @@ export default function AdminProgramScreen() {
               <Text style={styles.emptyText}>Aucun élément du programme pour le moment</Text>
             </View>
           ) : (
-            programs.map((program) => (
-              <View key={program.id} style={styles.programCard}>
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryText}>{program.category}</Text>
+            programs.map((program) => {
+              const categoryLabel = program.category || '';
+              return (
+                <View key={program.id} style={styles.programCard}>
+                  {categoryLabel ? (
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.categoryText}>{categoryLabel}</Text>
+                    </View>
+                  ) : null}
+                  <Text style={styles.programTitle}>{program.title}</Text>
+                  <Text style={styles.programDescription}>{program.description}</Text>
+                  <View style={styles.programActions}>
+                    <TouchableOpacity style={[styles.actionButton, styles.editButton]} onPress={() => handleEdit(program)}>
+                      <IconSymbol ios_icon_name="pencil" android_material_icon_name="edit" size={16} color={colors.primary} />
+                      <Text style={[styles.actionButtonText, styles.editButtonText]}>Modifier</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={() => handleDelete(program.id)}>
+                      <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={16} color="#FF3B30" />
+                      <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Supprimer</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <Text style={styles.programTitle}>{program.title}</Text>
-                <Text style={styles.programDescription}>{program.description}</Text>
-                <View style={styles.programActions}>
-                  <TouchableOpacity style={[styles.actionButton, styles.editButton]} onPress={() => handleEdit(program)}>
-                    <IconSymbol ios_icon_name="pencil" android_material_icon_name="edit" size={16} color={colors.primary} />
-                    <Text style={[styles.actionButtonText, styles.editButtonText]}>Modifier</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={() => handleDelete(program.id)}>
-                    <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={16} color="#FF3B30" />
-                    <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Supprimer</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
 
@@ -309,7 +282,6 @@ export default function AdminProgramScreen() {
           cancelText="Annuler"
         />
 
-        {/* Edit / Add inline modal */}
         {showEditModal && (
           <View style={styles.editModalOverlay}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.editModalWrapper}>
@@ -318,7 +290,7 @@ export default function AdminProgramScreen() {
                   {editingProgram ? 'Modifier le programme' : 'Nouveau programme'}
                 </Text>
 
-                <Text style={styles.inputLabel}>Catégorie *</Text>
+                <Text style={styles.inputLabel}>Catégorie</Text>
                 <TouchableOpacity
                   style={[styles.input, styles.categorySelector]}
                   onPress={() => {
@@ -327,7 +299,7 @@ export default function AdminProgramScreen() {
                   }}
                 >
                   <Text style={formCategory ? styles.categorySelectorText : styles.categorySelectorPlaceholder}>
-                    {formCategory || 'Sélectionner une catégorie'}
+                    {formCategory || 'Sélectionner une catégorie (optionnel)'}
                   </Text>
                   <Text style={styles.categorySelectorArrow}>{showCategoryPicker ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
@@ -371,11 +343,11 @@ export default function AdminProgramScreen() {
                   numberOfLines={6}
                 />
 
-                <Text style={styles.inputLabel}>Ordre d'affichage</Text>
+                <Text style={styles.inputLabel}>Ordre d'affichage (optionnel)</Text>
                 <TextInput
                   style={styles.input}
-                  value={formOrder}
-                  onChangeText={setFormOrder}
+                  value={formOrderIndex}
+                  onChangeText={setFormOrderIndex}
                   placeholder="1, 2, 3..."
                   placeholderTextColor={colors.textSecondary}
                   keyboardType="number-pad"
@@ -442,7 +414,7 @@ const styles = StyleSheet.create({
   categoryOptionSelected: { backgroundColor: colors.primary + '15' },
   categoryOptionText: { fontSize: 15, color: colors.text },
   categoryOptionTextSelected: { color: colors.primary, fontWeight: '600' },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8, marginBottom: 32 },
   modalButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
   cancelButton: { backgroundColor: colors.card },
   submitButton: { backgroundColor: colors.primary },
