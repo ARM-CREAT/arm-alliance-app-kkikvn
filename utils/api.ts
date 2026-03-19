@@ -6,9 +6,15 @@ import { BEARER_TOKEN_KEY } from "@/lib/auth";
 
 /**
  * Backend URL is configured in app.json under expo.extra.backendUrl
- * It is set automatically when the backend is deployed
+ * The production URL is hardcoded as fallback to ensure it is never empty
+ * in production APK/AAB builds where Constants.expoConfig may not be available.
  */
-export const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
+const PRODUCTION_BACKEND_URL = "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev";
+export const BACKEND_URL: string =
+  Constants.expoConfig?.extra?.backendUrl ||
+  PRODUCTION_BACKEND_URL;
+
+console.log('[API] BACKEND_URL resolved to:', BACKEND_URL);
 
 /**
  * Check if backend is properly configured
