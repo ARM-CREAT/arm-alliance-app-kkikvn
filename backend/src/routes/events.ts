@@ -9,6 +9,7 @@ interface EventBody {
   date: string;
   location: string;
   imageUrl?: string;
+  image_url?: string;
 }
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -29,9 +30,9 @@ function formatEvent(event: any) {
     description: event.description,
     date: event.date instanceof Date ? event.date.toISOString() : new Date(event.date).toISOString(),
     location: event.location,
-    imageUrl: event.imageUrl || null,
-    createdAt: event.createdAt instanceof Date ? event.createdAt.toISOString() : new Date(event.createdAt).toISOString(),
-    createdBy: event.createdBy || null,
+    image_url: event.imageUrl || null,
+    created_at: event.createdAt instanceof Date ? event.createdAt.toISOString() : new Date(event.createdAt).toISOString(),
+    created_by: event.createdBy || null,
   };
 }
 
@@ -88,12 +89,7 @@ export function register(app: App, fastify: FastifyInstance) {
         description: 'Get all events',
         tags: ['events'],
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              events: { type: 'array' },
-            },
-          },
+          200: { type: 'array' },
         },
       },
     },
@@ -107,7 +103,7 @@ export function register(app: App, fastify: FastifyInstance) {
           .orderBy(desc(schema.events.date));
 
         app.logger.info({ count: result.length }, 'Events fetched');
-        return { events: result.map(formatEvent) };
+        return result.map(formatEvent);
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch events');
         throw error;
@@ -130,6 +126,7 @@ export function register(app: App, fastify: FastifyInstance) {
             date: { type: 'string', format: 'date-time' },
             location: { type: 'string' },
             imageUrl: { type: 'string' },
+            image_url: { type: 'string' },
           },
           required: ['title', 'description', 'date', 'location'],
         },
@@ -143,12 +140,15 @@ export function register(app: App, fastify: FastifyInstance) {
     async (request, reply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { title, description, date, location, imageUrl } = request.body;
+      const { title, description, date, location, imageUrl, image_url } = request.body as any;
 
       if (!title || !description || !date || !location) {
         reply.status(400);
         return { error: 'Missing required fields' };
       }
+
+      // Map imageUrl to image_url
+      const finalImageUrl = imageUrl || image_url || null;
 
       app.logger.info({ title }, 'Creating event');
 
@@ -160,14 +160,14 @@ export function register(app: App, fastify: FastifyInstance) {
             description,
             date: new Date(date),
             location,
-            imageUrl: imageUrl || null,
+            imageUrl: finalImageUrl,
             createdBy: 'admin',
           })
           .returning();
 
         app.logger.info({ eventId: result[0].id }, 'Event created');
         reply.status(201);
-        return { event: formatEvent(result[0]) };
+        return formatEvent(result[0]);
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create event');
         throw error;
@@ -196,6 +196,7 @@ export function register(app: App, fastify: FastifyInstance) {
             date: { type: 'string', format: 'date-time' },
             location: { type: 'string' },
             imageUrl: { type: 'string' },
+            image_url: { type: 'string' },
           },
         },
         response: {
@@ -209,13 +210,15 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
+      const body = request.body as any;
       const updates: any = {};
 
-      if (request.body.title) updates.title = request.body.title;
-      if (request.body.description) updates.description = request.body.description;
-      if (request.body.date) updates.date = new Date(request.body.date);
-      if (request.body.location) updates.location = request.body.location;
-      if (request.body.imageUrl !== undefined) updates.imageUrl = request.body.imageUrl;
+      if (body.title) updates.title = body.title;
+      if (body.description) updates.description = body.description;
+      if (body.date) updates.date = new Date(body.date);
+      if (body.location) updates.location = body.location;
+      if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
+      if (body.image_url !== undefined) updates.imageUrl = body.image_url;
 
       app.logger.info({ eventId: id }, 'Updating event');
 
@@ -233,7 +236,7 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info({ eventId: id }, 'Event updated');
-        return { event: formatEvent(result[0]) };
+        return formatEvent(result[0]);
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to update event');
         throw error;

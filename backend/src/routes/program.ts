@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, asc, isNull, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -7,13 +7,6 @@ interface ProgramBody {
   category: string;
   title: string;
   description: string;
-  order?: number;
-}
-
-interface ProgramUpdateBody {
-  category?: string;
-  title?: string;
-  description?: string;
   order?: number;
 }
 
@@ -56,6 +49,8 @@ function formatProgram(prog: any) {
     title: prog.title,
     description: prog.description,
     order: prog.order,
+    created_at: prog.createdAt instanceof Date ? prog.createdAt.toISOString() : new Date(prog.createdAt).toISOString(),
+    created_by: prog.createdBy || null,
   };
 }
 
@@ -85,11 +80,14 @@ export function register(app: App, fastify: FastifyInstance) {
             .values(DEFAULT_PROGRAMS.map((p) => ({ ...p, createdBy: 'admin' })));
         }
 
-        // Fetch all
+        // Fetch all, ordered by order asc (nulls last), then created_at asc
         const result = await app.db
           .select()
           .from(schema.politicalProgram)
-          .orderBy(schema.politicalProgram.order);
+          .orderBy(
+            isNull(schema.politicalProgram.order) ? desc(schema.politicalProgram.order) : asc(schema.politicalProgram.order),
+            asc(schema.politicalProgram.createdAt)
+          );
 
         app.logger.info({ count: result.length }, 'Program items fetched');
         return result.map(formatProgram);
@@ -143,7 +141,7 @@ export function register(app: App, fastify: FastifyInstance) {
             category,
             title,
             description,
-            order: order || 0,
+            order: order || null,
             createdBy: 'admin',
           })
           .returning();
@@ -159,7 +157,7 @@ export function register(app: App, fastify: FastifyInstance) {
   );
 
   // PUT /api/program/:id - Update program item (admin only)
-  fastify.put<{ Params: { id: string }; Body: ProgramUpdateBody }>(
+  fastify.put<{ Params: { id: string }; Body: Partial<ProgramBody> }>(
     '/api/program/:id',
     {
       schema: {
@@ -191,7 +189,12 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
-      const updates = request.body;
+      const updates: any = {};
+
+      if (request.body.category) updates.category = request.body.category;
+      if (request.body.title) updates.title = request.body.title;
+      if (request.body.description) updates.description = request.body.description;
+      if (request.body.order !== undefined) updates.order = request.body.order;
 
       app.logger.info({ itemId: id }, 'Updating program item');
 
