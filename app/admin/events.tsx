@@ -89,8 +89,10 @@ export default function AdminEventsScreen() {
         throw new Error(`Erreur ${res.status}: ${errText}`);
       }
       const data = await res.json();
-      console.log('[AdminEvents] Events loaded:', data?.length ?? 0);
-      setEvents(Array.isArray(data) ? data : []);
+      // API returns { events: [...] } — unwrap the array
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.events) ? data.events : []);
+      console.log('[AdminEvents] Events loaded:', list.length);
+      setEvents(list);
     } catch (error: any) {
       console.error('[AdminEvents] Error loading events:', error);
       showModalFunc('Erreur', 'Impossible de charger les événements.', 'error');
@@ -159,15 +161,32 @@ export default function AdminEventsScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
+    // Convert user-entered date (YYYY-MM-DD HH:MM or YYYY-MM-DD) to ISO 8601
+    const rawDate = formDate.trim();
+    let isoDate: string;
+    try {
+      const parsed = new Date(rawDate);
+      if (isNaN(parsed.getTime())) {
+        throw new Error('Date invalide');
+      }
+      isoDate = parsed.toISOString();
+      console.log('[AdminEvents] Date converted:', rawDate, '->', isoDate);
+    } catch {
+      showModalFunc('Erreur', 'Format de date invalide. Utilisez AAAA-MM-JJ ou AAAA-MM-JJ HH:MM.', 'warning');
+      setSubmitting(false);
+      return;
+    }
+
     const eventData: any = {
       title: formTitle.trim(),
       description: formDescription.trim(),
-      date: formDate.trim(),
+      date: isoDate,
       location: formLocation.trim(),
     };
     if (formImageUrl.trim()) {
       eventData.imageUrl = formImageUrl.trim();
     }
+    console.log('[AdminEvents] Submitting event payload:', JSON.stringify(eventData));
 
     try {
       if (editingEvent) {
