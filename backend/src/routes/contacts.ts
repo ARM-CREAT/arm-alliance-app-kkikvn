@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -9,7 +9,9 @@ interface ContactBody {
   phone?: string;
   email?: string;
   address?: string;
-  type: string;
+  type?: string;
+  imageUrl?: string;
+  image_url?: string;
 }
 
 interface ContactUpdateBody {
@@ -68,26 +70,22 @@ function formatContact(contact: any) {
     email: contact.email || null,
     address: contact.address || null,
     type: contact.type,
+    imageUrl: null,
     createdAt: contact.createdAt instanceof Date ? contact.createdAt.toISOString() : new Date(contact.createdAt).toISOString(),
     updatedAt: contact.updatedAt instanceof Date ? contact.updatedAt.toISOString() : new Date(contact.updatedAt).toISOString(),
   };
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/contacts - Get all contacts (public)
+  // GET /api/contacts - Get all contacts ordered by created_at ASC (public)
   fastify.get(
     '/api/contacts',
     {
       schema: {
-        description: 'Get all contacts',
+        description: 'Get all contacts ordered by creation date',
         tags: ['contacts'],
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              contacts: { type: 'array' },
-            },
-          },
+          200: { type: 'array' },
         },
       },
     },
@@ -102,16 +100,60 @@ export function register(app: App, fastify: FastifyInstance) {
           await app.db.insert(schema.contacts).values(DEFAULT_CONTACTS);
         }
 
-        // Fetch all
+        // Fetch all ordered by created_at ASC
         const result = await app.db
           .select()
           .from(schema.contacts)
-          .orderBy(desc(schema.contacts.createdAt));
+          .orderBy(asc(schema.contacts.createdAt));
 
-        app.logger.info({ count: result.length }, 'Contacts fetched');
-        return { contacts: result.map(formatContact) };
+        app.logger.info({ count: result.length }, 'Contacts fetched successfully');
+        return result.map(formatContact);
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch contacts');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/contacts/:id - Get single contact (public)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/contacts/:id',
+    {
+      schema: {
+        description: 'Get a single contact by ID',
+        tags: ['contacts'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      app.logger.info({ contactId: id }, 'Fetching contact');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.contacts)
+          .where(eq(schema.contacts.id, id));
+
+        if (result.length === 0) {
+          app.logger.warn({ contactId: id }, 'Contact not found');
+          reply.status(404);
+          return { error: 'Contact not found' };
+        }
+
+        app.logger.info({ contactId: id }, 'Contact fetched successfully');
+        return formatContact(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, contactId: id }, 'Failed to fetch contact');
         throw error;
       }
     }
@@ -133,8 +175,10 @@ export function register(app: App, fastify: FastifyInstance) {
             phone: { type: 'string' },
             email: { type: 'string' },
             address: { type: 'string' },
+            imageUrl: { type: 'string' },
+            image_url: { type: 'string' },
           },
-          required: ['name', 'role', 'type'],
+          required: ['name', 'role'],
         },
         response: {
           201: { type: 'object' },
@@ -146,14 +190,16 @@ export function register(app: App, fastify: FastifyInstance) {
     async (request, reply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { name, role, type, phone, email, address } = request.body;
+      const { name, role, phone, email, address } = request.body;
+      const type = request.body.type || 'general';
 
-      if (!name || !role || !type) {
+      if (!name || !role) {
+        app.logger.warn({ body: request.body }, 'Missing required fields for contact creation');
         reply.status(400);
-        return { error: 'Missing required fields' };
+        return { error: 'Missing required fields: name, role' };
       }
 
-      app.logger.info({ name }, 'Creating contact');
+      app.logger.info({ name, role }, 'Creating contact');
 
       try {
         const result = await app.db
@@ -162,15 +208,15 @@ export function register(app: App, fastify: FastifyInstance) {
             name,
             role,
             type,
-            phone,
-            email,
-            address,
+            phone: phone || null,
+            email: email || null,
+            address: address || null,
           })
           .returning();
 
-        app.logger.info({ contactId: result[0].id }, 'Contact created');
+        app.logger.info({ contactId: result[0].id, name }, 'Contact created successfully');
         reply.status(201);
-        return { contact: formatContact(result[0]) };
+        return formatContact(result[0]);
       } catch (error) {
         app.logger.error({ err: error, name }, 'Failed to create contact');
         throw error;
@@ -200,6 +246,8 @@ export function register(app: App, fastify: FastifyInstance) {
             phone: { type: 'string' },
             email: { type: 'string' },
             address: { type: 'string' },
+            imageUrl: { type: 'string' },
+            image_url: { type: 'string' },
           },
         },
         response: {
@@ -213,7 +261,21 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
-      const updates = { ...request.body, updatedAt: new Date() };
+      const updates: any = {};
+
+      if (request.body.name !== undefined) updates.name = request.body.name;
+      if (request.body.role !== undefined) updates.role = request.body.role;
+      if (request.body.type !== undefined) updates.type = request.body.type;
+      if (request.body.phone !== undefined) updates.phone = request.body.phone;
+      if (request.body.email !== undefined) updates.email = request.body.email;
+      if (request.body.address !== undefined) updates.address = request.body.address;
+      updates.updatedAt = new Date();
+
+      if (Object.keys(updates).length === 1) {
+        app.logger.warn({ contactId: id }, 'No fields to update');
+        reply.status(400);
+        return { error: 'No fields to update' };
+      }
 
       app.logger.info({ contactId: id }, 'Updating contact');
 
@@ -227,11 +289,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ contactId: id }, 'Contact not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'Contact not found' };
         }
 
-        app.logger.info({ contactId: id }, 'Contact updated');
-        return { contact: formatContact(result[0]) };
+        app.logger.info({ contactId: id }, 'Contact updated successfully');
+        return formatContact(result[0]);
       } catch (error) {
         app.logger.error({ err: error, contactId: id }, 'Failed to update contact');
         throw error;
@@ -274,11 +336,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ contactId: id }, 'Contact not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'Contact not found' };
         }
 
-        app.logger.info({ contactId: id }, 'Contact deleted');
-        return { success: true };
+        app.logger.info({ contactId: id }, 'Contact deleted successfully');
+        return { success: true, message: 'Contact deleted successfully' };
       } catch (error) {
         app.logger.error({ err: error, contactId: id }, 'Failed to delete contact');
         throw error;

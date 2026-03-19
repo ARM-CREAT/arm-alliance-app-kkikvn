@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -30,9 +30,8 @@ function formatEvent(event: any) {
     description: event.description,
     date: event.date instanceof Date ? event.date.toISOString() : new Date(event.date).toISOString(),
     location: event.location,
-    image_url: event.imageUrl || null,
-    created_at: event.createdAt instanceof Date ? event.createdAt.toISOString() : new Date(event.createdAt).toISOString(),
-    created_by: event.createdBy || null,
+    imageUrl: event.imageUrl || null,
+    createdAt: event.createdAt instanceof Date ? event.createdAt.toISOString() : new Date(event.createdAt).toISOString(),
   };
 }
 
@@ -86,7 +85,7 @@ export function register(app: App, fastify: FastifyInstance) {
     '/api/events',
     {
       schema: {
-        description: 'Get all events',
+        description: 'Get all events ordered by date',
         tags: ['events'],
         response: {
           200: { type: 'array' },
@@ -100,12 +99,56 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await app.db
           .select()
           .from(schema.events)
-          .orderBy(desc(schema.events.date));
+          .orderBy(asc(schema.events.date));
 
-        app.logger.info({ count: result.length }, 'Events fetched');
+        app.logger.info({ count: result.length }, 'Events fetched successfully');
         return result.map(formatEvent);
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch events');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/events/:id - Get single event (public)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/events/:id',
+    {
+      schema: {
+        description: 'Get a single event by ID',
+        tags: ['events'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      app.logger.info({ eventId: id }, 'Fetching event');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.events)
+          .where(eq(schema.events.id, id));
+
+        if (result.length === 0) {
+          app.logger.warn({ eventId: id }, 'Event not found');
+          reply.status(404);
+          return { error: 'Event not found' };
+        }
+
+        app.logger.info({ eventId: id }, 'Event fetched successfully');
+        return formatEvent(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, eventId: id }, 'Failed to fetch event');
         throw error;
       }
     }
@@ -143,14 +186,15 @@ export function register(app: App, fastify: FastifyInstance) {
       const { title, description, date, location, imageUrl, image_url } = request.body as any;
 
       if (!title || !description || !date || !location) {
+        app.logger.warn({ body: request.body }, 'Missing required fields for event creation');
         reply.status(400);
-        return { error: 'Missing required fields' };
+        return { error: 'Missing required fields: title, description, date, location' };
       }
 
       // Map imageUrl to image_url
       const finalImageUrl = imageUrl || image_url || null;
 
-      app.logger.info({ title }, 'Creating event');
+      app.logger.info({ title, location }, 'Creating event');
 
       try {
         const result = await app.db
@@ -165,7 +209,7 @@ export function register(app: App, fastify: FastifyInstance) {
           })
           .returning();
 
-        app.logger.info({ eventId: result[0].id }, 'Event created');
+        app.logger.info({ eventId: result[0].id, title }, 'Event created successfully');
         reply.status(201);
         return formatEvent(result[0]);
       } catch (error) {
@@ -213,12 +257,18 @@ export function register(app: App, fastify: FastifyInstance) {
       const body = request.body as any;
       const updates: any = {};
 
-      if (body.title) updates.title = body.title;
-      if (body.description) updates.description = body.description;
-      if (body.date) updates.date = new Date(body.date);
-      if (body.location) updates.location = body.location;
+      if (body.title !== undefined) updates.title = body.title;
+      if (body.description !== undefined) updates.description = body.description;
+      if (body.date !== undefined) updates.date = new Date(body.date);
+      if (body.location !== undefined) updates.location = body.location;
       if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
       if (body.image_url !== undefined) updates.imageUrl = body.image_url;
+
+      if (Object.keys(updates).length === 0) {
+        app.logger.warn({ eventId: id }, 'No fields to update');
+        reply.status(400);
+        return { error: 'No fields to update' };
+      }
 
       app.logger.info({ eventId: id }, 'Updating event');
 
@@ -232,10 +282,10 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ eventId: id }, 'Event not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'Event not found' };
         }
 
-        app.logger.info({ eventId: id }, 'Event updated');
+        app.logger.info({ eventId: id }, 'Event updated successfully');
         return formatEvent(result[0]);
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to update event');
@@ -279,11 +329,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ eventId: id }, 'Event not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'Event not found' };
         }
 
-        app.logger.info({ eventId: id }, 'Event deleted');
-        return { success: true };
+        app.logger.info({ eventId: id }, 'Event deleted successfully');
+        return { success: true, message: 'Event deleted successfully' };
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to delete event');
         throw error;

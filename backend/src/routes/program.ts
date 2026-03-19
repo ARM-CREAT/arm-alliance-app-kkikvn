@@ -4,10 +4,11 @@ import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
 interface ProgramBody {
-  category: string;
+  category?: string;
   title: string;
   description: string;
   order?: number;
+  icon?: any;
 }
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -49,18 +50,19 @@ function formatProgram(prog: any) {
     title: prog.title,
     description: prog.description,
     order: prog.order,
-    created_at: prog.createdAt instanceof Date ? prog.createdAt.toISOString() : new Date(prog.createdAt).toISOString(),
-    created_by: prog.createdBy || null,
+    orderIndex: prog.order,
+    icon: null,
+    createdAt: prog.createdAt instanceof Date ? prog.createdAt.toISOString() : new Date(prog.createdAt).toISOString(),
   };
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/program - Get all program items (public)
+  // GET /api/program - Get all program items ordered by order ASC NULLS LAST then created_at ASC (public)
   fastify.get(
     '/api/program',
     {
       schema: {
-        description: 'Get all political program items',
+        description: 'Get all political program items ordered by order and creation date',
         tags: ['program'],
         response: {
           200: { type: 'array' },
@@ -89,10 +91,54 @@ export function register(app: App, fastify: FastifyInstance) {
             asc(schema.politicalProgram.createdAt)
           );
 
-        app.logger.info({ count: result.length }, 'Program items fetched');
+        app.logger.info({ count: result.length }, 'Program items fetched successfully');
         return result.map(formatProgram);
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch program');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/program/:id - Get single program item (public)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/program/:id',
+    {
+      schema: {
+        description: 'Get a single political program item by ID',
+        tags: ['program'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      app.logger.info({ itemId: id }, 'Fetching program item');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.politicalProgram)
+          .where(eq(schema.politicalProgram.id, id));
+
+        if (result.length === 0) {
+          app.logger.warn({ itemId: id }, 'Program item not found');
+          reply.status(404);
+          return { error: 'Program item not found' };
+        }
+
+        app.logger.info({ itemId: id }, 'Program item fetched successfully');
+        return formatProgram(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, itemId: id }, 'Failed to fetch program item');
         throw error;
       }
     }
@@ -112,8 +158,9 @@ export function register(app: App, fastify: FastifyInstance) {
             title: { type: 'string' },
             description: { type: 'string' },
             order: { type: 'number' },
+            icon: { type: 'string' },
           },
-          required: ['category', 'title', 'description'],
+          required: ['title', 'description'],
         },
         response: {
           201: { type: 'object' },
@@ -125,14 +172,16 @@ export function register(app: App, fastify: FastifyInstance) {
     async (request, reply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { category, title, description, order } = request.body;
+      const { title, description, order } = request.body;
+      const category = request.body.category || 'general';
 
-      if (!category || !title || !description) {
+      if (!title || !description) {
+        app.logger.warn({ body: request.body }, 'Missing required fields for program creation');
         reply.status(400);
-        return { error: 'Missing required fields' };
+        return { error: 'Missing required fields: title, description' };
       }
 
-      app.logger.info({ title }, 'Creating program item');
+      app.logger.info({ title, category }, 'Creating program item');
 
       try {
         const result = await app.db
@@ -146,7 +195,7 @@ export function register(app: App, fastify: FastifyInstance) {
           })
           .returning();
 
-        app.logger.info({ itemId: result[0].id }, 'Program item created');
+        app.logger.info({ itemId: result[0].id, title }, 'Program item created successfully');
         reply.status(201);
         return formatProgram(result[0]);
       } catch (error) {
@@ -176,6 +225,7 @@ export function register(app: App, fastify: FastifyInstance) {
             title: { type: 'string' },
             description: { type: 'string' },
             order: { type: 'number' },
+            icon: { type: 'string' },
           },
         },
         response: {
@@ -191,10 +241,16 @@ export function register(app: App, fastify: FastifyInstance) {
       const { id } = request.params;
       const updates: any = {};
 
-      if (request.body.category) updates.category = request.body.category;
-      if (request.body.title) updates.title = request.body.title;
-      if (request.body.description) updates.description = request.body.description;
+      if (request.body.category !== undefined) updates.category = request.body.category;
+      if (request.body.title !== undefined) updates.title = request.body.title;
+      if (request.body.description !== undefined) updates.description = request.body.description;
       if (request.body.order !== undefined) updates.order = request.body.order;
+
+      if (Object.keys(updates).length === 0) {
+        app.logger.warn({ itemId: id }, 'No fields to update');
+        reply.status(400);
+        return { error: 'No fields to update' };
+      }
 
       app.logger.info({ itemId: id }, 'Updating program item');
 
@@ -208,10 +264,10 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ itemId: id }, 'Program item not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'Program item not found' };
         }
 
-        app.logger.info({ itemId: id }, 'Program item updated');
+        app.logger.info({ itemId: id }, 'Program item updated successfully');
         return formatProgram(result[0]);
       } catch (error) {
         app.logger.error({ err: error, itemId: id }, 'Failed to update program');
@@ -255,11 +311,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ itemId: id }, 'Program item not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'Program item not found' };
         }
 
-        app.logger.info({ itemId: id }, 'Program item deleted');
-        return { success: true };
+        app.logger.info({ itemId: id }, 'Program item deleted successfully');
+        return { success: true, message: 'Program item deleted successfully' };
       } catch (error) {
         app.logger.error({ err: error, itemId: id }, 'Failed to delete program');
         throw error;
