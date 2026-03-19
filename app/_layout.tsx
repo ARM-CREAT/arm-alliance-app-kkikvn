@@ -148,12 +148,6 @@ export default function RootLayout() {
                     }} 
                   />
                   <Stack.Screen 
-                    name="ai-chat" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
                     name="auth" 
                     options={{ 
                       headerShown: false,

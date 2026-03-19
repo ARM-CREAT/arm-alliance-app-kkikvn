@@ -61,8 +61,6 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
-  const [fabScale] = useState(new Animated.Value(1));
-
   const loadAllData = useCallback(async () => {
     console.log('[HomeScreen] Chargement de toutes les données (PUBLIC - pas d\'authentification requise)');
     setError(null);
@@ -205,28 +203,6 @@ export default function HomeScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     router.push('/program');
-  };
-
-  const handleAIChat = () => {
-    console.log('L\'utilisateur a appuyé sur le bouton Assistant IA');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
-    
-    Animated.sequence([
-      Animated.timing(fabScale, {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fabScale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    router.push('/ai-chat');
   };
 
   const handleSettings = () => {
@@ -712,23 +688,6 @@ export default function HomeScreen() {
         </Animated.View>
       </ScrollView>
 
-      <Animated.View style={[styles.fabContainer, { transform: [{ scale: fabScale }] }]}>
-        <TouchableOpacity 
-          style={styles.fab}
-          onPress={handleAIChat}
-          activeOpacity={0.9}
-        >
-          <View style={styles.fabGradient}>
-            <IconSymbol 
-              ios_icon_name="sparkles" 
-              android_material_icon_name="auto-awesome" 
-              size={28} 
-              color="#FFFFFF" 
-            />
-            <Text style={styles.fabText}>IA</Text>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
     </View>
   );
 }
@@ -1149,34 +1108,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 4,
   },
-  fabContainer: {
-    position: 'absolute',
-    bottom: 100,
-    right: 20,
-    zIndex: 1000,
-  },
-  fab: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  fabGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-  },
-  fabText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginTop: 2,
-  },
+
 });
