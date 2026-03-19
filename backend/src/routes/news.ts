@@ -6,6 +6,8 @@ import type { App } from '../index.js';
 interface NewsBody {
   title: string;
   content: string;
+  publishedAt?: string;
+  published_at?: string;
   imageUrl?: string;
   image_url?: string;
   videoUrl?: string;
@@ -24,25 +26,25 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 }
 
 function formatNews(news: any) {
+  const publishedAtISO = news.publishedAt instanceof Date ? news.publishedAt.toISOString() : new Date(news.publishedAt).toISOString();
   return {
     id: news.id,
     title: news.title,
     content: news.content,
-    image_url: news.imageUrl || null,
-    video_url: news.videoUrl || null,
-    published_at: news.publishedAt instanceof Date ? news.publishedAt.toISOString() : new Date(news.publishedAt).toISOString(),
-    publishedAt: news.publishedAt instanceof Date ? news.publishedAt.toISOString() : new Date(news.publishedAt).toISOString(),
-    created_by: news.createdBy || null,
+    imageUrl: news.imageUrl || null,
+    videoUrl: news.videoUrl || null,
+    publishedAt: publishedAtISO,
+    published_at: publishedAtISO,
   };
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/news - Get all news articles ordered by date (public)
+  // GET /api/news - Get all news articles ordered by published_at DESC (public)
   fastify.get(
     '/api/news',
     {
       schema: {
-        description: 'Get all news articles',
+        description: 'Get all news articles ordered by published date',
         tags: ['news'],
         response: {
           200: { type: 'array' },
@@ -70,6 +72,50 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
+  // GET /api/news/:id - Get single news article (public)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/news/:id',
+    {
+      schema: {
+        description: 'Get a single news article by ID',
+        tags: ['news'],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      app.logger.info({ newsId: id }, 'Fetching news article');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.news)
+          .where(eq(schema.news.id, id));
+
+        if (result.length === 0) {
+          app.logger.warn({ newsId: id }, 'News article not found');
+          reply.status(404);
+          return { error: 'News article not found' };
+        }
+
+        app.logger.info({ newsId: id }, 'News article fetched successfully');
+        return formatNews(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, newsId: id }, 'Failed to fetch news article');
+        throw error;
+      }
+    }
+  );
+
   // POST /api/admin/news - Create news article (admin only)
   fastify.post<{ Body: NewsBody }>(
     '/api/admin/news',
@@ -82,6 +128,8 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: {
             title: { type: 'string' },
             content: { type: 'string' },
+            publishedAt: { type: 'string', format: 'date-time' },
+            published_at: { type: 'string', format: 'date-time' },
             imageUrl: { type: 'string' },
             image_url: { type: 'string' },
             videoUrl: { type: 'string' },
@@ -103,13 +151,16 @@ export function register(app: App, fastify: FastifyInstance) {
       const { title, content } = body;
 
       if (!title || !content) {
+        app.logger.warn({ body }, 'Missing required fields for news creation');
         reply.status(400);
-        return { error: 'Missing required fields' };
+        return { error: 'Missing required fields: title, content' };
       }
 
       // Map camelCase to correct field names
       const imageUrl = body.imageUrl || body.image_url || null;
       const videoUrl = body.videoUrl || body.video_url || null;
+      const publishedAtInput = body.publishedAt || body.published_at;
+      const publishedAt = publishedAtInput ? new Date(publishedAtInput) : new Date();
 
       app.logger.info({ title }, 'Creating news article');
 
@@ -121,7 +172,7 @@ export function register(app: App, fastify: FastifyInstance) {
             content,
             imageUrl,
             videoUrl,
-            publishedAt: new Date(),
+            publishedAt,
             createdBy: 'admin',
           })
           .returning();
@@ -160,6 +211,8 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: {
             title: { type: 'string' },
             content: { type: 'string' },
+            publishedAt: { type: 'string', format: 'date-time' },
+            published_at: { type: 'string', format: 'date-time' },
             imageUrl: { type: 'string' },
             image_url: { type: 'string' },
             videoUrl: { type: 'string' },
@@ -180,12 +233,20 @@ export function register(app: App, fastify: FastifyInstance) {
       const body = request.body as any;
       const updates: any = {};
 
-      if (body.title) updates.title = body.title;
-      if (body.content) updates.content = body.content;
+      if (body.title !== undefined) updates.title = body.title;
+      if (body.content !== undefined) updates.content = body.content;
+      if (body.publishedAt !== undefined) updates.publishedAt = new Date(body.publishedAt);
+      if (body.published_at !== undefined) updates.publishedAt = new Date(body.published_at);
       if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
       if (body.image_url !== undefined) updates.imageUrl = body.image_url;
       if (body.videoUrl !== undefined) updates.videoUrl = body.videoUrl;
       if (body.video_url !== undefined) updates.videoUrl = body.video_url;
+
+      if (Object.keys(updates).length === 0) {
+        app.logger.warn({ newsId: id }, 'No fields to update');
+        reply.status(400);
+        return { error: 'No fields to update' };
+      }
 
       app.logger.info({ newsId: id }, 'Updating news article');
 
@@ -199,7 +260,7 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'News article not found' };
         }
 
         app.logger.info(
@@ -252,14 +313,14 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { error: 'Not found' };
+          return { error: 'News article not found' };
         }
 
         app.logger.info(
           { newsId: id },
           'News article deleted successfully'
         );
-        return { success: true };
+        return { success: true, message: 'News article deleted successfully' };
       } catch (error) {
         app.logger.error(
           { err: error, newsId: id },
