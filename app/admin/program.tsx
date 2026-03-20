@@ -21,23 +21,15 @@ import { colors } from '@/styles/commonStyles';
 
 interface ProgramItem {
   id: string;
-  category?: string;
   title: string;
   description: string;
-  orderIndex?: number;
-  order?: number;
+  icon?: string;
+  color?: string;
+  content?: string;
 }
 
-const CATEGORIES = [
-  'Gouvernance',
-  'Économie',
-  'Sécurité',
-  'Éducation',
-  'Santé',
-  'Infrastructure',
-  'Agriculture',
-  'Diplomatie',
-];
+const ICON_OPTIONS = ['🏛️', '💰', '🛡️', '📚', '🏥', '🏗️', '🌾', '🌍', '⚖️', '🤝', '🌱', '🔬'];
+const COLOR_OPTIONS = ['#1B5E20', '#1565C0', '#E65100', '#6A1B9A', '#00695C', '#C62828', '#F57F17', '#37474F'];
 
 export default function AdminProgramScreen() {
   const [loading, setLoading] = useState(true);
@@ -51,11 +43,11 @@ export default function AdminProgramScreen() {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingProgram, setEditingProgram] = useState<ProgramItem | null>(null);
-  const [formCategory, setFormCategory] = useState('');
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formOrderIndex, setFormOrderIndex] = useState('');
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [formIcon, setFormIcon] = useState('');
+  const [formColor, setFormColor] = useState('');
+  const [formContent, setFormContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -63,9 +55,9 @@ export default function AdminProgramScreen() {
   }, []);
 
   const loadPrograms = async () => {
-    console.log('[AdminProgram] GET /api/program');
+    console.log('[AdminProgram] GET /api/programs');
     try {
-      const data = await apiGet<ProgramItem[]>('/api/program');
+      const data = await apiGet<ProgramItem[]>('/api/programs');
       console.log('[AdminProgram] Programs loaded:', Array.isArray(data) ? data.length : 0);
       setPrograms(Array.isArray(data) ? data : []);
     } catch (error: any) {
@@ -100,11 +92,11 @@ export default function AdminProgramScreen() {
     console.log('[AdminProgram] User tapped Ajouter program');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingProgram(null);
-    setFormCategory('');
     setFormTitle('');
     setFormDescription('');
-    setFormOrderIndex('');
-    setShowCategoryPicker(false);
+    setFormIcon('');
+    setFormColor('');
+    setFormContent('');
     setShowEditModal(true);
   };
 
@@ -112,12 +104,11 @@ export default function AdminProgramScreen() {
     console.log('[AdminProgram] User tapped Modifier program:', item.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingProgram(item);
-    setFormCategory(item.category || '');
     setFormTitle(item.title || '');
     setFormDescription(item.description || '');
-    const orderVal = item.orderIndex ?? item.order;
-    setFormOrderIndex(orderVal !== undefined ? String(orderVal) : '');
-    setShowCategoryPicker(false);
+    setFormIcon(item.icon || '');
+    setFormColor(item.color || '');
+    setFormContent(item.content || '');
     setShowEditModal(true);
   };
 
@@ -125,7 +116,6 @@ export default function AdminProgramScreen() {
     console.log('[AdminProgram] User tapped Annuler form');
     setShowEditModal(false);
     setEditingProgram(null);
-    setShowCategoryPicker(false);
   };
 
   const handleSubmit = async () => {
@@ -138,27 +128,24 @@ export default function AdminProgramScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
-    const programData: Record<string, string | number> = {
+    const programData: Record<string, string> = {
       title: formTitle.trim(),
       description: formDescription.trim(),
     };
-    if (formCategory.trim()) {
-      programData.category = formCategory.trim();
-    }
-    if (formOrderIndex.trim()) {
-      programData.orderIndex = parseInt(formOrderIndex.trim(), 10);
-    }
+    if (formIcon.trim()) programData.icon = formIcon.trim();
+    if (formColor.trim()) programData.color = formColor.trim();
+    if (formContent.trim()) programData.content = formContent.trim();
 
     console.log('[AdminProgram] Submitting payload:', JSON.stringify(programData));
 
     try {
       if (editingProgram) {
-        console.log('[AdminProgram] PUT /api/program/' + editingProgram.id);
-        await authenticatedPut(`/api/program/${editingProgram.id}`, programData);
+        console.log('[AdminProgram] PUT /api/programs/' + editingProgram.id);
+        await authenticatedPut(`/api/programs/${editingProgram.id}`, programData);
         console.log('[AdminProgram] Program updated successfully');
       } else {
-        console.log('[AdminProgram] POST /api/program');
-        await authenticatedPost('/api/program', programData);
+        console.log('[AdminProgram] POST /api/programs');
+        await authenticatedPost('/api/programs', programData);
         console.log('[AdminProgram] Program created successfully');
       }
 
@@ -183,9 +170,9 @@ export default function AdminProgramScreen() {
       "Êtes-vous sûr de vouloir supprimer cet élément du programme?",
       'confirm',
       async () => {
-        console.log('[AdminProgram] DELETE /api/program/' + id);
+        console.log('[AdminProgram] DELETE /api/programs/' + id);
         try {
-          await authenticatedDelete(`/api/program/${id}`);
+          await authenticatedDelete(`/api/programs/${id}`);
           console.log('[AdminProgram] Program deleted successfully');
           await loadPrograms();
           showModalFunc('Succès', 'Programme supprimé avec succès!', 'success');
@@ -232,16 +219,20 @@ export default function AdminProgramScreen() {
             </View>
           ) : (
             programs.map((program) => {
-              const categoryLabel = program.category || '';
+              const iconDisplay = program.icon || '📄';
+              const cardColor = program.color || colors.primary;
               return (
                 <View key={program.id} style={styles.programCard}>
-                  {categoryLabel ? (
-                    <View style={styles.categoryBadge}>
-                      <Text style={styles.categoryText}>{categoryLabel}</Text>
+                  <View style={styles.programCardHeader}>
+                    <View style={[styles.iconCircle, { backgroundColor: cardColor + '20' }]}>
+                      <Text style={styles.iconText}>{iconDisplay}</Text>
                     </View>
-                  ) : null}
-                  <Text style={styles.programTitle}>{program.title}</Text>
+                    <Text style={styles.programTitle}>{program.title}</Text>
+                  </View>
                   <Text style={styles.programDescription}>{program.description}</Text>
+                  {program.content ? (
+                    <Text style={styles.programContent} numberOfLines={2}>{program.content}</Text>
+                  ) : null}
                   <View style={styles.programActions}>
                     <TouchableOpacity style={[styles.actionButton, styles.editButton]} onPress={() => handleEdit(program)}>
                       <IconSymbol ios_icon_name="pencil" android_material_icon_name="edit" size={16} color={colors.primary} />
@@ -290,39 +281,6 @@ export default function AdminProgramScreen() {
                   {editingProgram ? 'Modifier le programme' : 'Nouveau programme'}
                 </Text>
 
-                <Text style={styles.inputLabel}>Catégorie</Text>
-                <TouchableOpacity
-                  style={[styles.input, styles.categorySelector]}
-                  onPress={() => {
-                    console.log('[AdminProgram] User tapped category picker');
-                    setShowCategoryPicker(!showCategoryPicker);
-                  }}
-                >
-                  <Text style={formCategory ? styles.categorySelectorText : styles.categorySelectorPlaceholder}>
-                    {formCategory || 'Sélectionner une catégorie (optionnel)'}
-                  </Text>
-                  <Text style={styles.categorySelectorArrow}>{showCategoryPicker ? '▲' : '▼'}</Text>
-                </TouchableOpacity>
-                {showCategoryPicker && (
-                  <View style={styles.categoryList}>
-                    {CATEGORIES.map((cat) => (
-                      <TouchableOpacity
-                        key={cat}
-                        style={[styles.categoryOption, formCategory === cat && styles.categoryOptionSelected]}
-                        onPress={() => {
-                          console.log('[AdminProgram] Category selected:', cat);
-                          setFormCategory(cat);
-                          setShowCategoryPicker(false);
-                        }}
-                      >
-                        <Text style={[styles.categoryOptionText, formCategory === cat && styles.categoryOptionTextSelected]}>
-                          {cat}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
                 <Text style={styles.inputLabel}>Titre *</Text>
                 <TextInput
                   style={styles.input}
@@ -337,20 +295,66 @@ export default function AdminProgramScreen() {
                   style={[styles.input, styles.textArea]}
                   value={formDescription}
                   onChangeText={setFormDescription}
-                  placeholder="Description détaillée du programme"
+                  placeholder="Description courte du programme"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={4}
+                />
+
+                <Text style={styles.inputLabel}>Contenu détaillé</Text>
+                <TextInput
+                  style={[styles.input, styles.textAreaLarge]}
+                  value={formContent}
+                  onChangeText={setFormContent}
+                  placeholder="Contenu détaillé du programme politique..."
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={6}
                 />
 
-                <Text style={styles.inputLabel}>Ordre d'affichage (optionnel)</Text>
+                <Text style={styles.inputLabel}>Icône</Text>
+                <View style={styles.iconGrid}>
+                  {ICON_OPTIONS.map((icon) => (
+                    <TouchableOpacity
+                      key={icon}
+                      style={[styles.iconOption, formIcon === icon && styles.iconOptionSelected]}
+                      onPress={() => {
+                        console.log('[AdminProgram] Icon selected:', icon);
+                        setFormIcon(icon);
+                      }}
+                    >
+                      <Text style={styles.iconOptionText}>{icon}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <TextInput
                   style={styles.input}
-                  value={formOrderIndex}
-                  onChangeText={setFormOrderIndex}
-                  placeholder="1, 2, 3..."
+                  value={formIcon}
+                  onChangeText={setFormIcon}
+                  placeholder="Ou saisissez un emoji personnalisé"
                   placeholderTextColor={colors.textSecondary}
-                  keyboardType="number-pad"
+                />
+
+                <Text style={styles.inputLabel}>Couleur</Text>
+                <View style={styles.colorGrid}>
+                  {COLOR_OPTIONS.map((color) => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[styles.colorOption, { backgroundColor: color }, formColor === color && styles.colorOptionSelected]}
+                      onPress={() => {
+                        console.log('[AdminProgram] Color selected:', color);
+                        setFormColor(color);
+                      }}
+                    />
+                  ))}
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={formColor}
+                  onChangeText={setFormColor}
+                  placeholder="#1B5E20"
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="none"
                 />
 
                 <View style={styles.modalActions}>
@@ -385,10 +389,12 @@ const styles = StyleSheet.create({
   addButtonText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
   listContainer: { padding: 16 },
   programCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  categoryBadge: { alignSelf: 'flex-start', backgroundColor: colors.primary + '20', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 8 },
-  categoryText: { fontSize: 11, fontWeight: '600', color: colors.primary, textTransform: 'uppercase' },
-  programTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8 },
-  programDescription: { fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
+  programCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 12 },
+  iconCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  iconText: { fontSize: 22 },
+  programTitle: { fontSize: 17, fontWeight: 'bold', color: colors.text, flex: 1 },
+  programDescription: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 6 },
+  programContent: { fontSize: 13, color: colors.textSecondary, lineHeight: 18, fontStyle: 'italic', marginBottom: 6 },
   programActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
   actionButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   editButton: { backgroundColor: colors.primary + '20' },
@@ -400,20 +406,19 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, color: colors.textSecondary, textAlign: 'center', marginTop: 16 },
   editModalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 999 },
   editModalWrapper: { justifyContent: 'flex-end' },
-  modalScroll: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' as any, padding: 24 },
+  modalScroll: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '92%' as any, padding: 24 },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
-  textArea: { minHeight: 120, textAlignVertical: 'top' },
-  categorySelector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  categorySelectorText: { fontSize: 15, color: colors.text },
-  categorySelectorPlaceholder: { fontSize: 15, color: colors.textSecondary },
-  categorySelectorArrow: { fontSize: 12, color: colors.textSecondary },
-  categoryList: { backgroundColor: colors.card, borderRadius: 8, borderWidth: 1, borderColor: colors.border, marginBottom: 16, overflow: 'hidden' },
-  categoryOption: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  categoryOptionSelected: { backgroundColor: colors.primary + '15' },
-  categoryOptionText: { fontSize: 15, color: colors.text },
-  categoryOptionTextSelected: { color: colors.primary, fontWeight: '600' },
+  textArea: { minHeight: 90, textAlignVertical: 'top' },
+  textAreaLarge: { minHeight: 120, textAlignVertical: 'top' },
+  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  iconOption: { width: 44, height: 44, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
+  iconOptionSelected: { borderColor: colors.primary, borderWidth: 2, backgroundColor: colors.primary + '15' },
+  iconOptionText: { fontSize: 22 },
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  colorOption: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent' },
+  colorOptionSelected: { borderColor: colors.text, borderWidth: 3 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8, marginBottom: 32 },
   modalButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
   cancelButton: { backgroundColor: colors.card },

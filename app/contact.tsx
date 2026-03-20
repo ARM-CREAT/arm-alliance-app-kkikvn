@@ -39,6 +39,8 @@ export default function ContactScreen() {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [sendSuccess, setSendSuccess] = useState(false);
 
   const loadContacts = useCallback(async () => {
     console.log('[Contact] GET /api/contacts');
@@ -74,22 +76,29 @@ export default function ContactScreen() {
   const handleSubmit = async () => {
     console.log('[Contact] User tapped Send Message button');
     if (!senderName.trim() || !senderEmail.trim() || !subject.trim() || !message.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs.');
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires (nom, email, sujet, message).');
       return;
     }
+    setSendSuccess(false);
     setSending(true);
-    const payload = { senderName, senderEmail, subject, message };
-    console.log('[Contact] POST /api/messages', payload);
+    const payload = {
+      nom: senderName.trim(),
+      email: senderEmail.trim(),
+      telephone: phone.trim(),
+      sujet: subject.trim(),
+      message: message.trim(),
+    };
+    console.log('[Contact] POST /api/contacts', payload);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/messages`, {
+      const res = await fetch(`${BACKEND_URL}/api/contacts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (res.ok) {
         console.log('[Contact] Message sent successfully');
-        Alert.alert('Succès', 'Votre message a été envoyé avec succès.');
-        setSenderName(''); setSenderEmail(''); setSubject(''); setMessage('');
+        setSendSuccess(true);
+        setSenderName(''); setSenderEmail(''); setPhone(''); setSubject(''); setMessage('');
       } else {
         const err = await res.text();
         console.log('[Contact] Message send failed, status:', res.status, err);
@@ -172,11 +181,20 @@ export default function ContactScreen() {
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Envoyer un Message</Text>
 
         <View style={styles.form}>
+          {sendSuccess ? (
+            <View style={styles.successBox}>
+              <Text style={styles.successText}>✅ Votre message a été envoyé avec succès. Nous vous répondrons dans les plus brefs délais.</Text>
+            </View>
+          ) : null}
+
           <Text style={styles.label}>Nom complet *</Text>
           <TextInput style={styles.input} value={senderName} onChangeText={setSenderName} placeholder="Votre nom" />
 
           <Text style={styles.label}>Email *</Text>
           <TextInput style={styles.input} value={senderEmail} onChangeText={setSenderEmail} placeholder="votre@email.com" keyboardType="email-address" autoCapitalize="none" />
+
+          <Text style={styles.label}>Téléphone</Text>
+          <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="+223 XX XX XX XX" keyboardType="phone-pad" />
 
           <Text style={styles.label}>Sujet *</Text>
           <TextInput style={styles.input} value={subject} onChangeText={setSubject} placeholder="Sujet de votre message" />
@@ -219,4 +237,6 @@ const styles = StyleSheet.create({
   textarea: { height: 120, paddingTop: 10 },
   submitBtn: { backgroundColor: '#1B5E20', borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 20 },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  successBox: { backgroundColor: '#E8F5E9', borderRadius: 10, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#A5D6A7' },
+  successText: { color: '#1B5E20', fontSize: 14, fontWeight: '600', lineHeight: 20 },
 });

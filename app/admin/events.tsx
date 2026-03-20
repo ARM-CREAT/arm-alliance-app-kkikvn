@@ -17,8 +17,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Image,
-  ImageSourcePropType,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 
@@ -28,13 +26,6 @@ interface EventItem {
   description: string;
   date: string;
   location: string;
-  imageUrl?: string;
-  image_url?: string;
-}
-
-function resolveImageSource(source: string | undefined): ImageSourcePropType {
-  if (!source) return { uri: '' };
-  return { uri: source };
 }
 
 export default function AdminEventsScreen() {
@@ -53,7 +44,6 @@ export default function AdminEventsScreen() {
   const [formDescription, setFormDescription] = useState('');
   const [formDate, setFormDate] = useState(new Date());
   const [formLocation, setFormLocation] = useState('');
-  const [formImageUrl, setFormImageUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -105,7 +95,6 @@ export default function AdminEventsScreen() {
     setFormDescription('');
     setFormDate(new Date());
     setFormLocation('');
-    setFormImageUrl('');
     setShowDatePicker(false);
     setShowTimePicker(false);
     setShowEditModal(true);
@@ -120,7 +109,6 @@ export default function AdminEventsScreen() {
     const d = new Date(item.date);
     setFormDate(isNaN(d.getTime()) ? new Date() : d);
     setFormLocation(item.location || '');
-    setFormImageUrl(item.imageUrl || item.image_url || '');
     setShowDatePicker(false);
     setShowTimePicker(false);
     setShowEditModal(true);
@@ -151,9 +139,6 @@ export default function AdminEventsScreen() {
       date: isoDate,
       location: formLocation.trim(),
     };
-    if (formImageUrl.trim()) {
-      eventData.imageUrl = formImageUrl.trim();
-    }
     console.log('[AdminEvents] Submitting event payload:', JSON.stringify(eventData));
 
     try {
@@ -225,8 +210,6 @@ export default function AdminEventsScreen() {
     );
   }
 
-  const imageUrl = formImageUrl.trim();
-
   return (
     <>
       <Stack.Screen options={{ headerShown: true, title: 'Gestion des Événements', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#FFFFFF' }} />
@@ -251,13 +234,9 @@ export default function AdminEventsScreen() {
             </View>
           ) : (
             events.map((event) => {
-              const eventImageUrl = event.imageUrl || event.image_url;
               const formattedDate = formatDate(event.date);
               return (
                 <View key={event.id} style={styles.eventCard}>
-                  {eventImageUrl ? (
-                    <Image source={resolveImageSource(eventImageUrl)} style={styles.eventImage} resizeMode="cover" />
-                  ) : null}
                   <Text style={styles.eventTitle}>{event.title}</Text>
                   <Text style={styles.eventDescription} numberOfLines={3}>{event.description}</Text>
                   <View style={styles.eventMeta}>
@@ -407,20 +386,6 @@ export default function AdminEventsScreen() {
                   placeholder="Lieu de l'événement"
                   placeholderTextColor={colors.textSecondary}
                 />
-
-                <Text style={styles.inputLabel}>URL de l'image (optionnel)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formImageUrl}
-                  onChangeText={setFormImageUrl}
-                  placeholder="https://..."
-                  placeholderTextColor={colors.textSecondary}
-                  autoCapitalize="none"
-                  keyboardType="url"
-                />
-                {imageUrl.length > 0 && (
-                  <Image source={resolveImageSource(imageUrl)} style={styles.imagePreview} resizeMode="cover" />
-                )}
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel} disabled={submitting}>

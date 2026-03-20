@@ -399,6 +399,22 @@ export default function AdminDashboardScreen() {
             <View style={styles.grid}>
               <TouchableOpacity 
                 style={styles.card}
+                onPress={() => handleNavigation('/admin/memberships', 'Adhésions')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.cardIcon}>
+                  <IconSymbol 
+                    ios_icon_name="person.3.fill" 
+                    android_material_icon_name="group" 
+                    size={32} 
+                    color={colors.accent} 
+                  />
+                </View>
+                <Text style={styles.cardTitle}>Adhésions</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.card}
                 onPress={() => handleNavigation('/admin/membership-stats', 'Stats Adhésion')}
                 activeOpacity={0.8}
               >
