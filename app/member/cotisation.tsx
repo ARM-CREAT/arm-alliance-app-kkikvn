@@ -235,7 +235,7 @@ export default function CotisationScreen() {
               <View style={styles.optionContent}>
                 <Text style={styles.optionTitle}>{t('annual')}</Text>
                 <Text style={styles.optionAmount}>{annualAmount} / {t('annual').toLowerCase()}</Text>
-                <Text style={styles.optionSavings}>Économisez {savingsAmount}</Text>
+                <Text style={styles.optionSavings}>{t('savings', { amount: savingsAmount })}</Text>
               </View>
               {selectedType === 'annual' && (
                 <IconSymbol

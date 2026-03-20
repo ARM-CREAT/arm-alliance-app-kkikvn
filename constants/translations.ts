@@ -14,14 +14,26 @@ export const translations = {
     delete: 'Supprimer',
     edit: 'Modifier',
     close: 'Fermer',
-    
-    // Home
+
+    // Navigation / Tabs
     home: 'Accueil',
+    membership: 'Adhésion',
+
+    // Home screen
     welcome: 'Bienvenue',
     news: 'Actualités',
     events: 'Événements',
     leadership: 'Direction',
-    
+    retry: 'Réessayer',
+
+    // Settings
+    settings: 'Paramètres',
+    settingsSubtitle: 'Langue et Devise',
+    language: 'Langue',
+    currency: 'Devise',
+    selectCurrency: 'Sélectionner la devise',
+    currencyInfo: 'Les montants seront affichés dans la devise sélectionnée. Les taux de change sont mis à jour régulièrement.',
+
     // Donation
     donation: 'Contribution',
     supportARM: 'Soutenez l\'A.R.M',
@@ -41,11 +53,7 @@ export const translations = {
     securePayment: 'Paiement sécurisé. Vous recevrez un reçu par email et pourrez annuler à tout moment.',
     thankYou: 'Merci pour votre contribution!',
     contributionSuccess: 'Votre contribution de {amount} a été enregistrée avec succès.',
-    
-    // Currency
-    currency: 'Devise',
-    selectCurrency: 'Sélectionner la devise',
-    
+
     // Cotisation
     cotisation: 'Cotisation',
     payCotisation: 'Payer ma Cotisation',
@@ -55,7 +63,8 @@ export const translations = {
     oneTimeContribution: 'Contribution ponctuelle',
     proceedPayment: 'Procéder au Paiement',
     paymentInstructions: 'Instructions de Paiement',
-    
+    savings: 'Économisez {amount}',
+
     // Errors
     errorName: 'Veuillez entrer votre nom complet',
     errorEmail: 'Veuillez entrer votre adresse email',
@@ -63,7 +72,7 @@ export const translations = {
     errorAmountValid: 'Veuillez entrer un montant valide supérieur à 0',
     errorMinAmount: 'Le montant minimum est de {min}',
   },
-  
+
   // English
   en: {
     // Common
@@ -77,14 +86,26 @@ export const translations = {
     delete: 'Delete',
     edit: 'Edit',
     close: 'Close',
-    
-    // Home
+
+    // Navigation / Tabs
     home: 'Home',
+    membership: 'Membership',
+
+    // Home screen
     welcome: 'Welcome',
     news: 'News',
     events: 'Events',
     leadership: 'Leadership',
-    
+    retry: 'Retry',
+
+    // Settings
+    settings: 'Settings',
+    settingsSubtitle: 'Language & Currency',
+    language: 'Language',
+    currency: 'Currency',
+    selectCurrency: 'Select Currency',
+    currencyInfo: 'Amounts will be displayed in the selected currency. Exchange rates are updated regularly.',
+
     // Donation
     donation: 'Contribution',
     supportARM: 'Support A.R.M',
@@ -104,11 +125,7 @@ export const translations = {
     securePayment: 'Secure payment. You will receive a receipt by email and can cancel at any time.',
     thankYou: 'Thank you for your contribution!',
     contributionSuccess: 'Your contribution of {amount} has been successfully recorded.',
-    
-    // Currency
-    currency: 'Currency',
-    selectCurrency: 'Select Currency',
-    
+
     // Cotisation
     cotisation: 'Membership Fee',
     payCotisation: 'Pay Membership Fee',
@@ -118,7 +135,8 @@ export const translations = {
     oneTimeContribution: 'One-time contribution',
     proceedPayment: 'Proceed to Payment',
     paymentInstructions: 'Payment Instructions',
-    
+    savings: 'Save {amount}',
+
     // Errors
     errorName: 'Please enter your full name',
     errorEmail: 'Please enter your email address',
@@ -126,7 +144,7 @@ export const translations = {
     errorAmountValid: 'Please enter a valid amount greater than 0',
     errorMinAmount: 'Minimum amount is {min}',
   },
-  
+
   // Bambara
   bm: {
     // Common
@@ -140,14 +158,26 @@ export const translations = {
     delete: 'A bɔ',
     edit: 'A yɛlɛma',
     close: 'A datugu',
-    
-    // Home
+
+    // Navigation / Tabs
     home: 'So',
+    membership: 'Jɛkulu',
+
+    // Home screen
     welcome: 'I ni ce',
     news: 'Kunnafoni kuraw',
     events: 'Ko kɛlenw',
     leadership: 'Kuntigiya',
-    
+    retry: 'A lɛ tugu',
+
+    // Settings
+    settings: 'Labɛnni',
+    settingsSubtitle: 'Kan ni Wari suguya',
+    language: 'Kan',
+    currency: 'Wari suguya',
+    selectCurrency: 'Wari suguya sugandi',
+    currencyInfo: 'Jatedenw bɛna jira wari suguya sugandilen na. Wari yɛlɛmani bɛ kɛ waati o waati.',
+
     // Donation
     donation: 'Dɛmɛ',
     supportARM: 'A.R.M dɛmɛ',
@@ -167,11 +197,7 @@ export const translations = {
     securePayment: 'Sara lakananen. I bɛna resepisi sɔrɔ imɛli fɛ wa i bɛ se ka bɔ waati o waati.',
     thankYou: 'I ni ce i ka dɛmɛ kosɔn!',
     contributionSuccess: 'I ka dɛmɛ {amount} ye sɛbɛn ka ɲɛ.',
-    
-    // Currency
-    currency: 'Wari suguya',
-    selectCurrency: 'Wari suguya sugandi',
-    
+
     // Cotisation
     cotisation: 'Jɛkulu sara',
     payCotisation: 'N ka jɛkulu sara sara',
@@ -181,7 +207,8 @@ export const translations = {
     oneTimeContribution: 'Dɛmɛ siɲɛ kelen',
     proceedPayment: 'Sara kɛ',
     paymentInstructions: 'Sara kalan',
-    
+    savings: 'Mara {amount}',
+
     // Errors
     errorName: 'I ka tɔgɔ bɛɛ sɛbɛn',
     errorEmail: 'I ka imɛli sɛbɛn',
@@ -189,7 +216,7 @@ export const translations = {
     errorAmountValid: 'Jateden ɲuman sɛbɛn min ka bon ka tɛmɛ 0 kan',
     errorMinAmount: 'Jateden dɔgɔman ye {min}',
   },
-  
+
   // Spanish
   es: {
     // Common
@@ -203,14 +230,26 @@ export const translations = {
     delete: 'Eliminar',
     edit: 'Editar',
     close: 'Cerrar',
-    
-    // Home
+
+    // Navigation / Tabs
     home: 'Inicio',
+    membership: 'Membresía',
+
+    // Home screen
     welcome: 'Bienvenido',
     news: 'Noticias',
     events: 'Eventos',
     leadership: 'Liderazgo',
-    
+    retry: 'Reintentar',
+
+    // Settings
+    settings: 'Configuración',
+    settingsSubtitle: 'Idioma y Moneda',
+    language: 'Idioma',
+    currency: 'Moneda',
+    selectCurrency: 'Seleccionar Moneda',
+    currencyInfo: 'Los montos se mostrarán en la moneda seleccionada. Los tipos de cambio se actualizan regularmente.',
+
     // Donation
     donation: 'Contribución',
     supportARM: 'Apoya A.R.M',
@@ -230,11 +269,7 @@ export const translations = {
     securePayment: 'Pago seguro. Recibirás un recibo por correo electrónico y podrás cancelar en cualquier momento.',
     thankYou: '¡Gracias por tu contribución!',
     contributionSuccess: 'Tu contribución de {amount} ha sido registrada exitosamente.',
-    
-    // Currency
-    currency: 'Moneda',
-    selectCurrency: 'Seleccionar Moneda',
-    
+
     // Cotisation
     cotisation: 'Cuota',
     payCotisation: 'Pagar mi Cuota',
@@ -244,7 +279,8 @@ export const translations = {
     oneTimeContribution: 'Contribución única',
     proceedPayment: 'Proceder al Pago',
     paymentInstructions: 'Instrucciones de Pago',
-    
+    savings: 'Ahorra {amount}',
+
     // Errors
     errorName: 'Por favor ingrese su nombre completo',
     errorEmail: 'Por favor ingrese su correo electrónico',
@@ -252,7 +288,7 @@ export const translations = {
     errorAmountValid: 'Por favor ingrese una cantidad válida mayor a 0',
     errorMinAmount: 'La cantidad mínima es {min}',
   },
-  
+
   // Arabic
   ar: {
     // Common
@@ -266,14 +302,26 @@ export const translations = {
     delete: 'حذف',
     edit: 'تعديل',
     close: 'إغلاق',
-    
-    // Home
+
+    // Navigation / Tabs
     home: 'الرئيسية',
+    membership: 'العضوية',
+
+    // Home screen
     welcome: 'مرحبا',
     news: 'الأخبار',
     events: 'الأحداث',
     leadership: 'القيادة',
-    
+    retry: 'إعادة المحاولة',
+
+    // Settings
+    settings: 'الإعدادات',
+    settingsSubtitle: 'اللغة والعملة',
+    language: 'اللغة',
+    currency: 'العملة',
+    selectCurrency: 'اختر العملة',
+    currencyInfo: 'ستظهر المبالغ بالعملة المختارة. يتم تحديث أسعار الصرف بانتظام.',
+
     // Donation
     donation: 'المساهمة',
     supportARM: 'ادعم A.R.M',
@@ -293,11 +341,7 @@ export const translations = {
     securePayment: 'دفع آمن. ستتلقى إيصالاً عبر البريد الإلكتروني ويمكنك الإلغاء في أي وقت.',
     thankYou: 'شكراً لمساهمتك!',
     contributionSuccess: 'تم تسجيل مساهمتك بمبلغ {amount} بنجاح.',
-    
-    // Currency
-    currency: 'العملة',
-    selectCurrency: 'اختر العملة',
-    
+
     // Cotisation
     cotisation: 'الاشتراك',
     payCotisation: 'دفع اشتراكي',
@@ -307,7 +351,8 @@ export const translations = {
     oneTimeContribution: 'مساهمة لمرة واحدة',
     proceedPayment: 'المتابعة للدفع',
     paymentInstructions: 'تعليمات الدفع',
-    
+    savings: 'وفر {amount}',
+
     // Errors
     errorName: 'الرجاء إدخال اسمك الكامل',
     errorEmail: 'الرجاء إدخال بريدك الإلكتروني',

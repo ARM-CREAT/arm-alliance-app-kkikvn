@@ -77,10 +77,8 @@ export default function SettingsScreen() {
             size={48}
             color={colors.primary}
           />
-          <Text style={styles.headerTitle}>Paramètres</Text>
-          <Text style={styles.headerSubtitle}>
-            Langue et Devise
-          </Text>
+          <Text style={styles.headerTitle}>{t('settings')}</Text>
+          <Text style={styles.headerSubtitle}>{t('settingsSubtitle')}</Text>
         </View>
 
         {/* Language Section */}
@@ -98,7 +96,7 @@ export default function SettingsScreen() {
                 color={colors.primary}
               />
               <View style={styles.sectionHeaderText}>
-                <Text style={styles.sectionTitle}>Langue</Text>
+                <Text style={styles.sectionTitle}>{t('language')}</Text>
                 <Text style={styles.sectionValue}>{currentLanguageName}</Text>
               </View>
             </View>
@@ -155,7 +153,7 @@ export default function SettingsScreen() {
                 color={colors.primary}
               />
               <View style={styles.sectionHeaderText}>
-                <Text style={styles.sectionTitle}>Devise</Text>
+                <Text style={styles.sectionTitle}>{t('currency')}</Text>
                 <Text style={styles.sectionValue}>{currentCurrencyName}</Text>
               </View>
             </View>
@@ -208,9 +206,7 @@ export default function SettingsScreen() {
             size={20}
             color={colors.primary}
           />
-          <Text style={styles.infoText}>
-            Les montants seront affichés dans la devise sélectionnée. Les taux de change sont mis à jour régulièrement.
-          </Text>
+          <Text style={styles.infoText}>{t('currencyInfo')}</Text>
         </View>
       </ScrollView>
     </View>
