@@ -462,14 +462,6 @@ export default function HomeScreen() {
               </View>
               {events.slice(0, 3).map((item) => (
                 <TouchableOpacity key={item.id} style={styles.eventCard} activeOpacity={0.9}>
-                  <View style={styles.eventDate}>
-                    <Text style={styles.eventDay}>
-                      {new Date(item.date).getDate()}
-                    </Text>
-                    <Text style={styles.eventMonth}>
-                      {new Date(item.date).toLocaleDateString('fr-FR', { month: 'short' })}
-                    </Text>
-                  </View>
                   <View style={styles.eventInfo}>
                     <Text style={styles.eventTitle}>{item.title}</Text>
                     <Text style={styles.eventDescription} numberOfLines={2}>
