@@ -5,7 +5,6 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
   Platform,
   RefreshControl,
@@ -144,11 +143,11 @@ function ProgramCard({ item, isExpanded, onToggle }: {
 
 export default function ProgramScreen() {
   const router = useRouter();
-  const [programs, setPrograms] = useState<ProgramItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [programs, setPrograms] = useState<ProgramItem[]>(STATIC_PROGRAMS);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const [fadeAnim] = useState(new Animated.Value(1));
 
   const loadPrograms = useCallback(async () => {
     console.log('[ProgramScreen] Chargement du programme politique depuis /api/programs');
@@ -167,15 +166,8 @@ export default function ProgramScreen() {
     } catch (err: any) {
       console.warn('[ProgramScreen] Erreur API - utilisation du contenu statique:', err.message);
       setPrograms(STATIC_PROGRAMS);
-    } finally {
-      setLoading(false);
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
     }
-  }, [fadeAnim]);
+  }, []);
 
   useEffect(() => {
     console.log('[ProgramScreen] Composant monté');
@@ -230,27 +222,6 @@ export default function ProgramScreen() {
 
   const allExpanded = expandedIds.size === programs.length && programs.length > 0;
   const toggleAllLabel = allExpanded ? 'Tout réduire' : 'Tout développer';
-
-  if (loading) {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            headerShown: true,
-            title: 'Programme Politique',
-            headerBackTitle: 'Retour',
-            headerStyle: { backgroundColor: colors.primary },
-            headerTintColor: colors.background,
-            headerTitleStyle: { fontWeight: 'bold' },
-          }}
-        />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Chargement du programme...</Text>
-        </View>
-      </>
-    );
-  }
 
   return (
     <>
