@@ -17,7 +17,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
   const password = request.headers['x-admin-password'];
   if (!password || password !== ADMIN_PASSWORD) {
-    reply.status(401).send({ error: 'Unauthorized' });
+    reply.status(401).send({ success: false, error: 'Non autorisé' });
     return false;
   }
   return true;
@@ -88,7 +88,7 @@ export function register(app: App, fastify: FastifyInstance) {
         description: 'Get all events ordered by date',
         tags: ['events'],
         response: {
-          200: { type: 'array' },
+          200: { type: 'object' },
         },
       },
     },
@@ -102,7 +102,11 @@ export function register(app: App, fastify: FastifyInstance) {
           .orderBy(asc(schema.events.date));
 
         app.logger.info({ count: result.length }, 'Events fetched successfully');
-        return result.map(formatEvent);
+        return {
+          success: true,
+          data: result.map(formatEvent),
+          total: result.length,
+        };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch events');
         throw error;
@@ -142,11 +146,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ eventId: id }, 'Event not found');
           reply.status(404);
-          return { error: 'Event not found' };
+          return { success: false, error: 'Événement non trouvé' };
         }
 
         app.logger.info({ eventId: id }, 'Event fetched successfully');
-        return formatEvent(result[0]);
+        return { success: true, data: formatEvent(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to fetch event');
         throw error;
@@ -188,7 +192,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!title || !description || !date || !location) {
         app.logger.warn({ body: request.body }, 'Missing required fields for event creation');
         reply.status(400);
-        return { error: 'Missing required fields: title, description, date, location' };
+        return { success: false, error: 'Missing required fields: title, description, date, location' };
       }
 
       // Map imageUrl to image_url
@@ -211,7 +215,11 @@ export function register(app: App, fastify: FastifyInstance) {
 
         app.logger.info({ eventId: result[0].id, title }, 'Event created successfully');
         reply.status(201);
-        return formatEvent(result[0]);
+        return {
+          success: true,
+          message: 'Événement créé avec succès',
+          data: formatEvent(result[0]),
+        };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create event');
         throw error;
@@ -267,7 +275,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (Object.keys(updates).length === 0) {
         app.logger.warn({ eventId: id }, 'No fields to update');
         reply.status(400);
-        return { error: 'No fields to update' };
+        return { success: false, error: 'No fields to update' };
       }
 
       app.logger.info({ eventId: id }, 'Updating event');
@@ -282,11 +290,15 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ eventId: id }, 'Event not found');
           reply.status(404);
-          return { error: 'Event not found' };
+          return { success: false, error: 'Événement non trouvé' };
         }
 
         app.logger.info({ eventId: id }, 'Event updated successfully');
-        return formatEvent(result[0]);
+        return {
+          success: true,
+          message: 'Événement mis à jour avec succès',
+          data: formatEvent(result[0]),
+        };
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to update event');
         throw error;
@@ -329,11 +341,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ eventId: id }, 'Event not found');
           reply.status(404);
-          return { error: 'Event not found' };
+          return { success: false, error: 'Événement non trouvé' };
         }
 
         app.logger.info({ eventId: id }, 'Event deleted successfully');
-        return { success: true, message: 'Event deleted successfully' };
+        return { success: true, message: 'Événement supprimé' };
       } catch (error) {
         app.logger.error({ err: error, eventId: id }, 'Failed to delete event');
         throw error;

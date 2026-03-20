@@ -37,7 +37,7 @@ const DEFAULT_PROGRAMS = [
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
   const password = request.headers['x-admin-password'];
   if (!password || password !== ADMIN_PASSWORD) {
-    reply.status(401).send({ error: 'Unauthorized' });
+    reply.status(401).send({ success: false, error: 'Non autorisé' });
     return false;
   }
   return true;
@@ -92,7 +92,11 @@ export function register(app: App, fastify: FastifyInstance) {
           );
 
         app.logger.info({ count: result.length }, 'Program items fetched successfully');
-        return result.map(formatProgram);
+        return {
+          success: true,
+          data: result.map(formatProgram),
+          total: result.length,
+        };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch program');
         throw error;
@@ -132,11 +136,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ itemId: id }, 'Program item not found');
           reply.status(404);
-          return { error: 'Program item not found' };
+          return { success: false, error: 'Programme politique non trouvé' };
         }
 
         app.logger.info({ itemId: id }, 'Program item fetched successfully');
-        return formatProgram(result[0]);
+        return { success: true, data: formatProgram(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, itemId: id }, 'Failed to fetch program item');
         throw error;
@@ -178,7 +182,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!title || !description) {
         app.logger.warn({ body: request.body }, 'Missing required fields for program creation');
         reply.status(400);
-        return { error: 'Missing required fields: title, description' };
+        return { success: false, error: 'Missing required fields: title, description' };
       }
 
       app.logger.info({ title, category }, 'Creating program item');
@@ -197,7 +201,11 @@ export function register(app: App, fastify: FastifyInstance) {
 
         app.logger.info({ itemId: result[0].id, title }, 'Program item created successfully');
         reply.status(201);
-        return formatProgram(result[0]);
+        return {
+          success: true,
+          message: 'Programme politique créé avec succès',
+          data: formatProgram(result[0]),
+        };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create program');
         throw error;
@@ -249,7 +257,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (Object.keys(updates).length === 0) {
         app.logger.warn({ itemId: id }, 'No fields to update');
         reply.status(400);
-        return { error: 'No fields to update' };
+        return { success: false, error: 'No fields to update' };
       }
 
       app.logger.info({ itemId: id }, 'Updating program item');
@@ -264,11 +272,15 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ itemId: id }, 'Program item not found');
           reply.status(404);
-          return { error: 'Program item not found' };
+          return { success: false, error: 'Programme politique non trouvé' };
         }
 
         app.logger.info({ itemId: id }, 'Program item updated successfully');
-        return formatProgram(result[0]);
+        return {
+          success: true,
+          message: 'Programme politique mis à jour avec succès',
+          data: formatProgram(result[0]),
+        };
       } catch (error) {
         app.logger.error({ err: error, itemId: id }, 'Failed to update program');
         throw error;
@@ -311,11 +323,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ itemId: id }, 'Program item not found');
           reply.status(404);
-          return { error: 'Program item not found' };
+          return { success: false, error: 'Programme politique non trouvé' };
         }
 
         app.logger.info({ itemId: id }, 'Program item deleted successfully');
-        return { success: true, message: 'Program item deleted successfully' };
+        return { success: true, message: 'Programme politique supprimé' };
       } catch (error) {
         app.logger.error({ err: error, itemId: id }, 'Failed to delete program');
         throw error;

@@ -19,7 +19,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
   const password = request.headers['x-admin-password'];
   if (!password || password !== ADMIN_PASSWORD) {
-    reply.status(401).send({ error: 'Unauthorized' });
+    reply.status(401).send({ success: false, error: 'Non autorisé' });
     return false;
   }
   return true;
@@ -72,7 +72,11 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await query;
 
         app.logger.info({ count: result.length }, 'Programs fetched successfully');
-        return result.map(formatProgram);
+        return {
+          success: true,
+          data: result.map(formatProgram),
+          total: result.length,
+        };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch programs');
         throw error;
@@ -112,11 +116,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ programId: id }, 'Program not found');
           reply.status(404);
-          return { error: 'Program not found' };
+          return { success: false, error: 'Programme non trouvé' };
         }
 
         app.logger.info({ programId: id }, 'Program fetched successfully');
-        return formatProgram(result[0]);
+        return { success: true, data: formatProgram(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, programId: id }, 'Failed to fetch program');
         throw error;
@@ -160,7 +164,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!title || !category || !summary || !content) {
         app.logger.warn({ body: request.body }, 'Missing required fields for program creation');
         reply.status(400);
-        return { error: 'Missing required fields: title, category, summary, content' };
+        return { success: false, error: 'Missing required fields: title, category, summary, content' };
       }
 
       app.logger.info({ title, category }, 'Creating program');
@@ -182,7 +186,11 @@ export function register(app: App, fastify: FastifyInstance) {
 
         app.logger.info({ programId: result[0].id, title }, 'Program created successfully');
         reply.status(201);
-        return formatProgram(result[0]);
+        return {
+          success: true,
+          message: 'Programme créé avec succès',
+          data: formatProgram(result[0]),
+        };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create program');
         throw error;
@@ -243,7 +251,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (Object.keys(updates).length === 1) {
         app.logger.warn({ programId: id }, 'No fields to update');
         reply.status(400);
-        return { error: 'No fields to update' };
+        return { success: false, error: 'No fields to update' };
       }
 
       app.logger.info({ programId: id }, 'Updating program');
@@ -258,11 +266,15 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ programId: id }, 'Program not found');
           reply.status(404);
-          return { error: 'Program not found' };
+          return { success: false, error: 'Programme non trouvé' };
         }
 
         app.logger.info({ programId: id }, 'Program updated successfully');
-        return formatProgram(result[0]);
+        return {
+          success: true,
+          message: 'Programme mis à jour avec succès',
+          data: formatProgram(result[0]),
+        };
       } catch (error) {
         app.logger.error({ err: error, programId: id }, 'Failed to update program');
         throw error;
@@ -305,11 +317,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ programId: id }, 'Program not found');
           reply.status(404);
-          return { error: 'Program not found' };
+          return { success: false, error: 'Programme non trouvé' };
         }
 
         app.logger.info({ programId: id }, 'Program deleted successfully');
-        return { success: true, message: 'Program deleted successfully' };
+        return { success: true, message: 'Programme supprimé' };
       } catch (error) {
         app.logger.error({ err: error, programId: id }, 'Failed to delete program');
         throw error;
