@@ -17,7 +17,7 @@ import { Stack, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/styles/commonStyles';
-import { BACKEND_URL } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 
 interface Conference {
   id: string;

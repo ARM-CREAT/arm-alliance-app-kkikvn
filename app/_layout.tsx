@@ -262,6 +262,12 @@ export default function RootLayout() {
                       headerShown: false,
                     }} 
                   />
+                  <Stack.Screen 
+                    name="ai-assistant" 
+                    options={{ 
+                      headerShown: false,
+                    }} 
+                  />
                 </Stack>
                 <StatusBar style="auto" />
                 

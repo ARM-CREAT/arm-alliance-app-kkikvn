@@ -16,6 +16,8 @@ export const colors = {
   danger: '#DC3545',      // Danger red
   error: '#DC3545',       // Error red (alias for danger)
   highlight: '#2D8B3C',   // Green highlight
+  // AI assistant accent
+  aiAccent: '#1565C0',    // Blue for AI features
 };
 
 export const buttonStyles = StyleSheet.create({

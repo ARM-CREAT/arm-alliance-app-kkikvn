@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     color: colors.background,
   },
   amountSummary: {
-    backgroundColor: colors.secondary,
+    backgroundColor: '#F4C43020',
     borderRadius: 8,
     padding: 12,
     marginTop: 12,

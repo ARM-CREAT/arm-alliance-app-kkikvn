@@ -220,6 +220,12 @@ export default function HomeScreen() {
     router.push('/call');
   };
 
+  const handleAIAssistant = () => {
+    console.log('User tapped AI Assistant button');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/ai-assistant');
+  };
+
   if (loading) {
     return (
       <>
@@ -599,6 +605,21 @@ export default function HomeScreen() {
                   <Text style={styles.actionTitle}>Appels</Text>
                   <Text style={styles.actionSubtitle}>Audio & Vidéo</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.actionCard, styles.actionCardAI]} 
+                  onPress={handleAIAssistant}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol 
+                    ios_icon_name="brain" 
+                    android_material_icon_name="smart-toy" 
+                    size={32} 
+                    color="#1565C0" 
+                  />
+                  <Text style={styles.actionTitle}>Assistant IA</Text>
+                  <Text style={[styles.actionSubtitle, { color: '#1565C0' }]}>Posez vos questions</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -957,6 +978,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 4,
+  },
+  actionCardAI: {
+    borderWidth: 1.5,
+    borderColor: '#1565C020',
+    backgroundColor: '#EEF4FF',
   },
   actionTitle: {
     fontSize: 14,

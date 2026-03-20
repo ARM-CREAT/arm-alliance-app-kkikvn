@@ -439,11 +439,6 @@ export default function AdminLoginScreen() {
     setShowPassword(!showPassword);
   };
 
-  const handleGoToDiagnostic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/admin/diagnostic');
-  };
-
   const handleGoToOfflineAccess = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/admin/offline-access');
@@ -584,14 +579,7 @@ export default function AdminLoginScreen() {
               <Text style={styles.secondaryButtonText}>⚙️ Configurer l'accès hors ligne</Text>
             </TouchableOpacity>
 
-            {backendConfigured && (
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={handleGoToDiagnostic}
-              >
-                <Text style={styles.secondaryButtonText}>🔍 Diagnostic de configuration</Text>
-              </TouchableOpacity>
-            )}
+
 
             <Text style={styles.helpText}>
               💡 Conseils de connexion:{'\n\n'}

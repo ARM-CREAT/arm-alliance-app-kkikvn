@@ -5,7 +5,7 @@ import {
   StyleSheet, Alert, Linking, RefreshControl, ActivityIndicator
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { BACKEND_URL } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 
 interface Contact {
   id: string;
