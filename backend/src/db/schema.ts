@@ -326,3 +326,15 @@ export const aiConversations = pgTable('ai_conversations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Contact Messages table - Contact form submissions (distinct from contacts party contacts)
+export const contactMessages = pgTable('contact_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  subject: text('subject').notNull(),
+  message: text('message').notNull(),
+  status: text('status').notNull().default('unread'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -19,7 +19,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
   const password = request.headers['x-admin-password'];
   if (!password || password !== ADMIN_PASSWORD) {
-    reply.status(401).send({ error: 'Unauthorized' });
+    reply.status(401).send({ success: false, error: 'Non autorisé' });
     return false;
   }
   return true;
@@ -47,7 +47,7 @@ export function register(app: App, fastify: FastifyInstance) {
         description: 'Get all news articles ordered by published date',
         tags: ['news'],
         response: {
-          200: { type: 'array' },
+          200: { type: 'object' },
         },
       },
     },
@@ -64,7 +64,11 @@ export function register(app: App, fastify: FastifyInstance) {
           { count: result.length },
           'News articles fetched successfully'
         );
-        return result.map(formatNews);
+        return {
+          success: true,
+          data: result.map(formatNews),
+          total: result.length,
+        };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch news articles');
         throw error;
@@ -104,11 +108,11 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { error: 'News article not found' };
+          return { success: false, error: 'Actualité non trouvée' };
         }
 
         app.logger.info({ newsId: id }, 'News article fetched successfully');
-        return formatNews(result[0]);
+        return { success: true, data: formatNews(result[0]) };
       } catch (error) {
         app.logger.error({ err: error, newsId: id }, 'Failed to fetch news article');
         throw error;
@@ -153,7 +157,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!title || !content) {
         app.logger.warn({ body }, 'Missing required fields for news creation');
         reply.status(400);
-        return { error: 'Missing required fields: title, content' };
+        return { success: false, error: 'Missing required fields: title, content' };
       }
 
       // Map camelCase to correct field names
@@ -182,7 +186,11 @@ export function register(app: App, fastify: FastifyInstance) {
           'News article created successfully'
         );
         reply.status(201);
-        return formatNews(result[0]);
+        return {
+          success: true,
+          message: 'Actualité créée avec succès',
+          data: formatNews(result[0]),
+        };
       } catch (error) {
         app.logger.error(
           { err: error, title },
@@ -245,7 +253,7 @@ export function register(app: App, fastify: FastifyInstance) {
       if (Object.keys(updates).length === 0) {
         app.logger.warn({ newsId: id }, 'No fields to update');
         reply.status(400);
-        return { error: 'No fields to update' };
+        return { success: false, error: 'No fields to update' };
       }
 
       app.logger.info({ newsId: id }, 'Updating news article');
@@ -260,14 +268,18 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { error: 'News article not found' };
+          return { success: false, error: 'Actualité non trouvée' };
         }
 
         app.logger.info(
           { newsId: id },
           'News article updated successfully'
         );
-        return formatNews(result[0]);
+        return {
+          success: true,
+          message: 'Actualité mise à jour avec succès',
+          data: formatNews(result[0]),
+        };
       } catch (error) {
         app.logger.error(
           { err: error, newsId: id },
@@ -313,14 +325,14 @@ export function register(app: App, fastify: FastifyInstance) {
         if (result.length === 0) {
           app.logger.warn({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { error: 'News article not found' };
+          return { success: false, error: 'Actualité non trouvée' };
         }
 
         app.logger.info(
           { newsId: id },
           'News article deleted successfully'
         );
-        return { success: true, message: 'News article deleted successfully' };
+        return { success: true, message: 'Actualité supprimée' };
       } catch (error) {
         app.logger.error(
           { err: error, newsId: id },

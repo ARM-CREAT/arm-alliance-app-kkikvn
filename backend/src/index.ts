@@ -31,6 +31,7 @@ import * as contactRoutes from './routes/contacts.js';
 import * as settingsRoutes from './routes/settings.js';
 import * as conversationRoutes from './routes/conversations.js';
 import * as extendedProgramRoutes from './routes/programs.js';
+import * as membershipsRoutes from './routes/memberships.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -78,6 +79,7 @@ contactRoutes.register(app, app.fastify);
 settingsRoutes.register(app, app.fastify);
 conversationRoutes.register(app, app.fastify);
 extendedProgramRoutes.register(app, app.fastify);
+membershipsRoutes.register(app, app.fastify);
 
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);
