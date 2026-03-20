@@ -6,6 +6,7 @@ import {
   integer,
   decimal,
   jsonb,
+  boolean,
 } from 'drizzle-orm/pg-core';
 
 // Members table - Party membership applications and approvals
@@ -279,5 +280,49 @@ export const appSettings = pgTable('app_settings', {
   id: uuid('id').primaryKey().defaultRandom(),
   key: text('key').notNull().unique(),
   value: text('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Conversations table - Private chat between members
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  participantIds: text('participant_ids').array().notNull(), // Array of user IDs
+  lastMessage: text('last_message'),
+  lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Chat messages table - Private messages in conversations
+export const chatMessages = pgTable('chat_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  senderId: text('sender_id').notNull(),
+  senderName: text('sender_name').notNull(),
+  content: text('content').notNull(),
+  readBy: text('read_by').array().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Programs table - Extended political program with richer fields
+export const programs = pgTable('programs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  category: text('category').notNull(),
+  summary: text('summary').notNull(),
+  content: text('content').notNull(),
+  icon: text('icon'),
+  color: text('color'),
+  order: integer('order').default(0),
+  published: boolean('published').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// AI Conversations table - AI chat history
+export const aiConversations = pgTable('ai_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  messages: jsonb('messages').notNull().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
