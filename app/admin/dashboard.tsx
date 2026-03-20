@@ -323,21 +323,6 @@ export default function AdminDashboardScreen() {
                 <Text style={styles.cardTitle}>Conférences</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.card}
-                onPress={() => handleNavigation('/call', 'Appels')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="phone.fill" 
-                    android_material_icon_name="call" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                </View>
-                <Text style={styles.cardTitle}>Appels</Text>
-              </TouchableOpacity>
             </View>
           </View>
 

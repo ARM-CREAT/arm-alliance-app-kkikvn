@@ -229,14 +229,6 @@ export default function HomeScreen() {
     router.push('/conference');
   };
 
-  const handleCalls = () => {
-    console.log('L\'utilisateur a appuyé sur le bouton Appels');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push('/call');
-  };
-
   const handleAIAssistant = () => {
     console.log('L\'utilisateur a appuyé sur le bouton Assistant IA');
     if (Platform.OS === 'ios') {
@@ -587,21 +579,6 @@ export default function HomeScreen() {
                 />
                 <Text style={styles.actionTitle}>Conférences</Text>
                 <Text style={styles.actionSubtitle}>Vidéo en ligne</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleCalls}
-                activeOpacity={0.8}
-              >
-                <IconSymbol 
-                  ios_icon_name="phone.fill" 
-                  android_material_icon_name="call" 
-                  size={32} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.actionTitle}>Appels</Text>
-                <Text style={styles.actionSubtitle}>Audio & Vidéo</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
