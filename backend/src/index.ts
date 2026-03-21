@@ -90,6 +90,7 @@ await eventRoutes.seedEvents(app);
 await leadershipRoutes.seedLeadership(app);
 await extendedProgramRoutes.seedPrograms(app);
 await notificationsRoutes.seedNotifications(app);
+await programRoutes.seedProgramSections(app);
 
 // Setup WebSocket signaling for conferences
 import {
