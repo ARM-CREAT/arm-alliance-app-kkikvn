@@ -365,3 +365,14 @@ export const notifications = pgTable('notifications', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Program Sections table - Party program sections with order and icon
+export const programSections = pgTable('program_sections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orderIndex: integer('order_index').notNull(),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  icon: text('icon'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
