@@ -234,12 +234,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/notifications - Create notification (public)
+  // POST /api/notifications - Create notification (authenticated)
   fastify.post<{ Body: CreateNotificationBody }>(
     '/api/notifications',
     {
       schema: {
-        description: 'Create notification',
+        description: 'Create notification (authenticated)',
         tags: ['notifications'],
         body: {
           type: 'object',
@@ -253,17 +253,20 @@ export function register(app: App, fastify: FastifyInstance) {
             isPublished: { type: 'boolean' },
             published: { type: 'boolean' },
             publishedAt: { type: 'string' },
-            createdBy: { type: 'string' },
           },
           required: ['title', 'type', 'category'],
         },
         response: {
           201: { type: 'object' },
+          401: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
-      const { title, content, body, type, category, imageUrl, isPublished, published, publishedAt, createdBy } = request.body as CreateNotificationBody;
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const { title, content, body, type, category, imageUrl, isPublished, published, publishedAt } = request.body as CreateNotificationBody;
       const finalContent = content || body || '';
       const finalPublished = published !== undefined ? published : (isPublished !== undefined ? isPublished : false);
       let finalPublishedAt: Date | null = null;
@@ -274,7 +277,7 @@ export function register(app: App, fastify: FastifyInstance) {
         finalPublishedAt = new Date();
       }
 
-      app.logger.info({ title }, 'Creating notification');
+      app.logger.info({ userId: session.user.id, title }, 'Creating notification');
 
       try {
         const result = await app.db
@@ -288,7 +291,7 @@ export function register(app: App, fastify: FastifyInstance) {
             imageUrl: imageUrl || null,
             isPublished: finalPublished,
             publishedAt: finalPublishedAt,
-            createdBy: createdBy || null,
+            createdBy: session.user.id,
           })
           .returning();
 
@@ -298,7 +301,7 @@ export function register(app: App, fastify: FastifyInstance) {
           notification: formatNotification(result[0], true),
         };
       } catch (error) {
-        app.logger.error({ err: error }, 'Failed to create notification');
+        app.logger.error({ err: error, userId: session.user.id }, 'Failed to create notification');
         throw error;
       }
     }
@@ -377,12 +380,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PUT /api/notifications/:id - Update notification (public)
+  // PUT /api/notifications/:id - Update notification (authenticated)
   fastify.put<{ Params: { id: string }; Body: UpdateNotificationBody }>(
     '/api/notifications/:id',
     {
       schema: {
-        description: 'Update notification',
+        description: 'Update notification (authenticated)',
         tags: ['notifications'],
         params: {
           type: 'object',
@@ -404,11 +407,15 @@ export function register(app: App, fastify: FastifyInstance) {
         },
         response: {
           200: { type: 'object' },
+          401: { type: 'object' },
           404: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
       const { id } = request.params;
       const updates: any = { updatedAt: new Date() };
 
@@ -429,7 +436,7 @@ export function register(app: App, fastify: FastifyInstance) {
       }
       if (body.publishedAt !== undefined) updates.publishedAt = body.publishedAt ? new Date(body.publishedAt) : null;
 
-      app.logger.info({ notificationId: id }, 'Updating notification');
+      app.logger.info({ userId: session.user.id, notificationId: id }, 'Updating notification');
 
       try {
         const result = await app.db
@@ -448,7 +455,7 @@ export function register(app: App, fastify: FastifyInstance) {
           notification: formatNotification(result[0], true),
         };
       } catch (error) {
-        app.logger.error({ err: error, notificationId: id }, 'Failed to update notification');
+        app.logger.error({ err: error, userId: session.user.id, notificationId: id }, 'Failed to update notification');
         throw error;
       }
     }
@@ -535,12 +542,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/notifications/:id - Delete notification (public)
+  // DELETE /api/notifications/:id - Delete notification (authenticated)
   fastify.delete<{ Params: { id: string } }>(
     '/api/notifications/:id',
     {
       schema: {
-        description: 'Delete notification',
+        description: 'Delete notification (authenticated)',
         tags: ['notifications'],
         params: {
           type: 'object',
@@ -548,13 +555,17 @@ export function register(app: App, fastify: FastifyInstance) {
         },
         response: {
           204: { type: 'null' },
+          401: { type: 'object' },
           404: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
       const { id } = request.params;
-      app.logger.info({ notificationId: id }, 'Deleting notification');
+      app.logger.info({ userId: session.user.id, notificationId: id }, 'Deleting notification');
 
       try {
         const result = await app.db
@@ -570,7 +581,7 @@ export function register(app: App, fastify: FastifyInstance) {
         reply.status(204);
         app.logger.info({ notificationId: id }, 'Notification deleted successfully');
       } catch (error) {
-        app.logger.error({ err: error, notificationId: id }, 'Failed to delete notification');
+        app.logger.error({ err: error, userId: session.user.id, notificationId: id }, 'Failed to delete notification');
         throw error;
       }
     }
@@ -621,12 +632,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/notifications/:id/publish - Publish notification (public)
+  // POST /api/notifications/:id/publish - Publish notification (authenticated)
   fastify.post<{ Params: { id: string } }>(
     '/api/notifications/:id/publish',
     {
       schema: {
-        description: 'Publish a notification',
+        description: 'Publish a notification (authenticated)',
         tags: ['notifications'],
         params: {
           type: 'object',
@@ -634,13 +645,17 @@ export function register(app: App, fastify: FastifyInstance) {
         },
         response: {
           200: { type: 'object' },
+          401: { type: 'object' },
           404: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
       const { id } = request.params;
-      app.logger.info({ notificationId: id }, 'Publishing notification');
+      app.logger.info({ userId: session.user.id, notificationId: id }, 'Publishing notification');
 
       try {
         const result = await app.db
@@ -663,18 +678,18 @@ export function register(app: App, fastify: FastifyInstance) {
           notification: formatNotification(result[0], true),
         };
       } catch (error) {
-        app.logger.error({ err: error, notificationId: id }, 'Failed to publish notification');
+        app.logger.error({ err: error, userId: session.user.id, notificationId: id }, 'Failed to publish notification');
         throw error;
       }
     }
   );
 
-  // POST /api/notifications/:id/unpublish - Unpublish notification (public)
+  // POST /api/notifications/:id/unpublish - Unpublish notification (authenticated)
   fastify.post<{ Params: { id: string } }>(
     '/api/notifications/:id/unpublish',
     {
       schema: {
-        description: 'Unpublish a notification',
+        description: 'Unpublish a notification (authenticated)',
         tags: ['notifications'],
         params: {
           type: 'object',
@@ -682,13 +697,17 @@ export function register(app: App, fastify: FastifyInstance) {
         },
         response: {
           200: { type: 'object' },
+          401: { type: 'object' },
           404: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
       const { id } = request.params;
-      app.logger.info({ notificationId: id }, 'Unpublishing notification');
+      app.logger.info({ userId: session.user.id, notificationId: id }, 'Unpublishing notification');
 
       try {
         const result = await app.db
@@ -710,7 +729,7 @@ export function register(app: App, fastify: FastifyInstance) {
           notification: formatNotification(result[0], true),
         };
       } catch (error) {
-        app.logger.error({ err: error, notificationId: id }, 'Failed to unpublish notification');
+        app.logger.error({ err: error, userId: session.user.id, notificationId: id }, 'Failed to unpublish notification');
         throw error;
       }
     }
