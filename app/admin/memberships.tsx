@@ -13,7 +13,7 @@ import {
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { authenticatedGet } from '@/utils/api';
 
 interface Membership {
   id: string;
@@ -58,15 +58,10 @@ export default function AdminMembershipsScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadMemberships = useCallback(async () => {
-    console.log('[AdminMemberships] GET /api/admin/memberships');
+    console.log('[AdminMemberships] GET /api/admin/memberships (authenticated)');
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/memberships`);
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Erreur ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
+      const data = await authenticatedGet('/api/admin/memberships');
       const list: Membership[] = Array.isArray(data) ? data : (data?.memberships ?? data?.members ?? []);
       console.log('[AdminMemberships] Memberships loaded:', list.length);
       setMemberships(list);

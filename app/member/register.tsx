@@ -26,14 +26,18 @@ export default function MemberRegisterScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+  const [registeredNumber, setRegisteredNumber] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
-    fullName: '',
-    nina: '',
-    commune: '',
-    profession: '',
+    firstName: '',
+    lastName: '',
     phone: '',
     email: '',
+    address: '',
+    city: '',
+    region: '',
+    profession: '',
+    motivation: '',
   });
 
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
@@ -43,23 +47,27 @@ export default function MemberRegisterScreen() {
     setModalVisible(true);
   };
 
+  const updateField = (field: keyof typeof formData) => (text: string) => {
+    setFormData(prev => ({ ...prev, [field]: text }));
+  };
+
   const handleSubmit = async () => {
-    console.log('[MemberRegister] User tapped Register Member button');
-    
-    if (!formData.fullName.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre nom complet', 'error');
+    console.log('[MemberRegister] User tapped S\'inscrire button');
+
+    if (!formData.firstName.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre prénom', 'error');
       return;
     }
-    if (!formData.commune.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre commune de résidence', 'error');
-      return;
-    }
-    if (!formData.profession.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre profession', 'error');
+    if (!formData.lastName.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre nom de famille', 'error');
       return;
     }
     if (!formData.phone.trim()) {
       showModal('Erreur', 'Veuillez entrer votre numéro de téléphone', 'error');
+      return;
+    }
+    if (!formData.city.trim()) {
+      showModal('Erreur', 'Veuillez entrer votre ville', 'error');
       return;
     }
 
@@ -69,41 +77,47 @@ export default function MemberRegisterScreen() {
 
     setLoading(true);
 
+    const payload: Record<string, string> = {
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      phone: formData.phone.trim(),
+      city: formData.city.trim(),
+    };
+    if (formData.email.trim()) payload.email = formData.email.trim();
+    if (formData.address.trim()) payload.address = formData.address.trim();
+    if (formData.region.trim()) payload.region = formData.region.trim();
+    if (formData.profession.trim()) payload.profession = formData.profession.trim();
+    if (formData.motivation.trim()) payload.motivation = formData.motivation.trim();
+
+    console.log('[MemberRegister] POST /api/members/register (public, no auth):', JSON.stringify(payload));
+
     try {
-      console.log('[MemberRegister] Submitting member registration (PUBLIC - no auth required):', formData);
-      
-      const response = await apiPost('/api/members/register', {
-        fullName: formData.fullName,
-        nina: formData.nina || undefined,
-        commune: formData.commune,
-        profession: formData.profession,
-        phone: formData.phone,
-        email: formData.email || undefined,
-      });
-      
-      console.log('[MemberRegister] Registration successful:', response);
-      
-      const membershipNumber = response.membershipNumber || 'N/A';
-      
-      // Store membership number locally so user can access their card
+      const response = await apiPost('/api/members/register', payload);
+
+      console.log('[MemberRegister] Registration response:', JSON.stringify(response));
+
+      const membershipNumber =
+        response?.member?.membershipNumber ||
+        response?.membershipNumber ||
+        response?.member?.membership_number ||
+        'N/A';
+
+      console.log('[MemberRegister] Membership number:', membershipNumber);
+
       await AsyncStorage.setItem('membershipNumber', membershipNumber);
-      
+      setRegisteredNumber(membershipNumber);
+
       showModal(
         'Inscription Réussie',
-        `Votre inscription a été enregistrée avec succès!\n\nNuméro de membre: ${membershipNumber}\n\nVous pouvez maintenant accéder à votre carte de membre.`,
+        `Votre inscription a été enregistrée avec succès!\n\nNuméro de membre: ${membershipNumber}\n\nVotre demande est en cours de validation.`,
         'success'
       );
-      
-      setTimeout(() => {
-        router.push('/member/card');
-      }, 2000);
-      
     } catch (error: any) {
       console.error('[MemberRegister] Registration error:', error);
-      
-      const errorMessage = error?.message || '';
-      
-      if (errorMessage.includes('already registered') || errorMessage.includes('duplicate')) {
+
+      const errorMessage = String(error?.message || '');
+
+      if (errorMessage.includes('409') || errorMessage.includes('already') || errorMessage.includes('duplicate') || errorMessage.includes('existe')) {
         showModal(
           'Déjà Inscrit',
           'Ce numéro de téléphone est déjà enregistré. Si vous avez perdu votre numéro de membre, veuillez contacter l\'administrateur.',
@@ -121,6 +135,13 @@ export default function MemberRegisterScreen() {
     }
   };
 
+  const handleModalClose = () => {
+    setModalVisible(false);
+    if (modalType === 'success' && registeredNumber) {
+      router.push('/member/card');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -128,6 +149,9 @@ export default function MemberRegisterScreen() {
           title: 'Inscription Militant',
           headerShown: true,
           headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: { fontWeight: 'bold' },
         }}
       />
 
@@ -154,52 +178,30 @@ export default function MemberRegisterScreen() {
           </View>
 
           <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nom Complet *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Entrez votre nom complet"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.fullName}
-                onChangeText={(text) => setFormData({ ...formData, fullName: text })}
-                autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>NINA (Optionnel)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Numéro d'identification national"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.nina}
-                onChangeText={(text) => setFormData({ ...formData, nina: text })}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Commune de Résidence *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Entrez votre commune"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.commune}
-                onChangeText={(text) => setFormData({ ...formData, commune: text })}
-                autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Profession *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Entrez votre profession"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.profession}
-                onChangeText={(text) => setFormData({ ...formData, profession: text })}
-                autoCapitalize="words"
-              />
+            {/* Row: Prénom + Nom */}
+            <View style={styles.row}>
+              <View style={[styles.inputGroup, styles.flex1]}>
+                <Text style={styles.label}>Prénom *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Prénom"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.firstName}
+                  onChangeText={updateField('firstName')}
+                  autoCapitalize="words"
+                />
+              </View>
+              <View style={[styles.inputGroup, styles.flex1]}>
+                <Text style={styles.label}>Nom *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nom de famille"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.lastName}
+                  onChangeText={updateField('lastName')}
+                  autoCapitalize="words"
+                />
+              </View>
             </View>
 
             <View style={styles.inputGroup}>
@@ -209,7 +211,7 @@ export default function MemberRegisterScreen() {
                 placeholder="+223 XX XX XX XX"
                 placeholderTextColor={colors.textSecondary}
                 value={formData.phone}
-                onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                onChangeText={updateField('phone')}
                 keyboardType="phone-pad"
               />
             </View>
@@ -221,9 +223,71 @@ export default function MemberRegisterScreen() {
                 placeholder="votre.email@exemple.com"
                 placeholderTextColor={colors.textSecondary}
                 value={formData.email}
-                onChangeText={(text) => setFormData({ ...formData, email: text })}
+                onChangeText={updateField('email')}
                 keyboardType="email-address"
                 autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Ville *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Bamako"
+                placeholderTextColor={colors.textSecondary}
+                value={formData.city}
+                onChangeText={updateField('city')}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Région (Optionnel)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: District de Bamako"
+                placeholderTextColor={colors.textSecondary}
+                value={formData.region}
+                onChangeText={updateField('region')}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Adresse (Optionnel)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Adresse complète"
+                placeholderTextColor={colors.textSecondary}
+                value={formData.address}
+                onChangeText={updateField('address')}
+                autoCapitalize="sentences"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Profession (Optionnel)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Enseignant, Commerçant..."
+                placeholderTextColor={colors.textSecondary}
+                value={formData.profession}
+                onChangeText={updateField('profession')}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Motivation (Optionnel)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Pourquoi souhaitez-vous rejoindre l'A.R.M?"
+                placeholderTextColor={colors.textSecondary}
+                value={formData.motivation}
+                onChangeText={updateField('motivation')}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
               />
             </View>
 
@@ -235,7 +299,7 @@ export default function MemberRegisterScreen() {
                 color={colors.primary}
               />
               <Text style={styles.infoText}>
-                Les champs marqués d&apos;un * sont obligatoires
+                Les champs marqués d&apos;un * sont obligatoires. Votre inscription sera examinée par un administrateur.
               </Text>
             </View>
 
@@ -268,7 +332,7 @@ export default function MemberRegisterScreen() {
         title={modalTitle}
         message={modalMessage}
         type={modalType}
-        onClose={() => setModalVisible(false)}
+        onClose={handleModalClose}
       />
     </View>
   );
@@ -286,49 +350,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
     paddingBottom: 40,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
-  },
-  emptyStateTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 24,
-    textAlign: 'center',
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginTop: 12,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  loginButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    marginTop: 32,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  loginButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.background,
-    marginLeft: 8,
   },
   header: {
     alignItems: 'center',
@@ -354,6 +376,13 @@ const styles = StyleSheet.create({
   form: {
     padding: 20,
   },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  flex1: {
+    flex: 1,
+  },
   inputGroup: {
     marginBottom: 20,
   },
@@ -373,19 +402,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
+  textArea: {
+    minHeight: 90,
+    paddingTop: 14,
+  },
   infoBox: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: colors.backgroundAlt,
     padding: 12,
     borderRadius: 10,
     marginBottom: 24,
+    gap: 10,
   },
   infoText: {
     flex: 1,
     fontSize: 14,
     color: colors.textSecondary,
-    marginLeft: 10,
+    lineHeight: 20,
   },
   submitButton: {
     flexDirection: 'row',
@@ -399,6 +433,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+    gap: 8,
   },
   submitButtonDisabled: {
     opacity: 0.6,
@@ -407,6 +442,5 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: 'bold',
     color: colors.background,
-    marginRight: 8,
   },
 });

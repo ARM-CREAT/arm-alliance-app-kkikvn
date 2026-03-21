@@ -36,6 +36,7 @@ export default function AdminNewsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState('');
   const [formContent, setFormContent] = useState('');
+  const [formImageUrl, setFormImageUrl] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
@@ -80,6 +81,7 @@ export default function AdminNewsScreen() {
     setEditingId(null);
     setFormTitle('');
     setFormContent('');
+    setFormImageUrl('');
     setShowForm(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -89,6 +91,7 @@ export default function AdminNewsScreen() {
     setEditingId(item.id);
     setFormTitle(item.title || '');
     setFormContent(item.content || '');
+    setFormImageUrl(item.imageUrl || '');
     setShowForm(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -99,6 +102,7 @@ export default function AdminNewsScreen() {
     setEditingId(null);
     setFormTitle('');
     setFormContent('');
+    setFormImageUrl('');
   };
 
   const handleSubmit = async () => {
@@ -115,6 +119,7 @@ export default function AdminNewsScreen() {
       title: formTitle.trim(),
       content: formContent.trim(),
       publishedAt: new Date().toISOString(),
+      ...(formImageUrl.trim() ? { imageUrl: formImageUrl.trim() } : {}),
     };
 
     console.log('[AdminNews] Submitting payload:', JSON.stringify(payload));
@@ -241,6 +246,19 @@ export default function AdminNewsScreen() {
                   value={formContent}
                   onChangeText={setFormContent}
                   multiline
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>URL de l'image (optionnel)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="https://exemple.com/image.jpg"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formImageUrl}
+                  onChangeText={setFormImageUrl}
+                  keyboardType="url"
+                  autoCapitalize="none"
                 />
               </View>
 
