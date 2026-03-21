@@ -79,198 +79,154 @@ export default function RootLayout() {
                   }}
                 >
                   <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen 
-                    name="contact" 
-                    options={{ 
+                  <Stack.Screen
+                    name="donation"
+                    options={{
                       presentation: "modal",
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="donation" 
-                    options={{ 
-                      presentation: "modal",
+                  <Stack.Screen
+                    name="chat/public"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="chat/public" 
-                    options={{ 
+                  <Stack.Screen
+                    name="member/register"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="member/register" 
-                    options={{ 
+                  <Stack.Screen
+                    name="member/card"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="member/card" 
-                    options={{ 
+                  <Stack.Screen
+                    name="member/cotisation"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="member/cotisation" 
-                    options={{ 
+                  <Stack.Screen
+                    name="member/messages"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="member/messages" 
-                    options={{ 
+                  <Stack.Screen
+                    name="member/election-results"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="member/election-results" 
-                    options={{ 
+                  <Stack.Screen
+                    name="ideology"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="settings" 
-                    options={{ 
+                  <Stack.Screen
+                    name="auth"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="ideology" 
-                    options={{ 
+                  <Stack.Screen
+                    name="auth-callback"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="program" 
-                    options={{ 
+                  <Stack.Screen
+                    name="auth-popup"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="auth" 
-                    options={{ 
+                  <Stack.Screen
+                    name="notifications"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="auth-callback" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/login"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="auth-popup" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/dashboard"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="admin/login" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/news"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="admin/dashboard" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/events"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="admin/news" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/leadership"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="admin/events" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/media"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="admin/leadership" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/notifications"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="admin/media" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/membership-stats"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="admin/program" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/offline-access"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="conference" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/quick-setup"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="call" 
-                    options={{ 
+                  <Stack.Screen
+                    name="admin/memberships"
+                    options={{
                       headerShown: false,
-                    }} 
+                    }}
                   />
-                  <Stack.Screen 
-                    name="live-conference" 
-                    options={{ 
+                  <Stack.Screen
+                    name="ai-assistant"
+                    options={{
                       headerShown: false,
-                      presentation: 'fullScreenModal',
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/conferences" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/contacts" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/app-settings" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/membership-stats" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/offline-access" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="admin/quick-setup" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
-                  />
-                  <Stack.Screen 
-                    name="ai-assistant" 
-                    options={{ 
-                      headerShown: false,
-                    }} 
+                    }}
                   />
                 </Stack>
                 <StatusBar style="auto" />
-                
+
                 {/* Network Status Modal */}
                 <Modal
                   visible={showNetworkModal}

@@ -1,13 +1,12 @@
 
 import React, { useState, useEffect, useCallback } from "react";
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  ScrollView, 
-  Image, 
+import {
+  StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  Image,
   TouchableOpacity,
-  Dimensions,
   ImageSourcePropType,
   RefreshControl,
   ActivityIndicator,
@@ -19,27 +18,22 @@ import { apiGet } from "@/utils/api";
 import { colors } from "@/styles/commonStyles";
 import * as Haptics from 'expo-haptics';
 
-// Helper to resolve image sources
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+
 function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
   if (!source) return { uri: '' };
   if (typeof source === 'string') return { uri: source };
   return source as ImageSourcePropType;
 }
 
-interface NewsItem {
+interface NotificationItem {
   id: string;
   title: string;
   content: string;
+  type: string;
+  category: string;
   imageUrl?: string;
-  publishedAt: string;
-}
-
-interface EventItem {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  location: string;
+  createdAt: string;
 }
 
 interface LeadershipMember {
@@ -50,67 +44,78 @@ interface LeadershipMember {
   location?: string;
 }
 
-const { width } = Dimensions.get('window');
+const CATEGORY_COLORS: Record<string, string> = {
+  actualite: '#1565C0',
+  evenement: '#2E7D32',
+  annonce: '#E65100',
+  urgent: '#C62828',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  actualite: 'Actualité',
+  evenement: 'Événement',
+  annonce: 'Annonce',
+  urgent: 'Urgent',
+};
+
+function formatDateFr(dateString: string): string {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return dateString;
+  }
+}
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
+
   const loadAllData = useCallback(async () => {
-    console.log('[HomeScreen iOS] Loading all data (PUBLIC - no authentication required)');
+    console.log('[HomeScreen iOS] Chargement de toutes les données');
     setError(null);
-    
+
     try {
-      // Load all data in parallel with individual error handling
-      const results = await Promise.allSettled([
-        apiGet<NewsItem[]>('/api/news'),
-        apiGet<EventItem[]>('/api/events'),
+      const [notifResult, leaderResult] = await Promise.allSettled([
+        fetch(`${BACKEND_URL}/api/notifications`).then(async (res) => {
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Notifications: ${res.status} ${text}`);
+          }
+          return res.json();
+        }),
         apiGet<LeadershipMember[]>('/api/leadership'),
       ]);
 
-      // Handle news
-      if (results[0].status === 'fulfilled' && Array.isArray(results[0].value)) {
-        console.log('[HomeScreen iOS] News loaded successfully:', results[0].value.length, 'items');
-        setNews(results[0].value);
+      if (notifResult.status === 'fulfilled' && Array.isArray(notifResult.value)) {
+        console.log('[HomeScreen iOS] Notifications chargées:', notifResult.value.length, 'éléments');
+        setNotifications(notifResult.value);
       } else {
-        console.warn('[HomeScreen iOS] Failed to load news:', results[0]);
+        console.warn('[HomeScreen iOS] Échec du chargement des notifications:', notifResult);
       }
 
-      // Handle events
-      if (results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
-        console.log('[HomeScreen iOS] Events loaded successfully:', results[1].value.length, 'items');
-        setEvents(results[1].value);
+      if (leaderResult.status === 'fulfilled' && Array.isArray(leaderResult.value)) {
+        console.log('[HomeScreen iOS] Direction chargée:', leaderResult.value.length, 'éléments');
+        setLeadership(leaderResult.value);
       } else {
-        console.warn('[HomeScreen iOS] Failed to load events:', results[1]);
+        console.warn('[HomeScreen iOS] Échec du chargement de la direction:', leaderResult);
       }
 
-      // Handle leadership
-      if (results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
-        console.log('[HomeScreen iOS] Leadership loaded successfully:', results[2].value.length, 'items');
-        setLeadership(results[2].value);
-      } else {
-        console.warn('[HomeScreen iOS] Failed to load leadership:', results[2]);
-      }
-
-      // Check if all failed
-      const allFailed = results.every(r => r.status === 'rejected');
+      const allFailed = notifResult.status === 'rejected' && leaderResult.status === 'rejected';
       if (allFailed) {
-        console.warn('[HomeScreen iOS] All API calls failed - showing default content');
         setError('Impossible de charger les données. Affichage du contenu par défaut.');
       }
-    } catch (error: any) {
-      console.error('[HomeScreen iOS] Error loading data:', error);
+    } catch (err: any) {
+      console.error('[HomeScreen iOS] Erreur lors du chargement:', err);
       setError('Une erreur est survenue. Affichage du contenu par défaut.');
     } finally {
       setLoading(false);
-      console.log('[HomeScreen iOS] Data loading complete');
-      
-      // Fade in animation
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 500,
@@ -120,12 +125,12 @@ export default function HomeScreen() {
   }, [fadeAnim]);
 
   useEffect(() => {
-    console.log('[HomeScreen iOS] Component mounted, loading data');
-    
+    console.log('[HomeScreen iOS] Composant monté, chargement des données');
+
     const loadingTimeout = setTimeout(() => {
       setLoading(prev => {
         if (prev) {
-          console.warn('[HomeScreen iOS] Loading timeout - showing content anyway');
+          console.warn('[HomeScreen iOS] Délai de chargement dépassé');
           setError('Chargement lent. Affichage du contenu par défaut.');
           Animated.timing(fadeAnim, {
             toValue: 1,
@@ -137,87 +142,67 @@ export default function HomeScreen() {
         return prev;
       });
     }, 3000);
-    
+
     loadAllData();
-    
+
     return () => clearTimeout(loadingTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadAllData]);
 
   const onRefresh = useCallback(async () => {
-    console.log('User pulled to refresh');
+    console.log('[HomeScreen iOS] Actualisation par glissement');
     setRefreshing(true);
     await loadAllData();
     setRefreshing(false);
-    
-    // Haptic feedback on refresh complete
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [loadAllData]);
 
-  const handleDonation = (amount: number) => {
-    console.log('User tapped donation button:', amount, 'EUR');
+  const handleDonation = () => {
+    console.log('[HomeScreen iOS] Bouton Don appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/donation');
   };
 
   const handleJoinParty = () => {
-    console.log('User tapped Join Party button (PUBLIC - no login required)');
+    console.log('[HomeScreen iOS] Bouton Adhérer appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/member/register');
   };
 
   const handleMemberCard = () => {
-    console.log('User tapped Member Card button (PUBLIC - no login required)');
+    console.log('[HomeScreen iOS] Bouton Carte de Membre appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/member/card');
   };
 
-  const handleContact = () => {
-    console.log('User tapped Contact button');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/contact');
-  };
-
   const handleChat = () => {
-    console.log('User tapped Public Chat button');
+    console.log('[HomeScreen iOS] Bouton Chat Public appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push('/chat/public');
   };
 
   const handleIdeology = () => {
-    console.log('User tapped Ideology button');
+    console.log('[HomeScreen iOS] Bouton Idéologie appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/ideology');
   };
 
-  const handleProgram = () => {
-    console.log('User tapped View Complete Program button');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/program');
-  };
-
-  const handleSettings = () => {
-    console.log('User tapped Settings button');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/settings');
-  };
-
   const handleAdminAccess = () => {
-    console.log('User tapped Admin Access button');
+    console.log('[HomeScreen iOS] Bouton Accès Admin appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/admin/login');
   };
 
-  const handleConferences = () => {
-    console.log('User tapped Conferences button');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/conference');
-  };
-
   const handleAIAssistant = () => {
-    console.log('User tapped AI Assistant button');
+    console.log('[HomeScreen iOS] Bouton Assistant IA appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/ai-assistant');
+  };
+
+  const handleVoirToutNotifications = () => {
+    console.log('[HomeScreen iOS] Bouton Voir tout (notifications) appuyé');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/notifications');
   };
 
   if (loading) {
@@ -225,7 +210,7 @@ export default function HomeScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <Image 
+          <Image
             source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
             style={styles.loadingLogo}
             resizeMode="contain"
@@ -237,12 +222,14 @@ export default function HomeScreen() {
     );
   }
 
+  const displayedNotifications = notifications.slice(0, 5);
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
-        <ScrollView 
-          style={styles.scrollView} 
+        <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           refreshControl={
             <RefreshControl
@@ -254,14 +241,13 @@ export default function HomeScreen() {
           }
         >
           <Animated.View style={{ opacity: fadeAnim }}>
-            {/* Error message */}
             {error && (
               <View style={styles.errorContainer}>
-                <IconSymbol 
-                  ios_icon_name="exclamationmark.triangle.fill" 
-                  android_material_icon_name="warning" 
-                  size={24} 
-                  color={colors.warning} 
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle.fill"
+                  android_material_icon_name="warning"
+                  size={24}
+                  color={colors.warning}
                 />
                 <Text style={styles.errorText}>{error}</Text>
                 <TouchableOpacity onPress={loadAllData} style={styles.retryButton}>
@@ -270,9 +256,8 @@ export default function HomeScreen() {
               </View>
             )}
 
-            {/* Header avec logo */}
             <View style={styles.header}>
-              <Image 
+              <Image
                 source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
                 style={styles.logo}
                 resizeMode="contain"
@@ -286,19 +271,18 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Idéologie du parti */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="book.fill" 
-                  android_material_icon_name="menu-book" 
-                  size={24} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="book.fill"
+                  android_material_icon_name="menu-book"
+                  size={24}
+                  color={colors.primary}
                 />
                 <Text style={styles.sectionTitle}>Notre Idéologie</Text>
               </View>
-              <TouchableOpacity 
-                style={styles.ideologyCard} 
+              <TouchableOpacity
+                style={styles.ideologyCard}
                 onPress={handleIdeology}
                 activeOpacity={0.8}
               >
@@ -309,56 +293,24 @@ export default function HomeScreen() {
                   </Text>
                   <View style={styles.ideologyButton}>
                     <Text style={styles.ideologyButtonText}>Découvrir notre idéologie</Text>
-                    <IconSymbol 
-                      ios_icon_name="arrow.right" 
-                      android_material_icon_name="arrow-forward" 
-                      size={20} 
-                      color={colors.primary} 
+                    <IconSymbol
+                      ios_icon_name="arrow.right"
+                      android_material_icon_name="arrow-forward"
+                      size={20}
+                      color={colors.primary}
                     />
                   </View>
                 </View>
               </TouchableOpacity>
             </View>
 
-            {/* Programme politique */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="doc.text.fill" 
-                  android_material_icon_name="description" 
-                  size={24} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.sectionTitle}>Notre Programme</Text>
-              </View>
-              <View style={styles.card}>
-                <Text style={styles.programText}>
-                  L&apos;A.R.M s&apos;engage pour le développement du Mali à travers des programmes concrets dans tous les secteurs : éducation, santé, économie, agriculture, et infrastructure.
-                </Text>
-                <TouchableOpacity 
-                  style={styles.linkButton} 
-                  onPress={handleProgram}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.linkButtonText}>Voir le programme complet</Text>
-                  <IconSymbol 
-                    ios_icon_name="chevron.right" 
-                    android_material_icon_name="chevron-right" 
-                    size={20} 
-                    color={colors.primary} 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Contributions */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="heart.fill" 
-                  android_material_icon_name="favorite" 
-                  size={24} 
-                  color={colors.accent} 
+                <IconSymbol
+                  ios_icon_name="heart.fill"
+                  android_material_icon_name="favorite"
+                  size={24}
+                  color={colors.accent}
                 />
                 <Text style={styles.sectionTitle}>Soutenez-nous</Text>
               </View>
@@ -366,227 +318,160 @@ export default function HomeScreen() {
                 <Text style={styles.donationText}>Votre contribution régulière aide à construire un Mali meilleur</Text>
                 <View style={styles.contributionInfo}>
                   <View style={styles.contributionOption}>
-                    <IconSymbol 
-                      ios_icon_name="calendar" 
-                      android_material_icon_name="event" 
-                      size={20} 
-                      color={colors.primary} 
+                    <IconSymbol
+                      ios_icon_name="calendar"
+                      android_material_icon_name="event"
+                      size={20}
+                      color={colors.primary}
                     />
                     <Text style={styles.contributionOptionText}>Contribution mensuelle</Text>
                   </View>
                   <View style={styles.contributionOption}>
-                    <IconSymbol 
-                      ios_icon_name="calendar.badge.clock" 
-                      android_material_icon_name="date-range" 
-                      size={20} 
-                      color={colors.primary} 
+                    <IconSymbol
+                      ios_icon_name="calendar.badge.clock"
+                      android_material_icon_name="date-range"
+                      size={20}
+                      color={colors.primary}
                     />
                     <Text style={styles.contributionOptionText}>Contribution annuelle</Text>
                   </View>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.contributionButton}
-                  onPress={() => handleDonation(0)}
+                  onPress={handleDonation}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.contributionButtonText}>Faire une contribution</Text>
-                  <IconSymbol 
-                    ios_icon_name="arrow.right" 
-                    android_material_icon_name="arrow-forward" 
-                    size={20} 
-                    color={colors.background} 
+                  <IconSymbol
+                    ios_icon_name="arrow.right"
+                    android_material_icon_name="arrow-forward"
+                    size={20}
+                    color={colors.background}
                   />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Actualités */}
-            {news.length > 0 && (
-              <View style={styles.section}>
+            {/* Notifications section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
                 <View style={styles.sectionHeader}>
-                  <IconSymbol 
-                    ios_icon_name="newspaper.fill" 
-                    android_material_icon_name="article" 
-                    size={24} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="bell.fill"
+                    android_material_icon_name="notifications"
+                    size={24}
+                    color={colors.primary}
                   />
-                  <Text style={styles.sectionTitle}>Actualités</Text>
+                  <Text style={styles.sectionTitle}>Actualités & Annonces</Text>
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {news.slice(0, 5).map((item) => (
-                    <TouchableOpacity key={item.id} style={styles.newsCard} activeOpacity={0.9}>
-                      {item.imageUrl && (
-                        <Image 
-                          source={resolveImageSource(item.imageUrl)}
-                          style={styles.newsImage}
-                          resizeMode="cover"
-                        />
-                      )}
-                      <View style={styles.newsContent}>
-                        <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
-                        <Text style={styles.newsExcerpt} numberOfLines={3}>{item.content}</Text>
-                        <Text style={styles.newsDate}>
-                          {new Date(item.publishedAt).toLocaleDateString('fr-FR')}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                <TouchableOpacity onPress={handleVoirToutNotifications} activeOpacity={0.7}>
+                  <Text style={styles.voirToutText}>Voir tout</Text>
+                </TouchableOpacity>
               </View>
-            )}
 
-            {/* Événements */}
-            {events.length > 0 && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <IconSymbol 
-                    ios_icon_name="calendar.badge.clock" 
-                    android_material_icon_name="event" 
-                    size={24} 
-                    color={colors.primary} 
+              {displayedNotifications.length === 0 ? (
+                <View style={styles.emptyNotifications}>
+                  <IconSymbol
+                    ios_icon_name="bell.slash"
+                    android_material_icon_name="notifications-off"
+                    size={32}
+                    color={colors.textSecondary}
                   />
-                  <Text style={styles.sectionTitle}>Événements à venir</Text>
+                  <Text style={styles.emptyNotificationsText}>Aucune actualité pour le moment</Text>
                 </View>
-                {events.slice(0, 3).map((item) => (
-                  <TouchableOpacity key={item.id} style={styles.eventCard} activeOpacity={0.9}>
-                    <View style={styles.eventInfo}>
-                      <Text style={styles.eventTitle}>{item.title}</Text>
-                      <Text style={styles.eventDescription} numberOfLines={2}>
-                        {item.description}
-                      </Text>
-                      <View style={styles.eventLocation}>
-                        <IconSymbol 
-                          ios_icon_name="location.fill" 
-                          android_material_icon_name="place" 
-                          size={14} 
-                          color={colors.textSecondary} 
-                        />
-                        <Text style={styles.eventLocationText}>{item.location}</Text>
+              ) : (
+                displayedNotifications.map((item) => {
+                  const catColor = CATEGORY_COLORS[item.category] || '#607D8B';
+                  const catLabel = CATEGORY_LABELS[item.category] || item.category;
+                  const dateStr = formatDateFr(item.createdAt);
+                  return (
+                    <View key={item.id} style={styles.notifCard}>
+                      <View style={styles.notifHeader}>
+                        <View style={[styles.categoryBadge, { backgroundColor: catColor }]}>
+                          <Text style={styles.categoryBadgeText}>{catLabel}</Text>
+                        </View>
+                        <Text style={styles.notifDate}>{dateStr}</Text>
                       </View>
+                      <Text style={styles.notifTitle}>{item.title}</Text>
+                      <Text style={styles.notifContent} numberOfLines={2}>{item.content}</Text>
                     </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+                  );
+                })
+              )}
+            </View>
 
-            {/* Actions rapides */}
             <View style={styles.section}>
               <View style={styles.quickActions}>
-                <TouchableOpacity 
-                  style={styles.actionCard} 
+                <TouchableOpacity
+                  style={styles.actionCard}
                   onPress={handleJoinParty}
                   activeOpacity={0.8}
                 >
-                  <IconSymbol 
-                    ios_icon_name="person.badge.plus" 
-                    android_material_icon_name="person-add" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="person.badge.plus"
+                    android_material_icon_name="person-add"
+                    size={32}
+                    color={colors.primary}
                   />
                   <Text style={styles.actionTitle}>Adhérer</Text>
                   <Text style={styles.actionSubtitle}>Sans mot de passe</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.actionCard} 
+                <TouchableOpacity
+                  style={styles.actionCard}
                   onPress={handleMemberCard}
                   activeOpacity={0.8}
                 >
-                  <IconSymbol 
-                    ios_icon_name="person.text.rectangle" 
-                    android_material_icon_name="badge" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="person.text.rectangle"
+                    android_material_icon_name="badge"
+                    size={32}
+                    color={colors.primary}
                   />
                   <Text style={styles.actionTitle}>Ma Carte</Text>
                   <Text style={styles.actionSubtitle}>Accès libre</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.actionCard} 
-                  onPress={handleSettings}
-                  activeOpacity={0.8}
-                >
-                  <IconSymbol 
-                    ios_icon_name="gear" 
-                    android_material_icon_name="settings" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                  <Text style={styles.actionTitle}>Paramètres</Text>
-                  <Text style={styles.actionSubtitle}>Langue & Devise</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.actionCard} 
-                  onPress={handleContact}
-                  activeOpacity={0.8}
-                >
-                  <IconSymbol 
-                    ios_icon_name="envelope.fill" 
-                    android_material_icon_name="email" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                  <Text style={styles.actionTitle}>Contact</Text>
-                  <Text style={styles.actionSubtitle}>Écrivez-nous</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.actionCard} 
+                <TouchableOpacity
+                  style={styles.actionCard}
                   onPress={handleChat}
                   activeOpacity={0.8}
                 >
-                  <IconSymbol 
-                    ios_icon_name="bubble.left.and.bubble.right.fill" 
-                    android_material_icon_name="chat" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="bubble.left.and.bubble.right.fill"
+                    android_material_icon_name="chat"
+                    size={32}
+                    color={colors.primary}
                   />
                   <Text style={styles.actionTitle}>Chat Public</Text>
                   <Text style={styles.actionSubtitle}>Discutez</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.actionCard} 
+                <TouchableOpacity
+                  style={styles.actionCard}
                   onPress={handleAdminAccess}
                   activeOpacity={0.8}
                 >
-                  <IconSymbol 
-                    ios_icon_name="lock.shield" 
-                    android_material_icon_name="admin-panel-settings" 
-                    size={32} 
-                    color={colors.accent} 
+                  <IconSymbol
+                    ios_icon_name="lock.shield"
+                    android_material_icon_name="admin-panel-settings"
+                    size={32}
+                    color={colors.accent}
                   />
                   <Text style={styles.actionTitle}>Admin</Text>
                   <Text style={styles.actionSubtitle}>Accès sécurisé</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.actionCard} 
-                  onPress={handleConferences}
-                  activeOpacity={0.8}
-                >
-                  <IconSymbol 
-                    ios_icon_name="video.fill" 
-                    android_material_icon_name="videocam" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                  <Text style={styles.actionTitle}>Conférences</Text>
-                  <Text style={styles.actionSubtitle}>Vidéo en ligne</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.actionCard, styles.actionCardAI]} 
+                <TouchableOpacity
+                  style={[styles.actionCard, styles.actionCardAI]}
                   onPress={handleAIAssistant}
                   activeOpacity={0.8}
                 >
-                  <IconSymbol 
-                    ios_icon_name="brain" 
-                    android_material_icon_name="smart-toy" 
-                    size={32} 
-                    color="#1565C0" 
+                  <IconSymbol
+                    ios_icon_name="brain"
+                    android_material_icon_name="smart-toy"
+                    size={32}
+                    color="#1565C0"
                   />
                   <Text style={styles.actionTitle}>Assistant IA</Text>
                   <Text style={[styles.actionSubtitle, { color: '#1565C0' }]}>Posez vos questions</Text>
@@ -594,21 +479,20 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            {/* Direction du parti */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="person.3.fill" 
-                  android_material_icon_name="group" 
-                  size={24} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="person.3.fill"
+                  android_material_icon_name="group"
+                  size={24}
+                  color={colors.primary}
                 />
                 <Text style={styles.sectionTitle}>Direction du Parti</Text>
               </View>
               <View style={styles.card}>
                 {leadership.length > 0 ? (
                   leadership.map((leader) => (
-                    <LeaderCard 
+                    <LeaderCard
                       key={leader.id}
                       name={leader.name}
                       position={leader.position}
@@ -618,52 +502,24 @@ export default function HomeScreen() {
                   ))
                 ) : (
                   <>
-                    <LeaderCard 
-                      name="Lassine Diakité"
-                      position="Président"
-                      location="Yuncos, Toledo, Espagne"
-                      phone="0034632607101"
-                    />
-                    <LeaderCard 
-                      name="Dadou Sangare"
-                      position="Premier Vice-Président"
-                      location="Milan, Italie"
-                    />
-                    <LeaderCard 
-                      name="Oumar Keita"
-                      position="Deuxième Vice-Président"
-                      location="Koutiala, Mali"
-                      phone="0022376304869"
-                    />
-                    <LeaderCard 
-                      name="Karifa Keita"
-                      position="Secrétaire Général"
-                      location="Bamako, Mali"
-                    />
-                    <LeaderCard 
-                      name="Modibo Keita"
-                      position="Secrétaire Administratif"
-                      location="Bamako Sebenikoro, Mali"
-                    />
-                    <LeaderCard 
-                      name="Sokona Keita"
-                      position="Trésorière"
-                      location="Bamako Sebenikoro, Mali"
-                      phone="0022375179920"
-                    />
+                    <LeaderCard name="Lassine Diakité" position="Président" location="Yuncos, Toledo, Espagne" phone="0034632607101" />
+                    <LeaderCard name="Dadou Sangare" position="Premier Vice-Président" location="Milan, Italie" />
+                    <LeaderCard name="Oumar Keita" position="Deuxième Vice-Président" location="Koutiala, Mali" phone="0022376304869" />
+                    <LeaderCard name="Karifa Keita" position="Secrétaire Général" location="Bamako, Mali" />
+                    <LeaderCard name="Modibo Keita" position="Secrétaire Administratif" location="Bamako Sebenikoro, Mali" />
+                    <LeaderCard name="Sokona Keita" position="Trésorière" location="Bamako Sebenikoro, Mali" phone="0022375179920" />
                   </>
                 )}
               </View>
             </View>
 
-            {/* Siège du parti */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="building.2.fill" 
-                  android_material_icon_name="location-city" 
-                  size={24} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="building.2.fill"
+                  android_material_icon_name="location-city"
+                  size={24}
+                  color={colors.primary}
                 />
                 <Text style={styles.sectionTitle}>Siège du Parti</Text>
               </View>
@@ -677,22 +533,21 @@ export default function HomeScreen() {
             <View style={styles.bottomSpacer} />
           </Animated.View>
         </ScrollView>
-
       </View>
     </>
   );
 }
 
-function LeaderCard({ name, position, location, phone }: { 
-  name: string; 
-  position: string; 
-  location?: string; 
+function LeaderCard({ name, position, location, phone }: {
+  name: string;
+  position: string;
+  location?: string;
   phone?: string;
 }) {
   return (
     <View style={styles.leaderCard}>
       <View style={styles.leaderIcon}>
-        <Image 
+        <Image
           source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
           style={styles.leaderAvatar}
           resizeMode="cover"
@@ -817,6 +672,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 24,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -827,6 +688,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     marginLeft: 8,
+  },
+  voirToutText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
   },
   card: {
     backgroundColor: colors.card,
@@ -877,23 +743,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  programText: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  linkButtonText: {
-    fontSize: 15,
-    color: colors.primary,
-    fontWeight: '600',
-  },
   donationText: {
     fontSize: 15,
     color: colors.text,
@@ -931,6 +780,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: colors.background,
+  },
+  notifCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  categoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 20,
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  notifDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  notifTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  notifContent: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  emptyNotifications: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 12,
+  },
+  emptyNotificationsText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 10,
   },
   quickActions: {
     flexDirection: 'row',
@@ -1011,97 +915,4 @@ const styles = StyleSheet.create({
   bottomSpacer: {
     height: 20,
   },
-  newsCard: {
-    width: width * 0.75,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    marginRight: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  newsImage: {
-    width: '100%',
-    height: 150,
-    backgroundColor: colors.border,
-  },
-  newsContent: {
-    padding: 16,
-  },
-  newsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  newsExcerpt: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  newsDate: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  eventCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  eventDate: {
-    width: 60,
-    height: 60,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  eventDay: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.background,
-  },
-  eventMonth: {
-    fontSize: 12,
-    color: colors.background,
-    textTransform: 'uppercase',
-  },
-  eventInfo: {
-    flex: 1,
-  },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  eventDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  eventLocation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eventLocationText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginLeft: 4,
-  },
-
 });

@@ -10,66 +10,65 @@ import {
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
-import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
-import { apiPost } from '@/utils/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+
+interface SuccessData {
+  membershipNumber: string;
+  id: string;
+  message?: string;
+}
 
 export default function MemberRegisterScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalMessage, setModalMessage] = useState('');
-  const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
-  const [registeredNumber, setRegisteredNumber] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successData, setSuccessData] = useState<SuccessData | null>(null);
 
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     phone: '',
     email: '',
-    city: '',
     region: '',
     cercle: '',
     commune: '',
-    nina: '',
     profession: '',
+    nina: '',
     motivation: '',
   });
 
-  const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setModalType(type);
-    setModalVisible(true);
-  };
-
   const updateField = (field: keyof typeof formData) => (text: string) => {
     setFormData(prev => ({ ...prev, [field]: text }));
+    if (errorMessage) setErrorMessage(null);
+  };
+
+  const validate = (): string | null => {
+    if (!formData.firstName.trim() || formData.firstName.trim().length < 2) {
+      return 'Le prénom doit contenir au moins 2 caractères.';
+    }
+    if (!formData.lastName.trim() || formData.lastName.trim().length < 2) {
+      return 'Le nom doit contenir au moins 2 caractères.';
+    }
+    const phoneRegex = /^[0-9+\s\-]{8,15}$/;
+    if (!formData.phone.trim() || !phoneRegex.test(formData.phone.trim())) {
+      return 'Veuillez entrer un numéro de téléphone valide (8-15 chiffres).';
+    }
+    return null;
   };
 
   const handleSubmit = async () => {
-    console.log('[MemberRegister] User tapped S\'inscrire button');
+    console.log('[MemberRegister] Bouton S\'inscrire appuyé');
 
-    if (!formData.firstName.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre prénom', 'error');
-      return;
-    }
-    if (!formData.lastName.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre nom de famille', 'error');
-      return;
-    }
-    if (!formData.phone.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre numéro de téléphone', 'error');
-      return;
-    }
-    if (!formData.city.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre ville', 'error');
+    const validationError = validate();
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
 
@@ -78,79 +77,143 @@ export default function MemberRegisterScreen() {
     }
 
     setLoading(true);
+    setErrorMessage(null);
 
     const payload: Record<string, string> = {
       firstName: formData.firstName.trim(),
       lastName: formData.lastName.trim(),
       phone: formData.phone.trim(),
-      city: formData.city.trim(),
     };
     if (formData.email.trim()) payload.email = formData.email.trim();
     if (formData.region.trim()) payload.region = formData.region.trim();
     if (formData.cercle.trim()) payload.cercle = formData.cercle.trim();
     if (formData.commune.trim()) payload.commune = formData.commune.trim();
-    if (formData.nina.trim()) payload.nina = formData.nina.trim();
     if (formData.profession.trim()) payload.profession = formData.profession.trim();
+    if (formData.nina.trim()) payload.nina = formData.nina.trim();
     if (formData.motivation.trim()) payload.motivation = formData.motivation.trim();
 
     console.log('[MemberRegister] POST /api/members/register payload:', JSON.stringify(payload));
 
     try {
-      const response = await apiPost('/api/members/register', payload);
+      const res = await fetch(`${BACKEND_URL}/api/members/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      console.log('[MemberRegister] Registration response:', JSON.stringify(response));
+      if (res.status === 409) {
+        const data = await res.json().catch(() => ({}));
+        const existingNumber = data?.membershipNumber || data?.member?.membershipNumber || '';
+        console.log('[MemberRegister] 409 - Déjà inscrit, numéro:', existingNumber);
+        Alert.alert(
+          'Déjà inscrit',
+          `Vous êtes déjà inscrit. Votre numéro: ${existingNumber}`,
+          [
+            {
+              text: 'Voir ma carte',
+              onPress: () => router.push({ pathname: '/member/card', params: { membershipNumber: existingNumber } } as any),
+            },
+            { text: 'OK', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = `Erreur ${res.status}`;
+        try {
+          const json = JSON.parse(text);
+          msg = json.error || json.message || msg;
+        } catch {
+          if (text) msg = text;
+        }
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      console.log('[MemberRegister] Inscription réussie:', JSON.stringify(data));
 
       const membershipNumber =
-        response?.membershipNumber ||
-        response?.member?.membershipNumber ||
-        response?.member?.membership_number ||
+        data?.membershipNumber ||
+        data?.member?.membershipNumber ||
+        data?.member?.membership_number ||
         'N/A';
 
-      console.log('[MemberRegister] Membership number:', membershipNumber);
+      setSuccessData({ membershipNumber, id: data?.id || data?.member?.id || '', message: data?.message });
 
-      await AsyncStorage.setItem('membershipNumber', membershipNumber);
-      setRegisteredNumber(membershipNumber);
-
-      showModal(
-        'Inscription Réussie',
-        `Votre inscription a été enregistrée avec succès!\n\nNuméro de membre: ${membershipNumber}\n\nVotre demande est en cours de validation.`,
-        'success'
-      );
-    } catch (error: any) {
-      console.error('[MemberRegister] Registration error:', error);
-
-      const errorMessage = String(error?.message || '');
-
-      if (errorMessage.includes('409') || errorMessage.includes('already') || errorMessage.includes('duplicate') || errorMessage.includes('existe')) {
-        showModal(
-          'Déjà Inscrit',
-          'Ce numéro de téléphone est déjà enregistré. Si vous avez perdu votre numéro de membre, veuillez contacter l\'administrateur.',
-          'info'
-        );
-      } else {
-        showModal(
-          'Erreur',
-          errorMessage || 'Une erreur est survenue lors de l\'inscription. Veuillez réessayer.',
-          'error'
-        );
+      if (Platform.OS === 'ios') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+    } catch (err: any) {
+      console.error('[MemberRegister] Erreur:', err);
+      setErrorMessage(err.message || 'Une erreur est survenue. Veuillez réessayer.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleModalClose = () => {
-    setModalVisible(false);
-    if (modalType === 'success' && registeredNumber) {
-      router.push('/member/card');
-    }
-  };
+  // Success screen
+  if (successData) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            title: 'Adhésion au Parti',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: '#FFFFFF',
+            headerTitleStyle: { fontWeight: 'bold' },
+          }}
+        />
+        <ScrollView contentContainerStyle={styles.successContainer}>
+          <View style={styles.successIconCircle}>
+            <IconSymbol
+              ios_icon_name="checkmark.circle.fill"
+              android_material_icon_name="check-circle"
+              size={72}
+              color="#2E7D32"
+            />
+          </View>
+          <Text style={styles.successTitle}>Inscription réussie !</Text>
+          <Text style={styles.successLabel}>Votre numéro de membre :</Text>
+          <View style={styles.memberNumberBox}>
+            <Text style={styles.memberNumber}>{successData.membershipNumber}</Text>
+          </View>
+          <Text style={styles.successSubtitle}>Conservez ce numéro précieusement</Text>
+
+          <TouchableOpacity
+            style={styles.successPrimaryBtn}
+            onPress={() => {
+              console.log('[MemberRegister] Bouton Voir ma carte appuyé');
+              router.push({ pathname: '/member/card', params: { membershipNumber: successData.membershipNumber } } as any);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.successPrimaryBtnText}>Voir ma carte</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.successSecondaryBtn}
+            onPress={() => {
+              console.log('[MemberRegister] Bouton Retour à l\'accueil appuyé');
+              router.replace('/(tabs)/(home)');
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.successSecondaryBtnText}>Retour à l&apos;accueil</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Inscription Militant',
+          title: 'Adhésion au Parti',
           headerShown: true,
           headerBackTitle: 'Retour',
           headerStyle: { backgroundColor: colors.primary },
@@ -168,7 +231,7 @@ export default function MemberRegisterScreen() {
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.header}>
+          <View style={styles.formHeader}>
             <IconSymbol
               ios_icon_name="person.badge.plus"
               android_material_icon_name="person-add"
@@ -182,7 +245,6 @@ export default function MemberRegisterScreen() {
           </View>
 
           <View style={styles.form}>
-            {/* Prénom + Nom */}
             <View style={styles.row}>
               <View style={[styles.inputGroup, styles.flex1]}>
                 <Text style={styles.label}>Prénom *</Text>
@@ -234,18 +296,6 @@ export default function MemberRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Ville *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ex: Bamako"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.city}
-                onChangeText={updateField('city')}
-                autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
               <Text style={styles.label}>Région (Optionnel)</Text>
               <TextInput
                 style={styles.input}
@@ -283,18 +333,6 @@ export default function MemberRegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>NINA (Optionnel)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Numéro d'identification nationale"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.nina}
-                onChangeText={updateField('nina')}
-                autoCapitalize="characters"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
               <Text style={styles.label}>Profession (Optionnel)</Text>
               <TextInput
                 style={styles.input}
@@ -303,6 +341,18 @@ export default function MemberRegisterScreen() {
                 value={formData.profession}
                 onChangeText={updateField('profession')}
                 autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Numéro NINA (Optionnel)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Numéro d'identification nationale"
+                placeholderTextColor={colors.textSecondary}
+                value={formData.nina}
+                onChangeText={updateField('nina')}
+                autoCapitalize="characters"
               />
             </View>
 
@@ -319,6 +369,18 @@ export default function MemberRegisterScreen() {
                 textAlignVertical="top"
               />
             </View>
+
+            {errorMessage && (
+              <View style={styles.errorBox}>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.circle.fill"
+                  android_material_icon_name="error"
+                  size={18}
+                  color={colors.error}
+                />
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              </View>
+            )}
 
             <View style={styles.infoBox}>
               <IconSymbol
@@ -355,14 +417,6 @@ export default function MemberRegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      <Modal
-        visible={modalVisible}
-        title={modalTitle}
-        message={modalMessage}
-        type={modalType}
-        onClose={handleModalClose}
-      />
     </View>
   );
 }
@@ -381,7 +435,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingBottom: 40,
   },
-  header: {
+  formHeader: {
     alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: 20,
@@ -435,6 +489,23 @@ const styles = StyleSheet.create({
     minHeight: 90,
     paddingTop: 14,
   },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF0F0',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.error + '40',
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.error,
+    lineHeight: 20,
+  },
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -471,5 +542,85 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: 'bold',
     color: colors.background,
+  },
+  // Success screen
+  successContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  successIconCircle: {
+    marginBottom: 24,
+  },
+  successTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  successLabel: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  memberNumberBox: {
+    backgroundColor: colors.primary + '15',
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderRadius: 14,
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    marginBottom: 12,
+  },
+  memberNumber: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: colors.primary,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  successSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 36,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  successPrimaryBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  successPrimaryBtnText: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  successSecondaryBtn: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  successSecondaryBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

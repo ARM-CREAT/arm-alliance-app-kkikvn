@@ -12,7 +12,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Alert,
 } from 'react-native';
 
 const styles = StyleSheet.create({
@@ -141,13 +140,13 @@ export default function AdminDashboardScreen() {
       const completed = await AsyncStorage.getItem('quick_setup_completed');
       setShowQuickSetup(!completed);
     };
-    
+
     checkQuickSetupStatus();
   }, []);
 
   const handleQuickSetup = () => {
-    console.log('Navigation vers Configuration Rapide');
-    
+    console.log('[AdminDashboard] Navigation vers Configuration Rapide');
+
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -156,8 +155,8 @@ export default function AdminDashboardScreen() {
   };
 
   const handleNavigation = (path: string, label: string) => {
-    console.log('Navigation vers', label);
-    
+    console.log('[AdminDashboard] Navigation vers', label);
+
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -166,8 +165,8 @@ export default function AdminDashboardScreen() {
   };
 
   const handleLogout = async () => {
-    console.log('Déconnexion admin');
-    
+    console.log('[AdminDashboard] Déconnexion admin');
+
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -176,20 +175,20 @@ export default function AdminDashboardScreen() {
       await AsyncStorage.removeItem('admin_password');
       router.replace('/admin/login');
     } catch (error) {
-      console.error('Erreur lors de la déconnexion:', error);
+      console.error('[AdminDashboard] Erreur lors de la déconnexion:', error);
     }
   };
 
   return (
     <>
-      <Stack.Screen 
+      <Stack.Screen
         options={{
           title: 'Tableau de Bord Admin',
           headerShown: true,
           headerBackTitle: 'Retour',
-        }} 
+        }}
       />
-      
+
       <View style={styles.container}>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           <View style={styles.header}>
@@ -203,16 +202,16 @@ export default function AdminDashboardScreen() {
               <Text style={styles.quickSetupText}>
                 Votre application est vide. Ajoutez rapidement des données de démonstration ou commencez à créer votre propre contenu.
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.quickSetupButton}
                 onPress={handleQuickSetup}
                 activeOpacity={0.8}
               >
-                <IconSymbol 
-                  ios_icon_name="wand.and.stars" 
-                  android_material_icon_name="auto-fix-high" 
-                  size={20} 
-                  color={colors.accent} 
+                <IconSymbol
+                  ios_icon_name="wand.and.stars"
+                  android_material_icon_name="auto-fix-high"
+                  size={20}
+                  color={colors.accent}
                 />
                 <Text style={styles.quickSetupButtonText}>Démarrer la configuration</Text>
               </TouchableOpacity>
@@ -222,81 +221,81 @@ export default function AdminDashboardScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Gestion du Contenu</Text>
             <View style={styles.grid}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
                 onPress={() => handleNavigation('/admin/news', 'Actualités')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="newspaper.fill" 
-                    android_material_icon_name="article" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="newspaper.fill"
+                    android_material_icon_name="article"
+                    size={32}
+                    color={colors.primary}
                   />
                 </View>
                 <Text style={styles.cardTitle}>Actualités</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
                 onPress={() => handleNavigation('/admin/events', 'Événements')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="calendar.badge.clock" 
-                    android_material_icon_name="event" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="calendar.badge.clock"
+                    android_material_icon_name="event"
+                    size={32}
+                    color={colors.primary}
                   />
                 </View>
                 <Text style={styles.cardTitle}>Événements</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
                 onPress={() => handleNavigation('/admin/leadership', 'Direction')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="person.3.fill" 
-                    android_material_icon_name="group" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="person.3.fill"
+                    android_material_icon_name="group"
+                    size={32}
+                    color={colors.primary}
                   />
                 </View>
                 <Text style={styles.cardTitle}>Direction</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
-                onPress={() => handleNavigation('/admin/program', 'Programme')}
+                onPress={() => handleNavigation('/admin/notifications', 'Notifications')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="doc.text.fill" 
-                    android_material_icon_name="description" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="bell.fill"
+                    android_material_icon_name="notifications"
+                    size={32}
+                    color={colors.primary}
                   />
                 </View>
-                <Text style={styles.cardTitle}>Programme</Text>
+                <Text style={styles.cardTitle}>Notifications</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
                 onPress={() => handleNavigation('/admin/media', 'Médias')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="photo.fill" 
-                    android_material_icon_name="photo-library" 
-                    size={32} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="photo.fill"
+                    android_material_icon_name="photo-library"
+                    size={32}
+                    color={colors.primary}
                   />
                 </View>
                 <Text style={styles.cardTitle}>Médias</Text>
@@ -305,126 +304,51 @@ export default function AdminDashboardScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Communication</Text>
-            <View style={styles.grid}>
-              <TouchableOpacity 
-                style={styles.card}
-                onPress={() => handleNavigation('/conference', 'Conférences')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="video.fill" 
-                    android_material_icon_name="videocam" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                </View>
-                <Text style={styles.cardTitle}>Conférences</Text>
-              </TouchableOpacity>
-
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Gestion Avancée</Text>
-            <View style={styles.grid}>
-              <TouchableOpacity 
-                style={styles.card}
-                onPress={() => handleNavigation('/admin/conferences', 'Gestion Conférences')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="video.badge.plus" 
-                    android_material_icon_name="video-call" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                </View>
-                <Text style={styles.cardTitle}>Conférences</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.card}
-                onPress={() => handleNavigation('/admin/contacts', 'Contacts')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="phone.circle.fill" 
-                    android_material_icon_name="contacts" 
-                    size={32} 
-                    color={colors.primary} 
-                  />
-                </View>
-                <Text style={styles.cardTitle}>Contacts</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.card}
-                onPress={() => handleNavigation('/admin/app-settings', 'Paramètres App')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="gearshape.fill" 
-                    android_material_icon_name="settings" 
-                    size={32} 
-                    color={colors.accent} 
-                  />
-                </View>
-                <Text style={styles.cardTitle}>Paramètres App</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Outils Admin</Text>
             <View style={styles.grid}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
                 onPress={() => handleNavigation('/admin/memberships', 'Adhésions')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="person.3.fill" 
-                    android_material_icon_name="group" 
-                    size={32} 
-                    color={colors.accent} 
+                  <IconSymbol
+                    ios_icon_name="person.3.fill"
+                    android_material_icon_name="group"
+                    size={32}
+                    color={colors.accent}
                   />
                 </View>
                 <Text style={styles.cardTitle}>Adhésions</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
                 onPress={() => handleNavigation('/admin/membership-stats', 'Stats Adhésion')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="chart.bar.fill" 
-                    android_material_icon_name="bar-chart" 
-                    size={32} 
-                    color={colors.accent} 
+                  <IconSymbol
+                    ios_icon_name="chart.bar.fill"
+                    android_material_icon_name="bar-chart"
+                    size={32}
+                    color={colors.accent}
                   />
                 </View>
                 <Text style={styles.cardTitle}>Stats Adhésion</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.card}
                 onPress={() => handleNavigation('/admin/offline-access', 'Accès Hors Ligne')}
                 activeOpacity={0.8}
               >
                 <View style={styles.cardIcon}>
-                  <IconSymbol 
-                    ios_icon_name="wifi.slash" 
-                    android_material_icon_name="wifi-off" 
-                    size={32} 
-                    color={colors.accent} 
+                  <IconSymbol
+                    ios_icon_name="wifi.slash"
+                    android_material_icon_name="wifi-off"
+                    size={32}
+                    color={colors.accent}
                   />
                 </View>
                 <Text style={styles.cardTitle}>Accès Hors Ligne</Text>
@@ -432,16 +356,16 @@ export default function AdminDashboardScreen() {
             </View>
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.logoutButton}
             onPress={handleLogout}
             activeOpacity={0.8}
           >
-            <IconSymbol 
-              ios_icon_name="rectangle.portrait.and.arrow.right" 
-              android_material_icon_name="logout" 
-              size={20} 
-              color={colors.background} 
+            <IconSymbol
+              ios_icon_name="rectangle.portrait.and.arrow.right"
+              android_material_icon_name="logout"
+              size={20}
+              color={colors.background}
             />
             <Text style={styles.logoutButtonText}>Déconnexion</Text>
           </TouchableOpacity>
