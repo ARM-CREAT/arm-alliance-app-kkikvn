@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, count as countFn, gte, or } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -608,6 +608,125 @@ export function register(app: App, fastify: FastifyInstance) {
         };
       } catch (error) {
         app.logger.error({ err: error, userId }, 'Failed to fetch membership stats');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/members/stats - Get public membership statistics (PUBLIC)
+  fastify.get(
+    '/api/members/stats',
+    {
+      schema: {
+        description: 'Get public membership statistics',
+        tags: ['members'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              total: { type: 'number' },
+              pending: { type: 'number' },
+              approved: { type: 'number' },
+              rejected: { type: 'number' },
+              byRegion: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    region: { type: 'string' },
+                    count: { type: 'number' },
+                  },
+                },
+              },
+              recentCount: { type: 'number' },
+              thisMonth: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      app.logger.info('Fetching public membership statistics');
+
+      try {
+        // Get total count
+        const totalResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles);
+        const total = totalResult[0]?.count ?? 0;
+
+        // Get pending count
+        const pendingResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'pending'));
+        const pending = pendingResult[0]?.count ?? 0;
+
+        // Get approved count (status = 'approved' OR status = 'active')
+        const approvedResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(or(
+            eq(schema.memberProfiles.status, 'approved'),
+            eq(schema.memberProfiles.status, 'active')
+          ));
+        const approved = approvedResult[0]?.count ?? 0;
+
+        // Get rejected count
+        const rejectedResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'rejected'));
+        const rejected = rejectedResult[0]?.count ?? 0;
+
+        // Get by region (exclude NULL regions)
+        const byRegionResult = await app.db
+          .select({
+            region: schema.memberProfiles.region,
+            count: countFn(),
+          })
+          .from(schema.memberProfiles)
+          .where(sql`${schema.memberProfiles.region} IS NOT NULL`)
+          .groupBy(schema.memberProfiles.region)
+          .orderBy(desc(countFn()));
+
+        const byRegion = byRegionResult.map((r: any) => ({
+          region: r.region,
+          count: r.count,
+        }));
+
+        // Get recent count (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const recentResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(gte(schema.memberProfiles.createdAt, thirtyDaysAgo));
+        const recentCount = recentResult[0]?.count ?? 0;
+
+        // Get this month count
+        const thisMonthResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(
+            sql`DATE_TRUNC('month', ${schema.memberProfiles.createdAt}) = DATE_TRUNC('month', NOW())`
+          );
+        const thisMonth = thisMonthResult[0]?.count ?? 0;
+
+        app.logger.info({ total, pending, approved, rejected }, 'Public membership statistics retrieved');
+
+        return {
+          total,
+          pending,
+          approved,
+          rejected,
+          byRegion,
+          recentCount,
+          thisMonth,
+        };
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch public membership statistics');
         throw error;
       }
     }
