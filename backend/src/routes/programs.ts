@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, or, isNull, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -30,7 +30,7 @@ function formatProgram(prog: any) {
     id: prog.id,
     title: prog.title,
     category: prog.category,
-    summary: prog.summary,
+    description: prog.summary,
     content: prog.content,
     icon: prog.icon || null,
     color: prog.color || null,
@@ -39,6 +39,66 @@ function formatProgram(prog: any) {
     createdAt: prog.createdAt instanceof Date ? prog.createdAt.toISOString() : new Date(prog.createdAt).toISOString(),
     updatedAt: prog.updatedAt instanceof Date ? prog.updatedAt.toISOString() : new Date(prog.updatedAt).toISOString(),
   };
+}
+
+export async function seedPrograms(app: App) {
+  app.logger.info('Checking programs table for seeding');
+  try {
+    const existing = await app.db.select().from(schema.programs).limit(1);
+    if (existing.length > 0) {
+      app.logger.info('Programs table already has data, skipping seed');
+      return;
+    }
+
+    const samplePrograms = [
+      {
+        title: 'Éducation pour Tous',
+        category: 'Education',
+        summary: 'Accès équitable à l\'éducation de qualité pour tous les enfants maliens',
+        content: 'Notre programme d\'éducation vise à garantir que chaque enfant malien ait accès à une éducation de qualité, inclusive et équitable. Nous nous engageons à renforcer les capacités des enseignants et à moderniser les infrastructures scolaires.',
+        icon: 'BookOpen',
+        color: '#3B82F6',
+        order: 1,
+        published: true,
+      },
+      {
+        title: 'Santé pour la Nation',
+        category: 'Santé',
+        summary: 'Amélioration de l\'accès aux services de santé de qualité',
+        content: 'Nous travaillons pour établir un système de santé robuste et inclusif qui répond aux besoins de tous les Maliens. Cela inclut l\'accès aux médicaments essentiels et aux services de prévention.',
+        icon: 'Heart',
+        color: '#EF4444',
+        order: 2,
+        published: true,
+      },
+      {
+        title: 'Emploi et Développement Économique',
+        category: 'Économie',
+        summary: 'Création d\'emplois durables et croissance économique inclusive',
+        content: 'Notre vision est de créer des opportunités d\'emploi décentes pour tous les Maliens, en particulier les jeunes et les femmes. Nous promouvons l\'entrepreneuriat et l\'innovation.',
+        icon: 'Briefcase',
+        color: '#10B981',
+        order: 3,
+        published: true,
+      },
+      {
+        title: 'Sécurité et Stabilité',
+        category: 'Sécurité',
+        summary: 'Restauration de la paix et de la sécurité dans tout le pays',
+        content: 'La sécurité est la fondation du progrès. Nous nous engageons à restaurer la paix, à renforcer les forces de sécurité et à protéger les droits des citoyens.',
+        icon: 'Shield',
+        color: '#8B5CF6',
+        order: 4,
+        published: true,
+      },
+    ];
+
+    await app.db.insert(schema.programs).values(samplePrograms);
+    app.logger.info({ count: samplePrograms.length }, 'Programs seeded successfully');
+  } catch (error) {
+    app.logger.error({ err: error }, 'Failed to seed programs');
+    throw error;
+  }
 }
 
 export function register(app: App, fastify: FastifyInstance) {
@@ -65,11 +125,23 @@ export function register(app: App, fastify: FastifyInstance) {
       app.logger.info({ category }, 'Fetching programs');
 
       try {
-        let query = app.db.select().from(schema.programs).where(
-          category ? eq(schema.programs.category, category) : undefined
-        ).orderBy(asc(schema.programs.order));
+        // Build WHERE conditions
+        const conditions = [
+          or(
+            eq(schema.programs.published, true),
+            isNull(schema.programs.published)
+          )
+        ];
 
-        const result = await query;
+        if (category) {
+          conditions.push(eq(schema.programs.category, category));
+        }
+
+        const result = await app.db
+          .select()
+          .from(schema.programs)
+          .where(and(...conditions))
+          .orderBy(asc(schema.programs.order));
 
         app.logger.info({ count: result.length }, 'Programs fetched successfully');
         return {

@@ -34,7 +34,6 @@ function formatNews(news: any) {
     imageUrl: news.imageUrl || null,
     videoUrl: news.videoUrl || null,
     publishedAt: publishedAtISO,
-    published_at: publishedAtISO,
   };
 }
 
