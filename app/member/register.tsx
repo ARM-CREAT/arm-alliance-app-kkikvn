@@ -33,9 +33,11 @@ export default function MemberRegisterScreen() {
     lastName: '',
     phone: '',
     email: '',
-    address: '',
     city: '',
     region: '',
+    cercle: '',
+    commune: '',
+    nina: '',
     profession: '',
     motivation: '',
   });
@@ -84,12 +86,14 @@ export default function MemberRegisterScreen() {
       city: formData.city.trim(),
     };
     if (formData.email.trim()) payload.email = formData.email.trim();
-    if (formData.address.trim()) payload.address = formData.address.trim();
     if (formData.region.trim()) payload.region = formData.region.trim();
+    if (formData.cercle.trim()) payload.cercle = formData.cercle.trim();
+    if (formData.commune.trim()) payload.commune = formData.commune.trim();
+    if (formData.nina.trim()) payload.nina = formData.nina.trim();
     if (formData.profession.trim()) payload.profession = formData.profession.trim();
     if (formData.motivation.trim()) payload.motivation = formData.motivation.trim();
 
-    console.log('[MemberRegister] POST /api/members/register (public, no auth):', JSON.stringify(payload));
+    console.log('[MemberRegister] POST /api/members/register payload:', JSON.stringify(payload));
 
     try {
       const response = await apiPost('/api/members/register', payload);
@@ -97,8 +101,8 @@ export default function MemberRegisterScreen() {
       console.log('[MemberRegister] Registration response:', JSON.stringify(response));
 
       const membershipNumber =
-        response?.member?.membershipNumber ||
         response?.membershipNumber ||
+        response?.member?.membershipNumber ||
         response?.member?.membership_number ||
         'N/A';
 
@@ -178,7 +182,7 @@ export default function MemberRegisterScreen() {
           </View>
 
           <View style={styles.form}>
-            {/* Row: Prénom + Nom */}
+            {/* Prénom + Nom */}
             <View style={styles.row}>
               <View style={[styles.inputGroup, styles.flex1]}>
                 <Text style={styles.label}>Prénom *</Text>
@@ -253,15 +257,40 @@ export default function MemberRegisterScreen() {
               />
             </View>
 
+            <View style={styles.row}>
+              <View style={[styles.inputGroup, styles.flex1]}>
+                <Text style={styles.label}>Cercle (Optionnel)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: Kati"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.cercle}
+                  onChangeText={updateField('cercle')}
+                  autoCapitalize="words"
+                />
+              </View>
+              <View style={[styles.inputGroup, styles.flex1]}>
+                <Text style={styles.label}>Commune (Optionnel)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: Commune I"
+                  placeholderTextColor={colors.textSecondary}
+                  value={formData.commune}
+                  onChangeText={updateField('commune')}
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
+
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Adresse (Optionnel)</Text>
+              <Text style={styles.label}>NINA (Optionnel)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Adresse complète"
+                placeholder="Numéro d'identification nationale"
                 placeholderTextColor={colors.textSecondary}
-                value={formData.address}
-                onChangeText={updateField('address')}
-                autoCapitalize="sentences"
+                value={formData.nina}
+                onChangeText={updateField('nina')}
+                autoCapitalize="characters"
               />
             </View>
 

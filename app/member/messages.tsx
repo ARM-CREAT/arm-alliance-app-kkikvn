@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,10 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  Modal as RNModal,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
-import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
@@ -21,14 +21,22 @@ interface Message {
   id: string;
   title: string;
   content: string;
-  senderId: string;
-  targetRole?: string;
-  targetRegion?: string;
-  targetCercle?: string;
-  targetCommune?: string;
   sentAt: string;
-  createdAt: string;
-  isRead?: boolean;
+  isRead: boolean;
+}
+
+function formatDate(dateString: string) {
+  try {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return dateString;
+  }
 }
 
 export default function MemberMessagesScreen() {
@@ -36,88 +44,80 @@ export default function MemberMessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [errorModalVisible, setErrorModalVisible] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadMessages();
-  }, []);
-
-  const loadMessages = async () => {
-    console.log('[MemberMessages] Loading messages');
-    setLoading(true);
-
+  const loadMessages = useCallback(async () => {
+    console.log('[MemberMessages] GET /api/messages/my-messages');
+    setError(null);
     try {
-      const response = await authenticatedGet('/api/messages/my-messages');
-      console.log('[MemberMessages] Messages loaded:', Array.isArray(response) ? response.length : 0);
-      setMessages(Array.isArray(response) ? response : []);
-    } catch (error: any) {
-      console.error('[MemberMessages] Error loading messages:', error);
-      // If unauthenticated, show empty state instead of crashing
-      if (error?.message?.includes('Authentication token not found') || error?.message?.includes('401')) {
-        console.log('[MemberMessages] Not authenticated — showing empty state');
+      const response = await authenticatedGet<{ messages: Message[] }>('/api/messages/my-messages');
+      const list = response?.messages ?? (Array.isArray(response) ? response : []);
+      console.log('[MemberMessages] Messages loaded:', list.length);
+      setMessages(list);
+    } catch (err: any) {
+      console.error('[MemberMessages] Error loading messages:', err);
+      if (err?.message?.includes('Authentication token not found') || err?.message?.includes('401')) {
         setMessages([]);
       } else {
-        setErrorMessage(error?.message || 'Impossible de charger les messages');
-        setErrorModalVisible(true);
+        setError(err?.message || 'Impossible de charger les messages');
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
-  const handleRefresh = async () => {
+  useEffect(() => {
+    loadMessages();
+  }, [loadMessages]);
+
+  const onRefresh = useCallback(() => {
+    console.log('[MemberMessages] Pull-to-refresh triggered');
     setRefreshing(true);
-    await loadMessages();
-    setRefreshing(false);
-  };
+    loadMessages();
+  }, [loadMessages]);
 
   const handleMessagePress = async (message: Message) => {
+    console.log('[MemberMessages] User tapped message:', message.id, message.title);
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
     setSelectedMessage(message);
-    setModalVisible(true);
+    setDetailVisible(true);
 
-    // Mark as read if not already read
     if (!message.isRead) {
+      console.log('[MemberMessages] POST /api/messages/mark-read/' + message.id);
       try {
         await authenticatedPost(`/api/messages/mark-read/${message.id}`, {});
-        // Update local state
         setMessages(prev =>
           prev.map(m => (m.id === message.id ? { ...m, isRead: true } : m))
         );
-      } catch (error) {
-        console.error('[MemberMessages] Error marking message as read:', error);
+        console.log('[MemberMessages] Message marked as read:', message.id);
+      } catch (err) {
+        console.error('[MemberMessages] Error marking message as read:', err);
       }
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const unreadCount = messages.filter(m => !m.isRead).length;
+  const unreadCountStr = String(unreadCount);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <Stack.Screen
           options={{
-            title: 'Messages Internes',
+            title: 'Messages',
             headerShown: true,
             headerBackTitle: 'Retour',
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: '#FFFFFF',
           }}
         />
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
+        <Text style={styles.loadingText}>Chargement des messages...</Text>
       </View>
     );
   }
@@ -126,93 +126,138 @@ export default function MemberMessagesScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Messages Internes',
+          title: 'Messages',
           headerShown: true,
           headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: { fontWeight: 'bold' },
         }}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {messages.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <IconSymbol
-              ios_icon_name="envelope.open"
-              android_material_icon_name="mail-outline"
-              size={64}
-              color={colors.textSecondary}
+      {error ? (
+        <View style={styles.errorContainer}>
+          <IconSymbol
+            ios_icon_name="exclamationmark.triangle"
+            android_material_icon_name="warning"
+            size={48}
+            color={colors.danger}
+          />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => { setLoading(true); loadMessages(); }}
+          >
+            <Text style={styles.retryBtnText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
             />
-            <Text style={styles.emptyText}>Aucun message</Text>
-            <Text style={styles.emptySubtext}>
-              Vous recevrez ici les notifications du parti
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.messagesList}>
-            {messages.map((message) => (
-              <TouchableOpacity
-                key={message.id}
-                style={[
-                  styles.messageCard,
-                  !message.isRead && styles.messageCardUnread,
-                ]}
-                onPress={() => handleMessagePress(message)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.messageHeader}>
-                  <View style={styles.messageIconContainer}>
-                    <IconSymbol
-                      ios_icon_name={message.isRead ? 'envelope.open.fill' : 'envelope.fill'}
-                      android_material_icon_name={message.isRead ? 'mail-outline' : 'mail'}
-                      size={24}
-                      color={message.isRead ? colors.textSecondary : colors.primary}
-                    />
-                  </View>
-                  <View style={styles.messageContent}>
-                    <Text style={styles.messageTitle} numberOfLines={1}>
-                      {message.title}
-                    </Text>
-                    <Text style={styles.messagePreview} numberOfLines={2}>
-                      {message.content}
-                    </Text>
-                    <Text style={styles.messageDate}>
-                      {formatDate(message.sentAt)}
-                    </Text>
-                  </View>
-                  {!message.isRead && <View style={styles.unreadBadge} />}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+          }
+        >
+          {unreadCount > 0 && (
+            <View style={styles.unreadBanner}>
+              <Text style={styles.unreadBannerText}>{unreadCountStr} message(s) non lu(s)</Text>
+            </View>
+          )}
 
-      {/* Message Detail Modal */}
-      {selectedMessage && (
-        <Modal
-          visible={modalVisible}
-          title={selectedMessage.title}
-          message={`${selectedMessage.content}\n\n${formatDate(selectedMessage.sentAt)}`}
-          onClose={() => {
-            setModalVisible(false);
-            setSelectedMessage(null);
-          }}
-        />
+          {messages.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconCircle}>
+                <IconSymbol
+                  ios_icon_name="envelope.open"
+                  android_material_icon_name="mail-outline"
+                  size={48}
+                  color={colors.textSecondary}
+                />
+              </View>
+              <Text style={styles.emptyTitle}>Aucun message</Text>
+              <Text style={styles.emptySubtext}>
+                Vous recevrez ici les notifications et communications du parti
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.messagesList}>
+              {messages.map((message) => {
+                const dateStr = formatDate(message.sentAt);
+                const isUnread = !message.isRead;
+                return (
+                  <TouchableOpacity
+                    key={message.id}
+                    style={[styles.messageCard, isUnread && styles.messageCardUnread]}
+                    onPress={() => handleMessagePress(message)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.messageRow}>
+                      <View style={[styles.messageIconWrap, isUnread && styles.messageIconWrapUnread]}>
+                        <IconSymbol
+                          ios_icon_name={isUnread ? 'envelope.fill' : 'envelope.open.fill'}
+                          android_material_icon_name={isUnread ? 'mail' : 'mail-outline'}
+                          size={22}
+                          color={isUnread ? colors.primary : colors.textSecondary}
+                        />
+                      </View>
+                      <View style={styles.messageContent}>
+                        <Text style={[styles.messageTitle, isUnread && styles.messageTitleUnread]} numberOfLines={1}>
+                          {message.title}
+                        </Text>
+                        <Text style={styles.messagePreview} numberOfLines={2}>
+                          {message.content}
+                        </Text>
+                        <Text style={styles.messageDate}>{dateStr}</Text>
+                      </View>
+                      {isUnread && <View style={styles.unreadDot} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
       )}
 
-      {/* Error Modal */}
-      <Modal
-        visible={errorModalVisible}
-        title="Erreur"
-        message={errorMessage}
-        type="error"
-        onClose={() => setErrorModalVisible(false)}
-      />
+      {/* Message Detail Modal */}
+      <RNModal
+        visible={detailVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setDetailVisible(false)}
+      >
+        <View style={styles.detailContainer}>
+          <View style={styles.detailHeader}>
+            <Text style={styles.detailTitle} numberOfLines={2}>
+              {selectedMessage?.title}
+            </Text>
+            <TouchableOpacity
+              style={styles.detailCloseBtn}
+              onPress={() => {
+                console.log('[MemberMessages] User closed message detail');
+                setDetailVisible(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.detailCloseBtnText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.detailScroll} contentContainerStyle={styles.detailScrollContent}>
+            {selectedMessage && (
+              <>
+                <Text style={styles.detailDate}>{formatDate(selectedMessage.sentAt)}</Text>
+                <Text style={styles.detailContent}>{selectedMessage.content}</Text>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </RNModal>
     </View>
   );
 }
@@ -221,13 +266,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
-    paddingBottom: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -240,81 +278,192 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
-  emptyContainer: {
+  errorContainer: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 16,
+  },
+  errorText: {
+    fontSize: 15,
+    color: colors.danger,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  retryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  retryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 40,
+  },
+  unreadBanner: {
+    backgroundColor: colors.primary + '18',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary + '30',
+  },
+  unreadBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  emptyContainer: {
+    alignItems: 'center',
     paddingVertical: 80,
     paddingHorizontal: 40,
   },
-  emptyText: {
+  emptyIconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.backgroundAlt,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginTop: 24,
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 15,
     color: colors.textSecondary,
-    marginTop: 8,
     textAlign: 'center',
+    lineHeight: 22,
   },
   messagesList: {
     padding: 16,
   },
   messageCard: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
   },
   messageCardUnread: {
     borderLeftWidth: 4,
     borderLeftColor: colors.primary,
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: '#F0FAF2',
   },
-  messageHeader: {
+  messageRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  messageIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  messageIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.backgroundAlt,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    flexShrink: 0,
+  },
+  messageIconWrapUnread: {
+    backgroundColor: colors.primary + '18',
   },
   messageContent: {
     flex: 1,
   },
   messageTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '500',
     color: colors.text,
     marginBottom: 4,
   },
+  messageTitleUnread: {
+    fontWeight: '700',
+    color: colors.text,
+  },
   messagePreview: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 8,
+    lineHeight: 19,
+    marginBottom: 6,
   },
   messageDate: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
   },
-  unreadBadge: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  unreadDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.primary,
     marginLeft: 8,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  detailContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 20,
+    paddingTop: Platform.OS === 'ios' ? 56 : 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.card,
+    gap: 12,
+  },
+  detailTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    lineHeight: 26,
+  },
+  detailCloseBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 8,
+    flexShrink: 0,
+  },
+  detailCloseBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  detailScroll: {
+    flex: 1,
+  },
+  detailScrollContent: {
+    padding: 20,
+    paddingBottom: 60,
+  },
+  detailDate: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  detailContent: {
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 26,
   },
 });

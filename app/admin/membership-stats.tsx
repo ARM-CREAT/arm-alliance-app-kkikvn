@@ -1,140 +1,369 @@
 
-import { colors } from '@/styles/commonStyles';
-import { IconSymbol } from '@/components/IconSymbol';
-import React from 'react';
-import { Stack, useRouter } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Stack } from 'expo-router';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
   TouchableOpacity,
+  RefreshControl,
   Platform,
 } from 'react-native';
+import { colors } from '@/styles/commonStyles';
+import { IconSymbol } from '@/components/IconSymbol';
+import { authenticatedGet } from '@/utils/api';
 
-const MOCK_STATS = {
-  activeMembers: 1248,
-  newThisMonth: 87,
-  renewalRate: 76,
-  pendingRenewals: 34,
-};
+interface Stats {
+  total: number;
+  active: number;
+  pending: number;
+  suspended: number;
+}
 
-const MOCK_MONTHLY = [
-  { month: 'Jan', count: 52 },
-  { month: 'Fév', count: 61 },
-  { month: 'Mar', count: 74 },
-  { month: 'Avr', count: 68 },
-  { month: 'Mai', count: 83 },
-  { month: 'Jun', count: 87 },
-];
+interface MonthlyEntry {
+  month: string;
+  count: number;
+}
 
-const MAX_COUNT = Math.max(...MOCK_MONTHLY.map((m) => m.count));
+interface StatCardProps {
+  icon_ios: string;
+  icon_android: string;
+  label: string;
+  value: number;
+  iconColor: string;
+}
+
+function StatCard({ icon_ios, icon_android, label, value, iconColor }: StatCardProps) {
+  const displayValue = String(value);
+  return (
+    <View style={styles.statCard}>
+      <View style={styles.statIconRow}>
+        <IconSymbol
+          ios_icon_name={icon_ios}
+          android_material_icon_name={icon_android}
+          size={20}
+          color={iconColor}
+        />
+        <Text style={styles.statLabel}>{label}</Text>
+      </View>
+      <Text style={[styles.statValue, { color: iconColor }]}>{displayValue}</Text>
+    </View>
+  );
+}
+
+export default function MembershipStatsScreen() {
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<Stats>({ total: 0, active: 0, pending: 0, suspended: 0 });
+  const [monthly, setMonthly] = useState<MonthlyEntry[]>([]);
+
+  const loadStats = useCallback(async () => {
+    console.log('[MembershipStats] GET /api/admin/membership-stats');
+    setError(null);
+    try {
+      const response = await authenticatedGet<{
+        stats: Stats;
+        monthlyRegistrations: MonthlyEntry[];
+      }>('/api/admin/membership-stats');
+
+      console.log('[MembershipStats] Stats loaded:', JSON.stringify(response));
+
+      const s = response?.stats ?? { total: 0, active: 0, pending: 0, suspended: 0 };
+      const m = response?.monthlyRegistrations ?? [];
+      setStats({
+        total: Number(s.total) || 0,
+        active: Number(s.active) || 0,
+        pending: Number(s.pending) || 0,
+        suspended: Number(s.suspended) || 0,
+      });
+      setMonthly(m);
+    } catch (err: any) {
+      console.error('[MembershipStats] Error loading stats:', err);
+      setError(err.message || 'Impossible de charger les statistiques.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  const onRefresh = useCallback(() => {
+    console.log('[MembershipStats] Pull-to-refresh triggered');
+    setRefreshing(true);
+    loadStats();
+  }, [loadStats]);
+
+  const maxCount = monthly.length > 0 ? Math.max(...monthly.map(m => Number(m.count) || 0), 1) : 1;
+
+  if (loading) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title: 'Statistiques Adhésion',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: '#FFFFFF',
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Chargement des statistiques...</Text>
+        </View>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          title: 'Statistiques Adhésion',
+          headerShown: true,
+          headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: { fontWeight: 'bold' },
+        }}
+      />
+
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
+          }
+        >
+          {error ? (
+            <View style={styles.errorContainer}>
+              <IconSymbol ios_icon_name="exclamationmark.triangle" android_material_icon_name="warning" size={40} color={colors.danger} />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => { setLoading(true); loadStats(); }}
+              >
+                <Text style={styles.retryBtnText}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.header}>
+                <Text style={styles.title}>Statistiques Adhésion</Text>
+                <Text style={styles.subtitle}>Vue d'ensemble des membres</Text>
+              </View>
+
+              {/* KPI Cards */}
+              <View style={styles.grid}>
+                <StatCard
+                  icon_ios="person.3.fill"
+                  icon_android="group"
+                  label="Total membres"
+                  value={stats.total}
+                  iconColor={colors.primary}
+                />
+                <StatCard
+                  icon_ios="checkmark.circle.fill"
+                  icon_android="check-circle"
+                  label="Membres actifs"
+                  value={stats.active}
+                  iconColor="#34C759"
+                />
+                <StatCard
+                  icon_ios="clock.fill"
+                  icon_android="schedule"
+                  label="En attente"
+                  value={stats.pending}
+                  iconColor="#FF9500"
+                />
+                <StatCard
+                  icon_ios="xmark.circle.fill"
+                  icon_android="cancel"
+                  label="Suspendus"
+                  value={stats.suspended}
+                  iconColor="#FF3B30"
+                />
+              </View>
+
+              {/* Bar Chart */}
+              {monthly.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Inscriptions mensuelles</Text>
+                  <View style={styles.chartContainer}>
+                    <View style={styles.chartBars}>
+                      {monthly.map((item, index) => {
+                        const count = Number(item.count) || 0;
+                        const barHeight = Math.max(Math.round((count / maxCount) * 100), 4);
+                        const countLabel = String(count);
+                        const monthLabel = String(item.month);
+                        return (
+                          <View key={index} style={styles.barWrapper}>
+                            <Text style={styles.barValue}>{countLabel}</Text>
+                            <View style={[styles.bar, { height: barHeight }]} />
+                            <Text style={styles.barLabel}>{monthLabel}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Detail by status */}
+              <Text style={styles.sectionTitle}>Détail par statut</Text>
+              <View style={styles.listContainer}>
+                <View style={styles.listRow}>
+                  <View style={styles.listRowLeft}>
+                    <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={20} color="#34C759" />
+                    <Text style={styles.listRowLabel}>Membres actifs</Text>
+                  </View>
+                  <Text style={[styles.listRowValue, { color: '#34C759' }]}>{String(stats.active)}</Text>
+                </View>
+                <View style={styles.listRow}>
+                  <View style={styles.listRowLeft}>
+                    <IconSymbol ios_icon_name="clock.fill" android_material_icon_name="schedule" size={20} color="#FF9500" />
+                    <Text style={styles.listRowLabel}>En attente de validation</Text>
+                  </View>
+                  <Text style={[styles.listRowValue, { color: '#FF9500' }]}>{String(stats.pending)}</Text>
+                </View>
+                <View style={[styles.listRow, styles.listRowLast]}>
+                  <View style={styles.listRowLeft}>
+                    <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color="#FF3B30" />
+                    <Text style={styles.listRowLabel}>Suspendus</Text>
+                  </View>
+                  <Text style={[styles.listRowValue, { color: '#FF3B30' }]}>{String(stats.suspended)}</Text>
+                </View>
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </View>
+    </>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
   scrollView: {
     flex: 1,
   },
   contentContainer: {
     padding: 20,
-    paddingTop: Platform.OS === 'android' ? 68 : 20,
     paddingBottom: 40,
   },
   header: {
     marginBottom: 24,
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.textSecondary,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 28,
+    gap: 12,
   },
   statCard: {
-    width: '48%',
+    width: '47%',
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   statIconRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
+    gap: 8,
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginLeft: 8,
+    flex: 1,
     flexShrink: 1,
   },
   statValue: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: 'bold',
-    color: colors.text,
-  },
-  statSuffix: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.textSecondary,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   chartContainer: {
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 28,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   chartBars: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 120,
-    marginBottom: 8,
+    height: 130,
+    paddingTop: 20,
   },
   barWrapper: {
     alignItems: 'center',
     flex: 1,
   },
   bar: {
-    width: 28,
+    width: 26,
     borderRadius: 6,
     backgroundColor: colors.primary,
   },
   barLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.textSecondary,
     marginTop: 6,
+    textAlign: 'center',
   },
   barValue: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.text,
     fontWeight: '600',
     marginBottom: 4,
@@ -144,10 +373,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
     marginBottom: 24,
   },
   listRow: {
@@ -165,172 +396,37 @@ const styles = StyleSheet.create({
   listRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   listRowLabel: {
     fontSize: 15,
     color: colors.text,
-    marginLeft: 12,
   },
   listRowValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.primary,
   },
-  backButton: {
-    flexDirection: 'row',
+  errorContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    paddingVertical: 60,
+    gap: 16,
   },
-  backButtonText: {
-    fontSize: 16,
-    color: colors.primary,
-    marginLeft: 6,
+  errorText: {
+    fontSize: 15,
+    color: colors.danger,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  retryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  retryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
-
-interface StatCardProps {
-  icon_ios: string;
-  icon_android: string;
-  label: string;
-  value: number;
-  suffix?: string;
-  iconColor?: string;
-}
-
-function StatCard({ icon_ios, icon_android, label, value, suffix, iconColor }: StatCardProps) {
-  const displayValue = String(value);
-  const displaySuffix = suffix ?? '';
-  const cardColor = iconColor ?? colors.primary;
-
-  return (
-    <View style={styles.statCard}>
-      <View style={styles.statIconRow}>
-        <IconSymbol
-          ios_icon_name={icon_ios}
-          android_material_icon_name={icon_android}
-          size={20}
-          color={cardColor}
-        />
-        <Text style={styles.statLabel}>{label}</Text>
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-        <Text style={styles.statValue}>{displayValue}</Text>
-        <Text style={styles.statSuffix}>{displaySuffix}</Text>
-      </View>
-    </View>
-  );
-}
-
-export default function MembershipStatsScreen() {
-  const router = useRouter();
-
-  const handleBack = () => {
-    console.log('Retour depuis Stats Adhésion');
-    router.back();
-  };
-
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          title: 'Statistiques Adhésion',
-          headerShown: true,
-          headerBackTitle: 'Retour',
-        }}
-      />
-
-      <View style={styles.container}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Statistiques Adhésion</Text>
-            <Text style={styles.subtitle}>Vue d'ensemble des membres</Text>
-          </View>
-
-          {/* KPI Cards */}
-          <View style={styles.grid}>
-            <StatCard
-              icon_ios="person.3.fill"
-              icon_android="group"
-              label="Membres actifs"
-              value={MOCK_STATS.activeMembers}
-              iconColor={colors.primary}
-            />
-            <StatCard
-              icon_ios="person.badge.plus"
-              icon_android="person-add"
-              label="Nouveaux ce mois"
-              value={MOCK_STATS.newThisMonth}
-              iconColor={colors.accent}
-            />
-            <StatCard
-              icon_ios="arrow.clockwise.circle.fill"
-              icon_android="autorenew"
-              label="Taux de renouvellement"
-              value={MOCK_STATS.renewalRate}
-              suffix="%"
-              iconColor={colors.primary}
-            />
-            <StatCard
-              icon_ios="clock.badge.exclamationmark"
-              icon_android="pending-actions"
-              label="Renouvellements en attente"
-              value={MOCK_STATS.pendingRenewals}
-              iconColor={colors.error}
-            />
-          </View>
-
-          {/* Bar Chart */}
-          <Text style={styles.sectionTitle}>Nouveaux membres (6 mois)</Text>
-          <View style={styles.chartContainer}>
-            <View style={styles.chartBars}>
-              {MOCK_MONTHLY.map((item) => {
-                const barHeight = Math.round((item.count / MAX_COUNT) * 100);
-                const countLabel = String(item.count);
-                return (
-                  <View key={item.month} style={styles.barWrapper}>
-                    <Text style={styles.barValue}>{countLabel}</Text>
-                    <View style={[styles.bar, { height: barHeight }]} />
-                    <Text style={styles.barLabel}>{item.month}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Detail List */}
-          <Text style={styles.sectionTitle}>Détail par statut</Text>
-          <View style={styles.listContainer}>
-            <View style={styles.listRow}>
-              <View style={styles.listRowLeft}>
-                <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={20} color={colors.primary} />
-                <Text style={styles.listRowLabel}>Membres à jour</Text>
-              </View>
-              <Text style={styles.listRowValue}>1 214</Text>
-            </View>
-            <View style={styles.listRow}>
-              <View style={styles.listRowLeft}>
-                <IconSymbol ios_icon_name="clock.fill" android_material_icon_name="schedule" size={20} color={colors.accent} />
-                <Text style={styles.listRowLabel}>En attente de validation</Text>
-              </View>
-              <Text style={[styles.listRowValue, { color: colors.accent }]}>34</Text>
-            </View>
-            <View style={styles.listRow}>
-              <View style={styles.listRowLeft}>
-                <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color={colors.error} />
-                <Text style={styles.listRowLabel}>Cotisation expirée</Text>
-              </View>
-              <Text style={[styles.listRowValue, { color: colors.error }]}>87</Text>
-            </View>
-            <View style={[styles.listRow, styles.listRowLast]}>
-              <View style={styles.listRowLeft}>
-                <IconSymbol ios_icon_name="star.fill" android_material_icon_name="star" size={20} color="#F59E0B" />
-                <Text style={styles.listRowLabel}>Membres fondateurs</Text>
-              </View>
-              <Text style={[styles.listRowValue, { color: '#F59E0B' }]}>12</Text>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-    </>
-  );
-}
