@@ -12,16 +12,15 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { BACKEND_URL } from '@/utils/api';
+import { BACKEND_URL, getBearerToken, apiGet, apiDelete } from '@/utils/api';
 
 interface MediaFile {
   id: string;
@@ -29,11 +28,11 @@ interface MediaFile {
   mimeType: string;
   size: number;
   uploadedAt: string;
-  key: string;
+  url?: string;
+  key?: string;
 }
 
 export default function AdminMediaScreen() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -53,44 +52,20 @@ export default function AdminMediaScreen() {
   const loadMedia = useCallback(async () => {
     console.log('[AdminMedia] GET /api/media');
     try {
-      const adminPassword = await AsyncStorage.getItem('admin_password') || '';
-      const response = await fetch(`${BACKEND_URL}/api/media`, {
-        headers: { 'x-admin-password': adminPassword },
-      });
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Erreur ${response.status}: ${errText}`);
-      }
-      const data = await response.json();
+      const data = await apiGet('/api/media');
       console.log('[AdminMedia] Loaded media files:', Array.isArray(data) ? data.length : 0);
       setMediaFiles(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error('[AdminMedia] Load error:', error);
-      showModal('Erreur', 'Impossible de charger les médias.', 'error');
+      showModal('Erreur', 'Impossible de charger les médias: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const checkAuthAndLoad = useCallback(async () => {
-    console.log('[AdminMedia] Checking authentication');
-    try {
-      const adminPassword = await AsyncStorage.getItem('admin_password');
-      if (!adminPassword) {
-        console.log('[AdminMedia] No admin password found, redirecting to login');
-        router.replace('/admin/login');
-        return;
-      }
-      await loadMedia();
-    } catch (error) {
-      console.error('[AdminMedia] Auth check error:', error);
-      router.replace('/admin/login');
-    }
-  }, [router, loadMedia]);
-
   useEffect(() => {
-    checkAuthAndLoad();
-  }, [checkAuthAndLoad]);
+    loadMedia();
+  }, [loadMedia]);
 
   const onRefresh = async () => {
     console.log('[AdminMedia] Pull-to-refresh triggered');
@@ -104,9 +79,9 @@ export default function AdminMediaScreen() {
     setUploading(true);
 
     try {
-      const adminPassword = await AsyncStorage.getItem('admin_password');
-      if (!adminPassword) {
-        throw new Error('Not authenticated');
+      const token = await getBearerToken();
+      if (!token) {
+        throw new Error('Non authentifié. Veuillez vous connecter.');
       }
 
       const formData = new FormData();
@@ -116,18 +91,20 @@ export default function AdminMediaScreen() {
         type: mimeType,
       } as any);
 
-      console.log('[AdminMedia] POST /api/admin/media/upload');
-      const response = await fetch(`${BACKEND_URL}/api/admin/media/upload`, {
+      console.log('[AdminMedia] POST /api/media (multipart/form-data)');
+      const response = await fetch(`${BACKEND_URL}/api/media`, {
         method: 'POST',
         headers: {
-          'x-admin-password': adminPassword,
+          Authorization: `Bearer ${token}`,
+          // Do NOT set Content-Type — let fetch set it with the boundary for multipart
         },
         body: formData,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || 'Upload failed');
+        console.error('[AdminMedia] Upload failed:', response.status, errorText);
+        throw new Error(errorText || `Erreur ${response.status}`);
       }
 
       const result = await response.json();
@@ -151,7 +128,7 @@ export default function AdminMediaScreen() {
 
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      showModal('Permission requise', "Permission d'accès à la galerie requise.", 'warning');
+      showModal('Permission requise', "L'accès à la galerie est nécessaire pour télécharger des photos et vidéos.", 'warning');
       return;
     }
 
@@ -163,9 +140,14 @@ export default function AdminMediaScreen() {
 
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      const fileName = asset.uri.split('/').pop() || 'image.jpg';
+      const uriParts = asset.uri.split('/');
+      const rawName = uriParts[uriParts.length - 1] || 'upload.jpg';
+      const fileName = rawName;
       const mimeType = asset.type === 'video' ? 'video/mp4' : 'image/jpeg';
+      console.log('[AdminMedia] Image/video selected:', fileName, mimeType);
       await uploadFile(asset.uri, fileName, mimeType);
+    } else {
+      console.log('[AdminMedia] Image/video picker cancelled');
     }
   };
 
@@ -181,7 +163,10 @@ export default function AdminMediaScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
+        console.log('[AdminMedia] Document selected:', asset.name, asset.mimeType);
         await uploadFile(asset.uri, asset.name, asset.mimeType || 'application/octet-stream');
+      } else {
+        console.log('[AdminMedia] Document picker cancelled');
       }
     } catch (error: any) {
       console.error('[AdminMedia] Document picker error:', error);
@@ -189,9 +174,14 @@ export default function AdminMediaScreen() {
     }
   };
 
-  const handleCopyUrl = async (mediaId: string) => {
-    console.log('[AdminMedia] User tapped Copier URL for media:', mediaId);
-    const url = `${BACKEND_URL}/api/media/${mediaId}/download`;
+  const getMediaUrl = (media: MediaFile): string => {
+    if (media.url) return media.url;
+    return `${BACKEND_URL}/api/media/${media.id}`;
+  };
+
+  const handleCopyUrl = async (media: MediaFile) => {
+    console.log('[AdminMedia] User tapped Copier URL for media:', media.id);
+    const url = getMediaUrl(media);
     try {
       await Clipboard.setStringAsync(url);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -202,31 +192,23 @@ export default function AdminMediaScreen() {
     }
   };
 
-  const handleDelete = (mediaId: string, fileName: string) => {
-    console.log('[AdminMedia] User tapped Supprimer for media:', mediaId, fileName);
+  const handleDelete = (media: MediaFile) => {
+    console.log('[AdminMedia] User tapped Supprimer for media:', media.id, media.fileName);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Supprimer le fichier',
-      `Êtes-vous sûr de vouloir supprimer "${fileName}" ?`,
+      `Êtes-vous sûr de vouloir supprimer "${media.fileName}" ?`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Supprimer',
           style: 'destructive',
           onPress: async () => {
-            console.log('[AdminMedia] DELETE /api/admin/media/' + mediaId);
+            console.log('[AdminMedia] DELETE /api/media/' + media.id);
             try {
-              const adminPassword = await AsyncStorage.getItem('admin_password') || '';
-              const response = await fetch(`${BACKEND_URL}/api/admin/media/${mediaId}`, {
-                method: 'DELETE',
-                headers: { 'x-admin-password': adminPassword },
-              });
-              if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`Erreur ${response.status}: ${errText}`);
-              }
-              console.log('[AdminMedia] Media deleted successfully:', mediaId);
-              setMediaFiles(prev => prev.filter(m => m.id !== mediaId));
+              await apiDelete(`/api/media/${media.id}`);
+              console.log('[AdminMedia] Media deleted successfully:', media.id);
+              setMediaFiles(prev => prev.filter(m => m.id !== media.id));
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error: any) {
               console.error('[AdminMedia] Delete error:', error);
@@ -239,24 +221,29 @@ export default function AdminMediaScreen() {
   };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) {
-      const sizeKB = (bytes / 1024).toFixed(1);
+    const numBytes = Number(bytes) || 0;
+    if (numBytes < 1024) return `${numBytes} B`;
+    if (numBytes < 1024 * 1024) {
+      const sizeKB = (numBytes / 1024).toFixed(1);
       return `${sizeKB} KB`;
     }
-    const sizeMB = (bytes / (1024 * 1024)).toFixed(1);
+    const sizeMB = (numBytes / (1024 * 1024)).toFixed(1);
     return `${sizeMB} MB`;
   };
 
   const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateString || '';
+    }
   };
 
   if (loading) {
@@ -293,7 +280,7 @@ export default function AdminMediaScreen() {
 
         <View style={styles.uploadSection}>
           <View style={styles.uploadButtons}>
-            <TouchableOpacity style={styles.uploadButton} onPress={handlePickImage} disabled={uploading}>
+            <TouchableOpacity style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]} onPress={handlePickImage} disabled={uploading}>
               {uploading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
@@ -304,7 +291,7 @@ export default function AdminMediaScreen() {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.uploadButton} onPress={handlePickDocument} disabled={uploading}>
+            <TouchableOpacity style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]} onPress={handlePickDocument} disabled={uploading}>
               {uploading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
@@ -315,45 +302,66 @@ export default function AdminMediaScreen() {
               )}
             </TouchableOpacity>
           </View>
+          {uploading && (
+            <Text style={styles.uploadingText}>Téléchargement en cours...</Text>
+          )}
         </View>
 
         {mediaFiles.length === 0 ? (
           <View style={styles.emptyState}>
             <IconSymbol ios_icon_name="photo" android_material_icon_name="photo" size={64} color={colors.textSecondary} />
             <Text style={styles.emptyStateText}>Aucun média téléchargé</Text>
+            <Text style={styles.emptyStateSubtext}>Appuyez sur Photo/Vidéo ou Document pour commencer</Text>
           </View>
         ) : (
           <View style={styles.mediaGrid}>
             {mediaFiles.map((media) => {
-              const isImage = media.mimeType.startsWith('image/');
+              const isImage = String(media.mimeType || '').startsWith('image/');
+              const isVideo = String(media.mimeType || '').startsWith('video/');
               const fileSize = formatFileSize(media.size);
               const uploadDate = formatDate(media.uploadedAt);
-              const detailsText = `${media.mimeType} • ${fileSize} • ${uploadDate}`;
-              const downloadUrl = `${BACKEND_URL}/api/media/${media.id}/download`;
+              const mediaUrl = getMediaUrl(media);
 
               return (
                 <View key={media.id} style={styles.mediaCard}>
-                  {isImage && (
+                  {isImage ? (
                     <Image
-                      source={{ uri: downloadUrl }}
+                      source={{ uri: mediaUrl }}
                       style={styles.mediaPreview}
                       resizeMode="cover"
                     />
+                  ) : isVideo ? (
+                    <View style={styles.videoPreview}>
+                      <IconSymbol ios_icon_name="play.circle.fill" android_material_icon_name="play-circle-filled" size={48} color="#FFFFFF" />
+                      <Text style={styles.videoLabel}>Vidéo</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.docPreview}>
+                      <IconSymbol ios_icon_name="document.fill" android_material_icon_name="description" size={40} color={colors.primary} />
+                    </View>
                   )}
                   <View style={styles.mediaInfo}>
-                    <Text style={styles.mediaName}>{media.fileName}</Text>
-                    <Text style={styles.mediaDetails}>{detailsText}</Text>
+                    <Text style={styles.mediaName} numberOfLines={1}>{media.fileName}</Text>
+                    <Text style={styles.mediaDetails}>
+                      {String(media.mimeType || 'inconnu')}
+                    </Text>
+                    <Text style={styles.mediaDetails}>
+                      {fileSize}
+                    </Text>
+                    <Text style={styles.mediaDetails}>
+                      {uploadDate}
+                    </Text>
                   </View>
                   <View style={styles.mediaActions}>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.copyButton]}
-                      onPress={() => handleCopyUrl(media.id)}
+                      onPress={() => handleCopyUrl(media)}
                     >
                       <Text style={[styles.actionButtonText, styles.copyButtonText]}>Copier URL</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => handleDelete(media.id, media.fileName)}
+                      onPress={() => handleDelete(media)}
                     >
                       <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Supprimer</Text>
                     </TouchableOpacity>
@@ -384,13 +392,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: 'bold', color: colors.text, marginBottom: 8 },
   subtitle: { fontSize: 14, color: colors.textSecondary },
   uploadSection: { marginBottom: 24 },
-  uploadButtons: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  uploadButtons: { flexDirection: 'row', gap: 12, marginBottom: 8 },
   uploadButton: { flex: 1, backgroundColor: colors.primary, borderRadius: 12, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  uploadButtonDisabled: { opacity: 0.6 },
   uploadButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  uploadingText: { textAlign: 'center', color: colors.textSecondary, fontSize: 13, marginTop: 4 },
   mediaGrid: { gap: 16 },
   mediaCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: colors.border, marginBottom: 16 },
   mediaPreview: { width: '100%', height: 200, borderRadius: 8, backgroundColor: colors.border, marginBottom: 12 },
-  mediaInfo: { marginBottom: 12 },
+  videoPreview: { width: '100%', height: 120, borderRadius: 8, backgroundColor: '#1a1a2e', marginBottom: 12, justifyContent: 'center', alignItems: 'center', gap: 8 },
+  videoLabel: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  docPreview: { width: '100%', height: 80, borderRadius: 8, backgroundColor: colors.backgroundAlt, marginBottom: 12, justifyContent: 'center', alignItems: 'center' },
+  mediaInfo: { marginBottom: 12, gap: 2 },
   mediaName: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 4 },
   mediaDetails: { fontSize: 12, color: colors.textSecondary },
   mediaActions: { flexDirection: 'row', gap: 8 },
@@ -401,5 +414,6 @@ const styles = StyleSheet.create({
   copyButtonText: { color: colors.primary },
   deleteButtonText: { color: '#DC3545' },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyStateText: { fontSize: 16, color: colors.textSecondary, marginTop: 16 },
+  emptyStateText: { fontSize: 16, color: colors.textSecondary, marginTop: 16, fontWeight: '600' },
+  emptyStateSubtext: { fontSize: 13, color: colors.textSecondary, marginTop: 6, textAlign: 'center' },
 });

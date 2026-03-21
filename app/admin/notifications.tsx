@@ -17,19 +17,20 @@ import {
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-
-const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api';
 
 interface NotificationItem {
   id: string;
   title: string;
-  content: string;
+  body?: string;
+  content?: string;
   type: string;
   category: string;
   published: boolean;
-  createdAt: string;
+  is_published?: boolean;
+  createdAt?: string;
+  created_at?: string;
 }
 
 const CATEGORY_OPTIONS = [
@@ -59,12 +60,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   urgent: 'Urgent',
 };
 
-async function getAdminHeaders(): Promise<Record<string, string>> {
-  const password = await AsyncStorage.getItem('admin_password');
-  return {
-    'Content-Type': 'application/json',
-    ...(password ? { 'x-admin-password': password } : {}),
-  };
+function getNotifBody(item: NotificationItem): string {
+  return item.body || item.content || '';
+}
+
+function isPublished(item: NotificationItem): boolean {
+  return item.published === true || item.is_published === true;
 }
 
 export default function AdminNotificationsScreen() {
@@ -77,21 +78,15 @@ export default function AdminNotificationsScreen() {
 
   // Form state
   const [formTitle, setFormTitle] = useState('');
-  const [formContent, setFormContent] = useState('');
+  const [formBody, setFormBody] = useState('');
   const [formType, setFormType] = useState('public');
   const [formCategory, setFormCategory] = useState('actualite');
-  const [formPublished, setFormPublished] = useState(true);
+  const [formPublished, setFormPublished] = useState(false);
 
   const loadNotifications = useCallback(async () => {
-    console.log('[AdminNotifications] GET /api/admin/notifications');
+    console.log('[AdminNotifications] GET /api/notifications');
     try {
-      const headers = await getAdminHeaders();
-      const res = await fetch(`${BACKEND_URL}/api/admin/notifications`, { headers });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Erreur ${res.status}: ${text}`);
-      }
-      const data = await res.json();
+      const data = await apiGet('/api/notifications');
       const list: NotificationItem[] = Array.isArray(data) ? data : [];
       console.log('[AdminNotifications] Chargées:', list.length, 'éléments');
       setNotifications(list);
@@ -116,29 +111,29 @@ export default function AdminNotificationsScreen() {
 
   const resetForm = () => {
     setFormTitle('');
-    setFormContent('');
+    setFormBody('');
     setFormType('public');
     setFormCategory('actualite');
-    setFormPublished(true);
+    setFormPublished(false);
     setEditingNotification(null);
   };
 
   const handleAdd = () => {
     console.log('[AdminNotifications] Bouton Nouvelle notification appuyé');
-    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     resetForm();
     setShowForm(true);
   };
 
   const handleEdit = (item: NotificationItem) => {
     console.log('[AdminNotifications] Bouton Modifier appuyé pour:', item.id);
-    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingNotification(item);
     setFormTitle(item.title || '');
-    setFormContent(item.content || '');
+    setFormBody(getNotifBody(item));
     setFormType(item.type || 'public');
     setFormCategory(item.category || 'actualite');
-    setFormPublished(item.published !== false);
+    setFormPublished(isPublished(item));
     setShowForm(true);
   };
 
@@ -155,7 +150,7 @@ export default function AdminNotificationsScreen() {
       Alert.alert('Erreur', 'Le titre est obligatoire.');
       return;
     }
-    if (!formContent.trim()) {
+    if (!formBody.trim()) {
       Alert.alert('Erreur', 'Le contenu est obligatoire.');
       return;
     }
@@ -164,7 +159,7 @@ export default function AdminNotificationsScreen() {
 
     const payload = {
       title: formTitle.trim(),
-      content: formContent.trim(),
+      body: formBody.trim(),
       type: formType,
       category: formCategory,
       published: formPublished,
@@ -173,42 +168,24 @@ export default function AdminNotificationsScreen() {
     console.log('[AdminNotifications] Payload:', JSON.stringify(payload));
 
     try {
-      const headers = await getAdminHeaders();
-
       if (editingNotification) {
-        console.log('[AdminNotifications] PATCH /api/admin/notifications/' + editingNotification.id);
-        const res = await fetch(`${BACKEND_URL}/api/admin/notifications/${editingNotification.id}`, {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`Erreur ${res.status}: ${text}`);
-        }
+        console.log('[AdminNotifications] PUT /api/notifications/' + editingNotification.id);
+        await apiPut(`/api/notifications/${editingNotification.id}`, payload);
         console.log('[AdminNotifications] Notification modifiée avec succès');
       } else {
-        console.log('[AdminNotifications] POST /api/admin/notifications');
-        const res = await fetch(`${BACKEND_URL}/api/admin/notifications`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`Erreur ${res.status}: ${text}`);
-        }
+        console.log('[AdminNotifications] POST /api/notifications');
+        await apiPost('/api/notifications', payload);
         console.log('[AdminNotifications] Notification créée avec succès');
       }
 
-      if (Platform.OS === 'ios') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowForm(false);
       resetForm();
       await loadNotifications();
       Alert.alert('Succès', editingNotification ? 'Notification modifiée.' : 'Notification créée.');
     } catch (err: any) {
       console.error('[AdminNotifications] Erreur de soumission:', err);
-      if (Platform.OS === 'ios') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Erreur', err.message || "Échec de l'opération.");
     } finally {
       setSubmitting(false);
@@ -226,19 +203,11 @@ export default function AdminNotificationsScreen() {
           text: 'Supprimer',
           style: 'destructive',
           onPress: async () => {
-            console.log('[AdminNotifications] DELETE /api/admin/notifications/' + item.id);
+            console.log('[AdminNotifications] DELETE /api/notifications/' + item.id);
             try {
-              const headers = await getAdminHeaders();
-              const res = await fetch(`${BACKEND_URL}/api/admin/notifications/${item.id}`, {
-                method: 'DELETE',
-                headers,
-              });
-              if (!res.ok) {
-                const text = await res.text();
-                throw new Error(`Erreur ${res.status}: ${text}`);
-              }
+              await apiDelete(`/api/notifications/${item.id}`);
               console.log('[AdminNotifications] Suppression réussie');
-              if (Platform.OS === 'ios') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               await loadNotifications();
             } catch (err: any) {
               console.error('[AdminNotifications] Erreur de suppression:', err);
@@ -251,21 +220,14 @@ export default function AdminNotificationsScreen() {
   };
 
   const handleTogglePublished = async (item: NotificationItem) => {
-    const newPublished = !item.published;
+    const newPublished = !isPublished(item);
     console.log('[AdminNotifications] Toggle publié pour:', item.id, '->', newPublished);
     try {
-      const headers = await getAdminHeaders();
-      const res = await fetch(`${BACKEND_URL}/api/admin/notifications/${item.id}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ published: newPublished }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Erreur ${res.status}: ${text}`);
-      }
+      console.log('[AdminNotifications] PUT /api/notifications/' + item.id, { published: newPublished });
+      await apiPut(`/api/notifications/${item.id}`, { published: newPublished });
+      console.log('[AdminNotifications] Toggle publié réussi');
       setNotifications(prev =>
-        prev.map(n => n.id === item.id ? { ...n, published: newPublished } : n)
+        prev.map(n => n.id === item.id ? { ...n, published: newPublished, is_published: newPublished } : n)
       );
     } catch (err: any) {
       console.error('[AdminNotifications] Erreur toggle publié:', err);
@@ -350,8 +312,8 @@ export default function AdminNotificationsScreen() {
                   style={[styles.input, styles.textArea]}
                   placeholder="Contenu de la notification"
                   placeholderTextColor={colors.textSecondary}
-                  value={formContent}
-                  onChangeText={setFormContent}
+                  value={formBody}
+                  onChangeText={setFormBody}
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
@@ -411,7 +373,7 @@ export default function AdminNotificationsScreen() {
               </View>
 
               <View style={styles.publishedRow}>
-                <Text style={styles.label}>Publié</Text>
+                <Text style={styles.label}>Publier immédiatement</Text>
                 <Switch
                   value={formPublished}
                   onValueChange={(val) => {
@@ -419,7 +381,7 @@ export default function AdminNotificationsScreen() {
                     setFormPublished(val);
                   }}
                   trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor={formPublished ? '#FFFFFF' : '#FFFFFF'}
+                  thumbColor="#FFFFFF"
                 />
               </View>
 
@@ -448,7 +410,7 @@ export default function AdminNotificationsScreen() {
             </View>
           )}
 
-          {notifications.length === 0 ? (
+          {notifications.length === 0 && !showForm ? (
             <View style={styles.emptyState}>
               <IconSymbol
                 ios_icon_name="bell.slash"
@@ -457,12 +419,15 @@ export default function AdminNotificationsScreen() {
                 color={colors.textSecondary}
               />
               <Text style={styles.emptyStateText}>Aucune notification</Text>
+              <Text style={styles.emptyStateSubtext}>Appuyez sur + pour créer une notification</Text>
             </View>
           ) : (
             notifications.map((item) => {
               const catColor = CATEGORY_COLORS[item.category] || '#607D8B';
               const catLabel = CATEGORY_LABELS[item.category] || item.category;
               const typeLabel = TYPE_OPTIONS.find(t => t.key === item.type)?.label || item.type;
+              const itemPublished = isPublished(item);
+              const itemBody = getNotifBody(item);
               return (
                 <View key={item.id} style={styles.notifCard}>
                   <View style={styles.notifCardTop}>
@@ -476,10 +441,10 @@ export default function AdminNotificationsScreen() {
                     </View>
                     <View style={styles.publishedToggleRow}>
                       <Text style={styles.publishedLabel}>
-                        {item.published ? 'Publié' : 'Masqué'}
+                        {itemPublished ? 'Publié' : 'Masqué'}
                       </Text>
                       <Switch
-                        value={item.published}
+                        value={itemPublished}
                         onValueChange={() => handleTogglePublished(item)}
                         trackColor={{ false: colors.border, true: colors.primary }}
                         thumbColor="#FFFFFF"
@@ -487,7 +452,7 @@ export default function AdminNotificationsScreen() {
                     </View>
                   </View>
                   <Text style={styles.notifTitle}>{item.title}</Text>
-                  <Text style={styles.notifContent} numberOfLines={2}>{item.content}</Text>
+                  <Text style={styles.notifContent} numberOfLines={2}>{itemBody}</Text>
                   <View style={styles.cardActions}>
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.editBtn]}
@@ -510,7 +475,6 @@ export default function AdminNotificationsScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
 
-        {/* FAB */}
         {!showForm && (
           <TouchableOpacity style={styles.fab} onPress={handleAdd} activeOpacity={0.85}>
             <IconSymbol
@@ -593,7 +557,8 @@ const styles = StyleSheet.create({
   },
   submitButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   emptyState: { alignItems: 'center', paddingVertical: 60 },
-  emptyStateText: { fontSize: 16, color: colors.textSecondary, marginTop: 16 },
+  emptyStateText: { fontSize: 16, color: colors.textSecondary, marginTop: 16, fontWeight: '600' },
+  emptyStateSubtext: { fontSize: 13, color: colors.textSecondary, marginTop: 6 },
   notifCard: {
     backgroundColor: colors.card,
     borderRadius: 12,

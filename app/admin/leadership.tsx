@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api';
 import {
   View,
   Text,
@@ -19,44 +19,15 @@ import {
   Image,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface LeadershipMember {
   id: string;
-  name: string;
-  position: string;
-  phone?: string;
-  email?: string;
-  address?: string;
-  location?: string;
-  photoUrl?: string;
-  order?: number;
-}
-
-async function getAdminPassword(): Promise<string> {
-  const pw = await AsyncStorage.getItem('admin_password');
-  return pw || '';
-}
-
-async function adminFetch(endpoint: string, options: RequestInit = {}): Promise<any> {
-  const password = await getAdminPassword();
-  const url = `${BACKEND_URL}${endpoint}`;
-  console.log('[AdminLeadership] Fetch:', options.method || 'GET', url);
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-admin-password': password,
-      ...(options.headers || {}),
-    },
-  });
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error('[AdminLeadership] API error:', response.status, errText);
-    throw new Error(`Erreur ${response.status}: ${errText}`);
-  }
-  const text = await response.text();
-  return text ? JSON.parse(text) : {};
+  first_name: string;
+  last_name: string;
+  role: string;
+  photo_url?: string;
+  bio?: string;
+  order_index?: number;
 }
 
 const styles = StyleSheet.create({
@@ -74,9 +45,8 @@ const styles = StyleSheet.create({
   memberAvatarInitial: { fontSize: 22, fontWeight: '700', color: colors.primary },
   memberCardInfo: { flex: 1 },
   memberName: { fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 2 },
-  memberPosition: { fontSize: 15, color: colors.primary, fontWeight: '600' },
-  memberInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8 },
-  memberInfoText: { fontSize: 13, color: colors.textSecondary, flex: 1 },
+  memberRole: { fontSize: 15, color: colors.primary, fontWeight: '600' },
+  memberBio: { fontSize: 13, color: colors.textSecondary, marginTop: 6, lineHeight: 18 },
   memberActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
   actionButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
   editButton: { backgroundColor: colors.primary + '20' },
@@ -92,6 +62,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 20 },
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
   imagePreview: { width: 80, height: 80, borderRadius: 40, marginBottom: 16, alignSelf: 'center' },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
   modalButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
@@ -114,14 +85,12 @@ export default function AdminLeadershipScreen() {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingMember, setEditingMember] = useState<LeadershipMember | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formPosition, setFormPosition] = useState('');
-  const [formPhone, setFormPhone] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formAddress, setFormAddress] = useState('');
-  const [formLocation, setFormLocation] = useState('');
+  const [formFirstName, setFormFirstName] = useState('');
+  const [formLastName, setFormLastName] = useState('');
+  const [formRole, setFormRole] = useState('');
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
-  const [formOrder, setFormOrder] = useState('');
+  const [formBio, setFormBio] = useState('');
+  const [formOrderIndex, setFormOrderIndex] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -129,9 +98,9 @@ export default function AdminLeadershipScreen() {
   }, []);
 
   const loadMembers = async () => {
-    console.log('[AdminLeadership] GET /api/leadership');
+    console.log('[AdminLeadership] GET /api/direction');
     try {
-      const data = await adminFetch('/api/leadership');
+      const data = await apiGet('/api/direction');
       const list = Array.isArray(data) ? data : [];
       console.log('[AdminLeadership] Members loaded:', list.length);
       setMembers(list);
@@ -162,14 +131,12 @@ export default function AdminLeadershipScreen() {
     console.log('[AdminLeadership] User tapped Ajouter member');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingMember(null);
-    setFormName('');
-    setFormPosition('');
-    setFormPhone('');
-    setFormEmail('');
-    setFormAddress('');
-    setFormLocation('');
+    setFormFirstName('');
+    setFormLastName('');
+    setFormRole('');
     setFormPhotoUrl('');
-    setFormOrder('');
+    setFormBio('');
+    setFormOrderIndex('');
     setShowEditModal(true);
   };
 
@@ -177,14 +144,12 @@ export default function AdminLeadershipScreen() {
     console.log('[AdminLeadership] User tapped Modifier member:', item.id);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingMember(item);
-    setFormName(item.name);
-    setFormPosition(item.position);
-    setFormPhone(item.phone || '');
-    setFormEmail(item.email || '');
-    setFormAddress(item.address || '');
-    setFormLocation(item.location || '');
-    setFormPhotoUrl(item.photoUrl || '');
-    setFormOrder(item.order?.toString() || '');
+    setFormFirstName(item.first_name || '');
+    setFormLastName(item.last_name || '');
+    setFormRole(item.role || '');
+    setFormPhotoUrl(item.photo_url || '');
+    setFormBio(item.bio || '');
+    setFormOrderIndex(item.order_index?.toString() || '');
     setShowEditModal(true);
   };
 
@@ -195,8 +160,8 @@ export default function AdminLeadershipScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!formName.trim() || !formPosition.trim()) {
-      showModalFunc('Erreur', 'Veuillez remplir le nom et le poste.', 'warning');
+    if (!formFirstName.trim() || !formLastName.trim() || !formRole.trim()) {
+      showModalFunc('Erreur', 'Veuillez remplir le prénom, le nom et le rôle.', 'warning');
       return;
     }
 
@@ -204,31 +169,23 @@ export default function AdminLeadershipScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
-    const memberData: any = {
-      name: formName.trim(),
-      position: formPosition.trim(),
+    const memberData: Record<string, any> = {
+      first_name: formFirstName.trim(),
+      last_name: formLastName.trim(),
+      role: formRole.trim(),
     };
-    if (formPhone.trim()) memberData.phone = formPhone.trim();
-    if (formEmail.trim()) memberData.email = formEmail.trim();
-    if (formAddress.trim()) memberData.address = formAddress.trim();
-    if (formLocation.trim()) memberData.location = formLocation.trim();
-    if (formPhotoUrl.trim()) memberData.photoUrl = formPhotoUrl.trim();
-    if (formOrder.trim()) memberData.order = parseInt(formOrder.trim(), 10);
+    if (formPhotoUrl.trim()) memberData.photo_url = formPhotoUrl.trim();
+    if (formBio.trim()) memberData.bio = formBio.trim();
+    if (formOrderIndex.trim()) memberData.order_index = parseInt(formOrderIndex.trim(), 10);
 
     try {
       if (editingMember) {
-        console.log('[AdminLeadership] PUT /api/leadership/' + editingMember.id);
-        await adminFetch(`/api/leadership/${editingMember.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(memberData),
-        });
+        console.log('[AdminLeadership] PUT /api/direction/' + editingMember.id, memberData);
+        await apiPut(`/api/direction/${editingMember.id}`, memberData);
         console.log('[AdminLeadership] Member updated successfully');
       } else {
-        console.log('[AdminLeadership] POST /api/leadership');
-        await adminFetch('/api/leadership', {
-          method: 'POST',
-          body: JSON.stringify(memberData),
-        });
+        console.log('[AdminLeadership] POST /api/direction', memberData);
+        await apiPost('/api/direction', memberData);
         console.log('[AdminLeadership] Member created successfully');
       }
 
@@ -253,9 +210,9 @@ export default function AdminLeadershipScreen() {
       'Êtes-vous sûr de vouloir supprimer ce membre de la direction?',
       'confirm',
       async () => {
-        console.log('[AdminLeadership] DELETE /api/leadership/' + id);
+        console.log('[AdminLeadership] DELETE /api/direction/' + id);
         try {
-          await adminFetch(`/api/leadership/${id}`, { method: 'DELETE', body: JSON.stringify({}) });
+          await apiDelete(`/api/direction/${id}`);
           console.log('[AdminLeadership] Member deleted successfully');
           await loadMembers();
           showModalFunc('Succès', 'Membre supprimé avec succès!', 'success');
@@ -302,49 +259,26 @@ export default function AdminLeadershipScreen() {
             </View>
           ) : (
             members.map((member) => {
-              const initial = member.name.charAt(0).toUpperCase();
+              const fullName = `${member.first_name} ${member.last_name}`.trim();
+              const initial = (member.first_name || member.last_name || '?').charAt(0).toUpperCase();
               return (
                 <View key={member.id} style={styles.memberCard}>
                   <View style={styles.memberCardTop}>
-                    {member.photoUrl ? (
-                      <Image source={{ uri: member.photoUrl }} style={styles.memberAvatar} />
+                    {member.photo_url ? (
+                      <Image source={{ uri: member.photo_url }} style={styles.memberAvatar} />
                     ) : (
                       <View style={styles.memberAvatarPlaceholder}>
                         <Text style={styles.memberAvatarInitial}>{initial}</Text>
                       </View>
                     )}
                     <View style={styles.memberCardInfo}>
-                      <Text style={styles.memberName}>{member.name}</Text>
-                      <Text style={styles.memberPosition}>{member.position}</Text>
+                      <Text style={styles.memberName}>{fullName}</Text>
+                      <Text style={styles.memberRole}>{member.role}</Text>
                     </View>
                   </View>
 
-                  {member.phone ? (
-                    <View style={styles.memberInfo}>
-                      <IconSymbol ios_icon_name="phone" android_material_icon_name="phone" size={16} color={colors.textSecondary} />
-                      <Text style={styles.memberInfoText}>{member.phone}</Text>
-                    </View>
-                  ) : null}
-
-                  {member.email ? (
-                    <View style={styles.memberInfo}>
-                      <IconSymbol ios_icon_name="envelope" android_material_icon_name="email" size={16} color={colors.textSecondary} />
-                      <Text style={styles.memberInfoText}>{member.email}</Text>
-                    </View>
-                  ) : null}
-
-                  {member.location ? (
-                    <View style={styles.memberInfo}>
-                      <IconSymbol ios_icon_name="location" android_material_icon_name="location-on" size={16} color={colors.textSecondary} />
-                      <Text style={styles.memberInfoText}>{member.location}</Text>
-                    </View>
-                  ) : null}
-
-                  {member.address ? (
-                    <View style={styles.memberInfo}>
-                      <IconSymbol ios_icon_name="house" android_material_icon_name="home" size={16} color={colors.textSecondary} />
-                      <Text style={styles.memberInfoText}>{member.address}</Text>
-                    </View>
+                  {member.bio ? (
+                    <Text style={styles.memberBio}>{member.bio}</Text>
                   ) : null}
 
                   <View style={styles.memberActions}>
@@ -395,32 +329,68 @@ export default function AdminLeadershipScreen() {
                   {editingMember ? 'Modifier le membre' : 'Nouveau membre'}
                 </Text>
 
-                <Text style={styles.inputLabel}>Nom complet *</Text>
-                <TextInput style={styles.input} value={formName} onChangeText={setFormName} placeholder="Nom du membre" placeholderTextColor={colors.textSecondary} />
+                <Text style={styles.inputLabel}>Prénom *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formFirstName}
+                  onChangeText={setFormFirstName}
+                  placeholder="Prénom"
+                  placeholderTextColor={colors.textSecondary}
+                />
 
-                <Text style={styles.inputLabel}>Poste *</Text>
-                <TextInput style={styles.input} value={formPosition} onChangeText={setFormPosition} placeholder="Président, Vice-président, etc." placeholderTextColor={colors.textSecondary} />
+                <Text style={styles.inputLabel}>Nom *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formLastName}
+                  onChangeText={setFormLastName}
+                  placeholder="Nom de famille"
+                  placeholderTextColor={colors.textSecondary}
+                />
 
-                <Text style={styles.inputLabel}>Téléphone</Text>
-                <TextInput style={styles.input} value={formPhone} onChangeText={setFormPhone} placeholder="+223 XX XX XX XX" placeholderTextColor={colors.textSecondary} keyboardType="phone-pad" />
-
-                <Text style={styles.inputLabel}>Email</Text>
-                <TextInput style={styles.input} value={formEmail} onChangeText={setFormEmail} placeholder="email@exemple.com" placeholderTextColor={colors.textSecondary} keyboardType="email-address" autoCapitalize="none" />
-
-                <Text style={styles.inputLabel}>Lieu</Text>
-                <TextInput style={styles.input} value={formLocation} onChangeText={setFormLocation} placeholder="Bamako, Mali" placeholderTextColor={colors.textSecondary} />
-
-                <Text style={styles.inputLabel}>Adresse</Text>
-                <TextInput style={styles.input} value={formAddress} onChangeText={setFormAddress} placeholder="Adresse complète" placeholderTextColor={colors.textSecondary} />
+                <Text style={styles.inputLabel}>Rôle / Poste *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formRole}
+                  onChangeText={setFormRole}
+                  placeholder="Président, Vice-président, etc."
+                  placeholderTextColor={colors.textSecondary}
+                />
 
                 <Text style={styles.inputLabel}>URL de la photo (optionnel)</Text>
-                <TextInput style={styles.input} value={formPhotoUrl} onChangeText={setFormPhotoUrl} placeholder="https://..." placeholderTextColor={colors.textSecondary} autoCapitalize="none" keyboardType="url" />
+                <TextInput
+                  style={styles.input}
+                  value={formPhotoUrl}
+                  onChangeText={setFormPhotoUrl}
+                  placeholder="https://..."
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
                 {formPhotoUrl.trim().length > 0 && (
                   <Image source={{ uri: formPhotoUrl.trim() }} style={styles.imagePreview} />
                 )}
 
-                <Text style={styles.inputLabel}>Ordre d'affichage</Text>
-                <TextInput style={styles.input} value={formOrder} onChangeText={setFormOrder} placeholder="1, 2, 3..." placeholderTextColor={colors.textSecondary} keyboardType="number-pad" />
+                <Text style={styles.inputLabel}>Biographie (optionnel)</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formBio}
+                  onChangeText={setFormBio}
+                  placeholder="Courte biographie..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+
+                <Text style={styles.inputLabel}>Ordre d'affichage (optionnel)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formOrderIndex}
+                  onChangeText={setFormOrderIndex}
+                  placeholder="1, 2, 3..."
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
 
                 <View style={styles.modalActions}>
                   <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={handleCancel} disabled={submitting}>
