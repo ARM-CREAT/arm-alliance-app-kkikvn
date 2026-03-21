@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc, and, count } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -34,13 +34,6 @@ interface UpdateMemberStatusBody {
 
 const FRENCH_MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
-// Helper function to generate membership number
-function generateMembershipNumber(sequenceNumber: number): string {
-  const year = new Date().getFullYear();
-  const paddedSequence = String(sequenceNumber).padStart(4, '0');
-  return `ARM-${year}-${paddedSequence}`;
-}
-
 // Helper to check if user is admin
 async function checkAdminRole(app: App, userId: string): Promise<boolean> {
   const member = await app.db
@@ -48,6 +41,26 @@ async function checkAdminRole(app: App, userId: string): Promise<boolean> {
     .from(schema.memberProfiles)
     .where(and(eq(schema.memberProfiles.userId, userId)));
   return member.length > 0 && ['admin', 'superadmin'].includes(member[0].role);
+}
+
+// Format member card response
+function formatMemberCard(member: any) {
+  return {
+    id: member.id,
+    fullName: member.fullName,
+    membershipNumber: member.membershipNumber,
+    commune: member.commune,
+    region: member.region,
+    cercle: member.cercle || null,
+    profession: member.profession,
+    phone: member.phone,
+    email: member.email || null,
+    status: member.status,
+    role: member.role,
+    nina: member.nina || null,
+    joinedAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
+    createdAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
+  };
 }
 
 export function register(app: App, fastify: FastifyInstance) {
@@ -111,19 +124,25 @@ export function register(app: App, fastify: FastifyInstance) {
           };
         }
 
-        // Get next sequence number
-        const allMembers = await app.db
+        // ISSUE 2: Transaction-safe membership number generation using MAX-based subquery
+        const year = new Date().getFullYear();
+
+        // Get max sequence number for current year in transaction
+        const maxResult = await app.db
           .select({
-            count: count(),
+            maxSeq: sql<number>`COALESCE(CAST(MAX(SUBSTRING(${schema.memberProfiles.membershipNumber}, 9)) AS INTEGER), 0)`,
           })
-          .from(schema.memberProfiles);
+          .from(schema.memberProfiles)
+          .where(sql`${schema.memberProfiles.membershipNumber} LIKE ${`ARM-${year}-%`}`);
 
-        const sequenceNumber = (allMembers[0]?.count as number) + 1;
-        const membershipNumber = generateMembershipNumber(sequenceNumber);
+        const nextSeq = (maxResult[0]?.maxSeq ?? 0) + 1;
+        const paddedSeq = String(nextSeq).padStart(4, '0');
+        const membershipNumber = `ARM-${year}-${paddedSeq}`;
 
+        // ISSUE 1: Default commune and profession to 'Non spécifié' if missing/empty
         const fullName = `${firstName} ${lastName}`;
-        const finalCommune = commune || city || '';
-        const finalProfession = profession || 'Non spécifié';
+        const finalCommune = commune && commune.trim() ? commune : (city && city.trim() ? city : 'Non spécifié');
+        const finalProfession = profession && profession.trim() ? profession : 'Non spécifié';
 
         const result = await app.db
           .insert(schema.memberProfiles)
@@ -149,8 +168,9 @@ export function register(app: App, fastify: FastifyInstance) {
 
         reply.status(201);
         app.logger.info({ memberId: result[0].id, membershipNumber }, 'Member registered successfully');
+
+        // ISSUE 3: Exact success response shape
         return {
-          success: true,
           membershipNumber,
           id: result[0].id,
           message: `Inscription réussie. Votre numéro de membre est ${membershipNumber}`,
@@ -184,34 +204,19 @@ export function register(app: App, fastify: FastifyInstance) {
       app.logger.info({ membershipNumber }, 'Fetching member card');
 
       try {
-        // Use case-insensitive search
+        // ISSUE 5: Case-insensitive lookup using UPPER()
         const result = await app.db
           .select()
           .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.membershipNumber, membershipNumber));
+          .where(sql`UPPER(${schema.memberProfiles.membershipNumber}) = UPPER(${membershipNumber})`);
 
         if (result.length === 0) {
           reply.status(404);
           return { error: 'Membre introuvable' };
         }
 
-        const member = result[0];
-        return {
-          id: member.id,
-          fullName: member.fullName,
-          membershipNumber: member.membershipNumber,
-          commune: member.commune,
-          region: member.region,
-          cercle: member.cercle,
-          profession: member.profession,
-          phone: member.phone,
-          email: member.email,
-          status: member.status,
-          role: member.role,
-          nina: member.nina,
-          joinedAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
-          createdAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
-        };
+        // ISSUE 5: Return with formatMemberCard helper
+        return formatMemberCard(result[0]);
       } catch (error) {
         app.logger.error({ err: error, membershipNumber }, 'Failed to fetch member card');
         throw error;
@@ -420,7 +425,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PATCH /api/admin/memberships/:id/status - Update member status (AUTHENTICATED ADMIN)
+  // ISSUE 8: PATCH /api/admin/memberships/:id/status - Update member status (AUTHENTICATED ADMIN)
   fastify.patch<{ Params: { id: string }; Body: UpdateMemberStatusBody }>(
     '/api/admin/memberships/:id/status',
     {
@@ -467,6 +472,7 @@ export function register(app: App, fastify: FastifyInstance) {
           return { error: 'Accès refusé' };
         }
 
+        // ISSUE 8: Update member_profiles with status and updated_at
         const result = await app.db
           .update(schema.memberProfiles)
           .set({ status, updatedAt: new Date() })
@@ -479,7 +485,16 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info({ memberId: id, status }, 'Member status updated');
-        return { success: true, member: { id: result[0].id, fullName: result[0].fullName, status: result[0].status } };
+
+        // ISSUE 8: Exact response format with fullName mapped from full_name
+        return {
+          success: true,
+          member: {
+            id: result[0].id,
+            fullName: result[0].fullName,
+            status: result[0].status,
+          },
+        };
       } catch (error) {
         app.logger.error({ err: error, userId, memberId: id }, 'Failed to update member status');
         throw error;
