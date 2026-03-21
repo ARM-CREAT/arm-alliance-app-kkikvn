@@ -17,9 +17,12 @@ import { authenticatedGet } from '@/utils/api';
 
 interface Stats {
   total: number;
-  active: number;
   pending: number;
-  suspended: number;
+  approved: number;
+  rejected: number;
+  byRegion: { region: string; count: number }[];
+  recentCount: number;
+  thisMonth: number;
 }
 
 interface MonthlyEntry {
@@ -57,29 +60,31 @@ export default function MembershipStatsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({ total: 0, active: 0, pending: 0, suspended: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, approved: 0, rejected: 0, byRegion: [], recentCount: 0, thisMonth: 0 });
   const [monthly, setMonthly] = useState<MonthlyEntry[]>([]);
 
   const loadStats = useCallback(async () => {
-    console.log('[MembershipStats] GET /api/admin/membership-stats');
+    const url = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev/api/members/stats';
+    console.log('[MembershipStats] GET', url);
     setError(null);
     try {
-      const response = await authenticatedGet<{
-        stats: Stats;
-        monthlyRegistrations: MonthlyEntry[];
-      }>('/api/admin/membership-stats');
-
-      console.log('[MembershipStats] Stats loaded:', JSON.stringify(response));
-
-      const s = response?.stats ?? { total: 0, active: 0, pending: 0, suspended: 0 };
-      const m = response?.monthlyRegistrations ?? [];
+      const response = await fetch(url);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+      }
+      const data: Stats = await response.json();
+      console.log('[MembershipStats] Stats loaded:', JSON.stringify(data));
       setStats({
-        total: Number(s.total) || 0,
-        active: Number(s.active) || 0,
-        pending: Number(s.pending) || 0,
-        suspended: Number(s.suspended) || 0,
+        total: Number(data.total) || 0,
+        pending: Number(data.pending) || 0,
+        approved: Number(data.approved) || 0,
+        rejected: Number(data.rejected) || 0,
+        byRegion: Array.isArray(data.byRegion) ? data.byRegion : [],
+        recentCount: Number(data.recentCount) || 0,
+        thisMonth: Number(data.thisMonth) || 0,
       });
-      setMonthly(m);
+      setMonthly([]);
     } catch (err: any) {
       console.error('[MembershipStats] Error loading stats:', err);
       setError(err.message || 'Impossible de charger les statistiques.');
@@ -170,13 +175,6 @@ export default function MembershipStatsScreen() {
                   iconColor={colors.primary}
                 />
                 <StatCard
-                  icon_ios="checkmark.circle.fill"
-                  icon_android="check-circle"
-                  label="Membres actifs"
-                  value={stats.active}
-                  iconColor="#34C759"
-                />
-                <StatCard
                   icon_ios="clock.fill"
                   icon_android="schedule"
                   label="En attente"
@@ -184,34 +182,54 @@ export default function MembershipStatsScreen() {
                   iconColor="#FF9500"
                 />
                 <StatCard
+                  icon_ios="checkmark.circle.fill"
+                  icon_android="check-circle"
+                  label="Approuvés"
+                  value={stats.approved}
+                  iconColor="#34C759"
+                />
+                <StatCard
                   icon_ios="xmark.circle.fill"
                   icon_android="cancel"
-                  label="Suspendus"
-                  value={stats.suspended}
+                  label="Rejetés"
+                  value={stats.rejected}
                   iconColor="#FF3B30"
+                />
+                <StatCard
+                  icon_ios="calendar"
+                  icon_android="calendar-today"
+                  label="Nouveaux ce mois"
+                  value={stats.thisMonth}
+                  iconColor="#007AFF"
+                />
+                <StatCard
+                  icon_ios="clock.arrow.circlepath"
+                  icon_android="history"
+                  label="Récents (30j)"
+                  value={stats.recentCount}
+                  iconColor="#AF52DE"
                 />
               </View>
 
-              {/* Bar Chart */}
-              {monthly.length > 0 && (
+              {/* By Region */}
+              {stats.byRegion.length > 0 && (
                 <>
-                  <Text style={styles.sectionTitle}>Inscriptions mensuelles</Text>
-                  <View style={styles.chartContainer}>
-                    <View style={styles.chartBars}>
-                      {monthly.map((item, index) => {
-                        const count = Number(item.count) || 0;
-                        const barHeight = Math.max(Math.round((count / maxCount) * 100), 4);
-                        const countLabel = String(count);
-                        const monthLabel = String(item.month);
-                        return (
-                          <View key={index} style={styles.barWrapper}>
-                            <Text style={styles.barValue}>{countLabel}</Text>
-                            <View style={[styles.bar, { height: barHeight }]} />
-                            <Text style={styles.barLabel}>{monthLabel}</Text>
+                  <Text style={styles.sectionTitle}>Membres par région</Text>
+                  <View style={styles.listContainer}>
+                    {stats.byRegion.map((item, index) => {
+                      const regionName = String(item.region || 'Inconnue');
+                      const regionCount = String(Number(item.count) || 0);
+                      const isLast = index === stats.byRegion.length - 1;
+                      return (
+                        <View key={index} style={[styles.listRow, isLast && styles.listRowLast]}>
+                          <View style={styles.listRowLeft}>
+                            <IconSymbol ios_icon_name="mappin.circle.fill" android_material_icon_name="place" size={20} color={colors.primary} />
+                            <Text style={styles.listRowLabel}>{regionName}</Text>
                           </View>
-                        );
-                      })}
-                    </View>
+                          <Text style={[styles.listRowValue, { color: colors.primary }]}>{regionCount}</Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 </>
               )}
@@ -222,9 +240,9 @@ export default function MembershipStatsScreen() {
                 <View style={styles.listRow}>
                   <View style={styles.listRowLeft}>
                     <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={20} color="#34C759" />
-                    <Text style={styles.listRowLabel}>Membres actifs</Text>
+                    <Text style={styles.listRowLabel}>Approuvés</Text>
                   </View>
-                  <Text style={[styles.listRowValue, { color: '#34C759' }]}>{String(stats.active)}</Text>
+                  <Text style={[styles.listRowValue, { color: '#34C759' }]}>{String(stats.approved)}</Text>
                 </View>
                 <View style={styles.listRow}>
                   <View style={styles.listRowLeft}>
@@ -236,9 +254,9 @@ export default function MembershipStatsScreen() {
                 <View style={[styles.listRow, styles.listRowLast]}>
                   <View style={styles.listRowLeft}>
                     <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color="#FF3B30" />
-                    <Text style={styles.listRowLabel}>Suspendus</Text>
+                    <Text style={styles.listRowLabel}>Rejetés</Text>
                   </View>
-                  <Text style={[styles.listRowValue, { color: '#FF3B30' }]}>{String(stats.suspended)}</Text>
+                  <Text style={[styles.listRowValue, { color: '#FF3B30' }]}>{String(stats.rejected)}</Text>
                 </View>
               </View>
             </>
