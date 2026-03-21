@@ -18,7 +18,7 @@ import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
-import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api';
+import { BACKEND_URL, apiPost, apiPut, apiDelete } from '@/utils/api';
 
 interface NotificationItem {
   id: string;
@@ -84,15 +84,20 @@ export default function AdminNotificationsScreen() {
   const [formPublished, setFormPublished] = useState(false);
 
   const loadNotifications = useCallback(async () => {
-    console.log('[AdminNotifications] GET /api/notifications');
+    console.log('[AdminNotifications] GET /api/notifications (public)');
     try {
-      const data = await apiGet('/api/notifications');
+      const res = await fetch(`${BACKEND_URL}/api/notifications`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erreur ${res.status}: ${text}`);
+      }
+      const data = await res.json();
       const list: NotificationItem[] = Array.isArray(data) ? data : [];
       console.log('[AdminNotifications] Chargées:', list.length, 'éléments');
       setNotifications(list);
     } catch (err: any) {
       console.error('[AdminNotifications] Erreur de chargement:', err);
-      Alert.alert('Erreur', 'Impossible de charger les notifications: ' + err.message);
+      Alert.alert('Erreur', 'Impossible de charger les notifications. Veuillez réessayer.');
     } finally {
       setLoading(false);
     }
