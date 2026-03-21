@@ -351,3 +351,17 @@ export const contactMessages = pgTable('contact_messages', {
   status: text('status').notNull().default('unread'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Notifications table - Push notifications and announcements
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  type: text('type').notNull(), // 'public', 'militants', 'all'
+  category: text('category').notNull(), // 'actualite', 'evenement', 'annonce', 'urgent'
+  imageUrl: text('image_url'),
+  isPublished: boolean('is_published').notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

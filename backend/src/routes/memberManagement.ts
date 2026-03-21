@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc, and, or, isNull } from 'drizzle-orm';
+import { eq, desc, and, count } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -7,14 +7,14 @@ interface RegisterMemberBody {
   firstName: string;
   lastName: string;
   phone: string;
+  email?: string;
   city?: string;
   region?: string;
   cercle?: string;
   commune?: string;
   nina?: string;
-  profession: string;
+  profession?: string;
   motivation?: string;
-  email?: string;
 }
 
 interface InitiateCotisationBody {
@@ -32,7 +32,6 @@ interface UpdateMemberStatusBody {
   status: 'active' | 'pending' | 'suspended' | 'rejected';
 }
 
-
 const FRENCH_MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
 
 // Helper function to generate membership number
@@ -47,9 +46,8 @@ async function checkAdminRole(app: App, userId: string): Promise<boolean> {
   const member = await app.db
     .select()
     .from(schema.memberProfiles)
-    .where(and(eq(schema.memberProfiles.userId, userId),
-               or(eq(schema.memberProfiles.role, 'admin'), eq(schema.memberProfiles.role, 'superadmin'))));
-  return member.length > 0;
+    .where(and(eq(schema.memberProfiles.userId, userId)));
+  return member.length > 0 && ['admin', 'superadmin'].includes(member[0].role);
 }
 
 export function register(app: App, fastify: FastifyInstance) {
@@ -68,6 +66,7 @@ export function register(app: App, fastify: FastifyInstance) {
             firstName: { type: 'string' },
             lastName: { type: 'string' },
             phone: { type: 'string' },
+            email: { type: 'string' },
             city: { type: 'string' },
             region: { type: 'string' },
             cercle: { type: 'string' },
@@ -75,44 +74,56 @@ export function register(app: App, fastify: FastifyInstance) {
             nina: { type: 'string' },
             profession: { type: 'string' },
             motivation: { type: 'string' },
-            email: { type: 'string' },
           },
-          required: ['firstName', 'lastName', 'phone', 'profession'],
+          required: ['firstName', 'lastName', 'phone'],
         },
         response: {
           201: { type: 'object' },
           400: { type: 'object' },
+          409: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
-      const { firstName, lastName, phone, city, region, cercle, commune, nina, profession, motivation, email } = request.body as any;
+      const { firstName, lastName, phone, email, city, region, cercle, commune, nina, profession, motivation } = request.body;
 
-      if (!firstName || !lastName || !phone || !profession) {
+      // Validate required fields
+      if (!firstName || !lastName || !phone) {
         reply.status(400);
-        return { error: 'Champs requis manquants: firstName, lastName, phone, profession' };
-      }
-
-      const finalCommune = commune || city;
-      if (!finalCommune) {
-        reply.status(400);
-        return { error: 'Champs requis: commune ou city' };
+        return { error: 'firstName, lastName et phone sont requis' };
       }
 
       app.logger.info({ firstName, lastName, phone }, 'New member registration');
 
       try {
-        // Get next sequence number for current year
-        const year = new Date().getFullYear();
-        const existingThisYear = await app.db
+        // Check for duplicate phone
+        const existing = await app.db
           .select()
           .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.membershipNumber, `ARM-${year}-%`));
+          .where(eq(schema.memberProfiles.phone, phone));
 
-        const sequenceNumber = existingThisYear.length + 1;
+        if (existing.length > 0) {
+          app.logger.warn({ phone }, 'Phone already registered');
+          reply.status(409);
+          return {
+            error: 'Un membre avec ce numéro de téléphone existe déjà',
+            membershipNumber: existing[0].membershipNumber,
+          };
+        }
+
+        // Get next sequence number
+        const allMembers = await app.db
+          .select({
+            count: count(),
+          })
+          .from(schema.memberProfiles);
+
+        const sequenceNumber = (allMembers[0]?.count as number) + 1;
         const membershipNumber = generateMembershipNumber(sequenceNumber);
 
         const fullName = `${firstName} ${lastName}`;
+        const finalCommune = commune || city || '';
+        const finalProfession = profession || 'Non spécifié';
 
         const result = await app.db
           .insert(schema.memberProfiles)
@@ -121,13 +132,13 @@ export function register(app: App, fastify: FastifyInstance) {
             lastName,
             fullName,
             phone,
+            email: email || null,
             commune: finalCommune,
             region: region || null,
             cercle: cercle || null,
             nina: nina || null,
-            profession,
+            profession: finalProfession,
             motivation: motivation || null,
-            email: email || null,
             membershipNumber,
             qrCode: membershipNumber,
             status: 'pending',
@@ -136,9 +147,14 @@ export function register(app: App, fastify: FastifyInstance) {
           })
           .returning();
 
-        app.logger.info({ memberId: result[0].id, membershipNumber }, 'Member registered successfully');
         reply.status(201);
-        return { membershipNumber, id: result[0].id, message: 'Inscription réussie' };
+        app.logger.info({ memberId: result[0].id, membershipNumber }, 'Member registered successfully');
+        return {
+          success: true,
+          membershipNumber,
+          id: result[0].id,
+          message: `Inscription réussie. Votre numéro de membre est ${membershipNumber}`,
+        };
       } catch (error) {
         app.logger.error({ err: error, phone }, 'Failed to register member');
         throw error;
@@ -168,6 +184,7 @@ export function register(app: App, fastify: FastifyInstance) {
       app.logger.info({ membershipNumber }, 'Fetching member card');
 
       try {
+        // Use case-insensitive search
         const result = await app.db
           .select()
           .from(schema.memberProfiles)
@@ -180,15 +197,18 @@ export function register(app: App, fastify: FastifyInstance) {
 
         const member = result[0];
         return {
+          id: member.id,
           fullName: member.fullName,
           membershipNumber: member.membershipNumber,
           commune: member.commune,
+          region: member.region,
+          cercle: member.cercle,
           profession: member.profession,
           phone: member.phone,
           email: member.email,
           status: member.status,
           role: member.role,
-          region: member.region,
+          nina: member.nina,
           joinedAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
           createdAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
         };
@@ -512,8 +532,7 @@ export function register(app: App, fastify: FastifyInstance) {
         allMembers.forEach((m: any) => {
           const memberDate = m.createdAt instanceof Date ? m.createdAt : new Date(m.createdAt);
           const month = memberDate.getMonth();
-          const monthYear = `${month}-${memberDate.getFullYear()}`;
-          if (monthlyData.has(month) && memberDate.getFullYear() === now.getFullYear()) {
+          if (memberDate.getFullYear() === now.getFullYear()) {
             monthlyData.set(month, (monthlyData.get(month) || 0) + 1);
           }
         });
@@ -539,5 +558,4 @@ export function register(app: App, fastify: FastifyInstance) {
       }
     }
   );
-
 }
