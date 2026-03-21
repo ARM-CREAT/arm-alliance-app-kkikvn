@@ -137,11 +137,16 @@ export const memberProfiles = pgTable('member_profiles', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id'), // Foreign key to users table (for authenticated members)
   fullName: text('full_name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
   nina: text('nina'), // National ID number
   commune: text('commune').notNull(),
+  region: text('region'),
+  cercle: text('cercle'),
   profession: text('profession').notNull(),
   phone: text('phone').notNull(),
   email: text('email'),
+  motivation: text('motivation'),
   membershipNumber: text('membership_number').notNull().unique(), // ARM-YYYY-XXXXX
   qrCode: text('qr_code').notNull(), // QR code data (no unique constraint - visual representation only)
   status: text('status').notNull().default('pending'), // pending, active, suspended
@@ -204,6 +209,14 @@ export const internalMessages = pgTable('internal_messages', {
   targetCommune: text('target_commune'),
   sentAt: timestamp('sent_at').notNull().defaultNow(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Message Reads - Track which members have read messages
+export const messageReads = pgTable('message_reads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  messageId: uuid('message_id').notNull().references(() => internalMessages.id, { onDelete: 'cascade' }),
+  memberProfileId: uuid('member_profile_id').notNull().references(() => memberProfiles.id, { onDelete: 'cascade' }),
+  readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // Election Results - Module Sentinelle
