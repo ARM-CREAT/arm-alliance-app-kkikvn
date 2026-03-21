@@ -80,7 +80,6 @@ export function register(app: App, fastify: FastifyInstance) {
             lastName: { type: 'string' },
             phone: { type: 'string' },
             email: { type: 'string' },
-            city: { type: 'string' },
             region: { type: 'string' },
             cercle: { type: 'string' },
             commune: { type: 'string' },
@@ -94,70 +93,79 @@ export function register(app: App, fastify: FastifyInstance) {
           201: { type: 'object' },
           400: { type: 'object' },
           409: { type: 'object' },
+          500: { type: 'object' },
         },
       },
     },
     async (request, reply) => {
-      const { firstName, lastName, phone, email, city, region, cercle, commune, nina, profession, motivation } = request.body;
+      const { firstName, lastName, phone, email, region, cercle, commune, nina, profession, motivation } = request.body;
 
-      // Validate required fields
-      if (!firstName || !lastName || !phone) {
+      // Step 2: Validate required fields
+      if (!firstName || firstName.toString().trim() === '') {
         reply.status(400);
-        return { error: 'firstName, lastName et phone sont requis' };
+        return { error: 'firstName requis' };
+      }
+
+      if (!lastName || lastName.toString().trim() === '') {
+        reply.status(400);
+        return { error: 'lastName requis' };
+      }
+
+      if (!phone || phone.toString().trim() === '') {
+        reply.status(400);
+        return { error: 'phone requis' };
       }
 
       app.logger.info({ firstName, lastName, phone }, 'New member registration');
 
       try {
-        // Check for duplicate phone
-        const existing = await app.db
-          .select()
-          .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.phone, phone));
+        // Step 3: Apply defaults for NOT NULL columns
+        const finalCommune = commune && commune.trim() ? commune : 'Non spécifié';
+        const finalProfession = profession && profession.trim() ? profession : 'Non spécifié';
 
-        if (existing.length > 0) {
-          app.logger.warn({ phone }, 'Phone already registered');
-          reply.status(409);
-          return {
-            error: 'Un membre avec ce numéro de téléphone existe déjà',
-            membershipNumber: existing[0].membershipNumber,
-          };
-        }
-
-        // ISSUE 2: Transaction-safe membership number generation using MAX-based subquery
+        // Step 4: Generate membership_number safely with transaction
         const year = new Date().getFullYear();
 
-        // Get max sequence number for current year in transaction
+        // Query for max membership number for current year
         const maxResult = await app.db
           .select({
-            maxSeq: sql<number>`COALESCE(CAST(MAX(SUBSTRING(${schema.memberProfiles.membershipNumber}, 9)) AS INTEGER), 0)`,
+            maxNum: sql<string>`MAX(${schema.memberProfiles.membershipNumber})`,
           })
           .from(schema.memberProfiles)
           .where(sql`${schema.memberProfiles.membershipNumber} LIKE ${`ARM-${year}-%`}`);
 
-        const nextSeq = (maxResult[0]?.maxSeq ?? 0) + 1;
+        let nextSeq = 1;
+        if (maxResult[0]?.maxNum) {
+          // Parse the numeric suffix from "ARM-YYYY-NNNN"
+          const parts = maxResult[0].maxNum.split('-');
+          if (parts.length === 3) {
+            const currentSeq = parseInt(parts[2], 10);
+            if (!isNaN(currentSeq)) {
+              nextSeq = currentSeq + 1;
+            }
+          }
+        }
+
         const paddedSeq = String(nextSeq).padStart(4, '0');
         const membershipNumber = `ARM-${year}-${paddedSeq}`;
 
-        // ISSUE 1: Default commune and profession to 'Non spécifié' if missing/empty
+        // Step 5: Insert into member_profiles
         const fullName = `${firstName} ${lastName}`;
-        const finalCommune = commune && commune.trim() ? commune : (city && city.trim() ? city : 'Non spécifié');
-        const finalProfession = profession && profession.trim() ? profession : 'Non spécifié';
 
         const result = await app.db
           .insert(schema.memberProfiles)
           .values({
-            firstName,
-            lastName,
             fullName,
-            phone,
-            email: email || null,
+            firstName: firstName.toString().trim(),
+            lastName: lastName.toString().trim(),
+            phone: phone.toString().trim(),
+            email: email ? email.toString().trim() : null,
             commune: finalCommune,
-            region: region || null,
-            cercle: cercle || null,
-            nina: nina || null,
+            region: region ? region.toString().trim() : null,
+            cercle: cercle ? cercle.toString().trim() : null,
             profession: finalProfession,
-            motivation: motivation || null,
+            nina: nina ? nina.toString().trim() : null,
+            motivation: motivation ? motivation.toString().trim() : null,
             membershipNumber,
             qrCode: membershipNumber,
             status: 'pending',
@@ -169,15 +177,46 @@ export function register(app: App, fastify: FastifyInstance) {
         reply.status(201);
         app.logger.info({ memberId: result[0].id, membershipNumber }, 'Member registered successfully');
 
-        // ISSUE 3: Exact success response shape
+        // Step 7: Return success response
         return {
           membershipNumber,
           id: result[0].id,
-          message: `Inscription réussie. Votre numéro de membre est ${membershipNumber}`,
+          message: 'Inscription réussie',
         };
-      } catch (error) {
-        app.logger.error({ err: error, phone }, 'Failed to register member');
-        throw error;
+      } catch (error: any) {
+        // Step 8: Comprehensive error handling
+        console.error('POST /api/members/register error:', error);
+        console.error('Error message:', error?.message);
+        console.error('Error code:', error?.code);
+
+        // Step 6: Handle unique constraint violation on phone
+        if (error?.code === '23505') {
+          app.logger.warn({ phone }, 'Phone already registered (constraint violation)');
+          try {
+            const existing = await app.db
+              .select({ membershipNumber: schema.memberProfiles.membershipNumber })
+              .from(schema.memberProfiles)
+              .where(eq(schema.memberProfiles.phone, phone))
+              .limit(1);
+
+            if (existing.length > 0) {
+              reply.status(409);
+              return {
+                error: 'Déjà inscrit',
+                membershipNumber: existing[0].membershipNumber,
+              };
+            }
+          } catch (queryError) {
+            app.logger.error({ err: queryError }, 'Failed to query existing member after constraint violation');
+          }
+        }
+
+        // Default server error response
+        reply.status(500);
+        return {
+          error: 'Erreur serveur',
+          details: error?.message || 'Unknown error',
+        };
       }
     }
   );
