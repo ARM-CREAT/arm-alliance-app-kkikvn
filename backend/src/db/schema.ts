@@ -13,13 +13,15 @@ import {
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
   email: text('email').notNull().unique(),
   phone: text('phone').notNull(),
   region: text('region').notNull(),
   cercle: text('cercle'),
   commune: text('commune'),
   membershipDate: timestamp('membership_date').notNull().defaultNow(),
-  status: text('status').notNull().default('pending'), // pending, approved, rejected
+  status: text('status').notNull().default('pending'), // pending, approved, rejected, active, inactive
 });
 
 // Leadership table - Party leadership positions
