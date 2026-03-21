@@ -1,314 +1,299 @@
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
-  StyleSheet,
   View,
   Text,
   ScrollView,
-  ActivityIndicator,
+  StyleSheet,
   TouchableOpacity,
-} from "react-native";
-import { Stack } from "expo-router";
-import { IconSymbol } from "@/components/IconSymbol";
-import { colors } from "@/styles/commonStyles";
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
-interface ProgramSection {
-  id?: string;
-  title: string;
-  description: string;
-}
-
-const STATIC_PROGRAM: ProgramSection[] = [
+const STATIC_PROGRAM = [
   {
-    title: "Démocratie & Gouvernance",
+    id: '1',
+    icon: 'people-outline',
+    title: 'Démocratie & Gouvernance',
     description:
-      "Alliance ARM s'engage pour une démocratie forte, des institutions transparentes et une gouvernance au service du peuple malien. Nous défendons l'État de droit, la séparation des pouvoirs et la lutte contre la corruption.",
+      "Alliance ARM s'engage pour une démocratie forte, des institutions transparentes et une gouvernance au service du peuple malien. Nous défendons l'État de droit, la séparation des pouvoirs et la lutte contre la corruption à tous les niveaux de l'État.",
+    color: '#1B5E20',
   },
   {
-    title: "Développement Économique",
+    id: '2',
+    icon: 'trending-up-outline',
+    title: 'Développement Économique',
     description:
-      "Notre programme économique vise à créer des emplois, soutenir l'agriculture, développer les PME et attirer les investissements étrangers. Nous croyons en une économie inclusive qui profite à tous les Maliens.",
+      "Notre programme économique vise à créer des emplois durables, soutenir l'agriculture, développer les PME et attirer les investissements étrangers. Nous croyons en une économie inclusive qui profite à tous les Maliens sans exception.",
+    color: '#E65100',
   },
   {
-    title: "Éducation & Formation",
+    id: '3',
+    icon: 'school-outline',
+    title: 'Éducation & Formation',
     description:
-      "L'éducation est notre priorité. Nous nous engageons à améliorer la qualité de l'enseignement, construire des écoles, former des enseignants qualifiés et garantir l'accès à l'éducation pour tous les enfants maliens.",
+      "L'éducation est notre priorité absolue. Nous nous engageons à améliorer la qualité de l'enseignement, construire des écoles modernes, former des enseignants qualifiés et garantir l'accès à l'éducation pour tous les enfants maliens.",
+    color: '#1565C0',
   },
   {
-    title: "Santé & Protection Sociale",
+    id: '4',
+    icon: 'medkit-outline',
+    title: 'Santé & Protection Sociale',
     description:
-      "Nous voulons un système de santé accessible à tous. Notre programme prévoit la construction d'hôpitaux, le recrutement de personnel médical et la mise en place d'une couverture santé universelle.",
+      "Nous voulons un système de santé accessible à tous les Maliens. Notre programme prévoit la construction d'hôpitaux, le recrutement de personnel médical qualifié et la mise en place d'une couverture santé universelle.",
+    color: '#AD1457',
   },
   {
-    title: "Sécurité & Paix",
+    id: '5',
+    icon: 'shield-outline',
+    title: 'Sécurité & Paix',
     description:
-      "La sécurité du peuple malien est notre engagement premier. Nous travaillerons pour renforcer les forces de défense, promouvoir le dialogue inter-communautaire et restaurer la paix dans toutes les régions du Mali.",
+      "La sécurité du peuple malien est notre engagement premier. Nous travaillerons pour renforcer les forces de défense et de sécurité, promouvoir le dialogue inter-communautaire et restaurer la paix dans toutes les régions du Mali.",
+    color: '#4527A0',
   },
   {
-    title: "Agriculture & Environnement",
+    id: '6',
+    icon: 'leaf-outline',
+    title: 'Agriculture & Environnement',
     description:
-      "Le Mali est une terre agricole. Nous soutiendrons les agriculteurs avec des équipements modernes, des semences améliorées et des systèmes d'irrigation. Nous protégerons aussi l'environnement pour les générations futures.",
+      "Le Mali est une terre agricole. Nous soutiendrons les agriculteurs avec des équipements modernes, des semences améliorées et des systèmes d'irrigation performants. Nous protégerons aussi l'environnement pour les générations futures.",
+    color: '#2E7D32',
   },
 ];
 
+interface ProgramItem {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  color: string;
+}
+
+const ICON_MAP: Record<number, string> = {
+  0: 'people-outline',
+  1: 'trending-up-outline',
+  2: 'school-outline',
+  3: 'medkit-outline',
+  4: 'shield-outline',
+  5: 'leaf-outline',
+};
+
+const COLOR_MAP: Record<number, string> = {
+  0: '#1B5E20',
+  1: '#E65100',
+  2: '#1565C0',
+  3: '#AD1457',
+  4: '#4527A0',
+  5: '#2E7D32',
+};
+
 export default function ProgramScreen() {
-  const [sections, setSections] = useState<ProgramSection[]>([]);
+  const router = useRouter();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [programData, setProgramData] = useState<ProgramItem[]>(STATIC_PROGRAM);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('[ProgramScreen] Chargement du programme politique');
     fetchProgram();
   }, []);
 
   const fetchProgram = async () => {
     console.log('[ProgramScreen] GET /api/program');
+    setLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/program`);
-      if (!res.ok) {
-        const text = await res.text();
-        console.warn('[ProgramScreen] Réponse non-OK:', res.status, text);
-        setSections(STATIC_PROGRAM);
-        return;
-      }
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        console.log('[ProgramScreen] Programme chargé depuis API:', data.length, 'sections');
-        setSections(data);
+      if (res.ok) {
+        const data = await res.json();
+        const sections = data.sections || [];
+        if (sections.length > 0) {
+          const mapped: ProgramItem[] = sections.map((s: any, i: number) => ({
+            id: s.id || String(i + 1),
+            icon: ICON_MAP[i] || 'document-outline',
+            title: s.title,
+            description: s.description,
+            color: COLOR_MAP[i] || '#1B5E20',
+          }));
+          setProgramData(mapped);
+        } else {
+          setProgramData(STATIC_PROGRAM);
+        }
       } else {
-        console.log('[ProgramScreen] API vide, utilisation du contenu statique');
-        setSections(STATIC_PROGRAM);
+        setProgramData(STATIC_PROGRAM);
       }
-    } catch (err) {
-      console.warn('[ProgramScreen] Erreur API, utilisation du contenu statique:', err);
-      setSections(STATIC_PROGRAM);
+    } catch {
+      setProgramData(STATIC_PROGRAM);
     } finally {
       setLoading(false);
     }
   };
 
+  const toggleExpand = (id: string) => {
+    console.log('[ProgramScreen] Carte dépliée:', id);
+    setExpandedId(expandedId === id ? null : id);
+  };
+
   if (loading) {
     return (
-      <>
-        <Stack.Screen
-          options={{
-            title: "Notre Programme",
-            headerShown: true,
-            headerBackTitle: "Retour",
-            headerStyle: { backgroundColor: '#1B5E20' },
-            headerTintColor: '#FFFFFF',
-            headerTitleStyle: { fontWeight: 'bold' },
-          }}
-        />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Chargement du programme...</Text>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notre Programme</Text>
+          <View style={{ width: 40 }} />
         </View>
-      </>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1B5E20" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          title: "Notre Programme",
-          headerShown: true,
-          headerBackTitle: "Retour",
-          headerStyle: { backgroundColor: '#1B5E20' },
-          headerTintColor: '#FFFFFF',
-          headerTitleStyle: { fontWeight: 'bold' },
-        }}
-      />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-      >
-        {/* Hero Header */}
-        <View style={styles.hero}>
-          <View style={styles.heroIconContainer}>
-            <IconSymbol
-              ios_icon_name="doc.text.fill"
-              android_material_icon_name="description"
-              size={40}
-              color="#FFFFFF"
-            />
-          </View>
-          <Text style={styles.heroTitle}>Alliance ARM</Text>
-          <Text style={styles.heroSubtitle}>Notre Programme Politique</Text>
-          <View style={styles.heroSeparator} />
-          <Text style={styles.heroTagline}>
-            Un programme pour un Mali fort, uni et prospère
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => {
+            console.log('[ProgramScreen] Bouton retour appuyé');
+            router.back();
+          }}
+          style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notre Programme</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.introSection}>
+          <Text style={styles.introTitle}>Notre Programme Politique</Text>
+          <Text style={styles.introText}>
+            Découvrez les grandes lignes du programme d'Alliance ARM pour un Mali prospère,
+            démocratique et en paix.
           </Text>
         </View>
 
-        {/* Program Sections */}
-        <View style={styles.sectionsContainer}>
-          {sections.map((section, index) => {
-            const sectionNumber = String(index + 1);
-            return (
-              <View key={section.id || String(index)} style={styles.sectionCard}>
-                <View style={styles.sectionCardHeader}>
-                  <View style={styles.numberCircle}>
-                    <Text style={styles.numberText}>{sectionNumber}</Text>
-                  </View>
-                  <Text style={styles.sectionTitle}>{section.title}</Text>
-                </View>
-                <Text style={styles.sectionDescription}>{section.description}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
+        {programData.map((item) => (
           <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              console.log('[ProgramScreen] Bouton Actualiser appuyé');
-              setLoading(true);
-              fetchProgram();
-            }}
-            activeOpacity={0.8}
-          >
-            <IconSymbol
-              ios_icon_name="arrow.clockwise"
-              android_material_icon_name="refresh"
-              size={16}
-              color={colors.primary}
-            />
-            <Text style={styles.retryButtonText}>Actualiser</Text>
+            key={item.id}
+            style={styles.card}
+            onPress={() => toggleExpand(item.id)}
+            activeOpacity={0.8}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}>
+                <Ionicons name={item.icon as any} size={28} color={item.color} />
+              </View>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Ionicons
+                name={expandedId === item.id ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color="#666"
+              />
+            </View>
+            {expandedId === item.id && (
+              <View style={styles.cardBody}>
+                <Text style={styles.cardDescription}>{item.description}</Text>
+              </View>
+            )}
           </TouchableOpacity>
-        </View>
+        ))}
+
+        <View style={{ height: 40 }} />
       </ScrollView>
-    </>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#f5f5f5',
   },
-  contentContainer: {
-    paddingBottom: 40,
+  header: {
+    backgroundColor: '#1B5E20',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  scrollView: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.textSecondary,
-  },
-  hero: {
+  introSection: {
     backgroundColor: '#1B5E20',
-    alignItems: 'center',
-    paddingTop: 32,
-    paddingBottom: 36,
-    paddingHorizontal: 24,
+    padding: 20,
+    paddingTop: 0,
   },
-  heroIconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+  introTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 8,
   },
-  heroTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  heroSubtitle: {
-    fontSize: 16,
+  introText: {
     color: 'rgba(255,255,255,0.85)',
-    marginBottom: 16,
-  },
-  heroSeparator: {
-    width: 48,
-    height: 2,
-    backgroundColor: '#F4C430',
-    marginBottom: 16,
-    borderRadius: 1,
-  },
-  heroTagline: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.75)',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    lineHeight: 20,
   },
-  sectionsContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
+  card: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
-  sectionCardHeader: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    padding: 16,
+    gap: 12,
   },
-  numberCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1B5E20',
+  iconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    flexShrink: 0,
   },
-  numberText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: colors.text,
+  cardTitle: {
     flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a1a1a',
   },
-  sectionDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  footer: {
-    alignItems: 'center',
-    paddingTop: 8,
+  cardBody: {
+    paddingHorizontal: 16,
     paddingBottom: 16,
+    paddingTop: 0,
   },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    gap: 6,
-  },
-  retryButtonText: {
+  cardDescription: {
     fontSize: 14,
-    color: colors.primary,
-    fontWeight: '600',
+    color: '#555',
+    lineHeight: 22,
   },
 });
