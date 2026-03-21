@@ -32,6 +32,7 @@ import * as settingsRoutes from './routes/settings.js';
 import * as conversationRoutes from './routes/conversations.js';
 import * as extendedProgramRoutes from './routes/programs.js';
 import * as membershipsRoutes from './routes/memberships.js';
+import * as notificationsRoutes from './routes/notifications.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -80,6 +81,7 @@ settingsRoutes.register(app, app.fastify);
 conversationRoutes.register(app, app.fastify);
 extendedProgramRoutes.register(app, app.fastify);
 membershipsRoutes.register(app, app.fastify);
+notificationsRoutes.register(app, app.fastify);
 
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);
@@ -87,6 +89,7 @@ await settingsRoutes.seedSettings(app);
 await eventRoutes.seedEvents(app);
 await leadershipRoutes.seedLeadership(app);
 await extendedProgramRoutes.seedPrograms(app);
+await notificationsRoutes.seedNotifications(app);
 
 // Setup WebSocket signaling for conferences
 import {

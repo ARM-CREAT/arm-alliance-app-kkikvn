@@ -85,6 +85,13 @@
       "when": 1774086219597,
       "tag": "20260321094339_black_steel_serpent",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1774087666461,
+      "tag": "20260321100746_light_vulcan",
+      "breakpoints": true
     }
   ]
 }
