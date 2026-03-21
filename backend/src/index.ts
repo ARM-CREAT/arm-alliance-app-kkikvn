@@ -86,6 +86,7 @@ await conferenceRoutes.seedDefaultConference(app);
 await settingsRoutes.seedSettings(app);
 await eventRoutes.seedEvents(app);
 await leadershipRoutes.seedLeadership(app);
+await extendedProgramRoutes.seedPrograms(app);
 
 // Setup WebSocket signaling for conferences
 import {

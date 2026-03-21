@@ -36,6 +36,8 @@ interface ConfirmCotisationBody {
   transactionId: string;
 }
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
@@ -59,12 +61,19 @@ export function register(app: App, fastify: FastifyInstance) {
           required: ['fullName', 'commune', 'profession', 'phone'],
         },
         response: {
-          200: {
+          201: {
             type: 'object',
             properties: {
-              member: { type: 'object' },
+              success: { type: 'boolean' },
+              message: { type: 'string' },
               membershipNumber: { type: 'string' },
-              qrCode: { type: 'string' },
+            },
+          },
+          409: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              membershipNumber: { type: 'string' },
             },
           },
         },
@@ -123,10 +132,11 @@ export function register(app: App, fastify: FastifyInstance) {
           'Member registered successfully'
         );
 
+        reply.status(201);
         return {
-          member: result[0],
+          success: true,
+          message: 'Inscription réussie',
           membershipNumber,
-          qrCode,
         };
       } catch (error) {
         app.logger.error(
@@ -496,4 +506,66 @@ export function register(app: App, fastify: FastifyInstance) {
       }
     }
   );
+
+  // GET /api/members/profile/:membershipNumber - Get member profile by membership number (public)
+  fastify.get<{ Params: { membershipNumber: string } }>(
+    '/api/members/profile/:membershipNumber',
+    {
+      schema: {
+        description: 'Get member profile by membership number (public)',
+        tags: ['members'],
+        params: {
+          type: 'object',
+          properties: {
+            membershipNumber: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { membershipNumber: string } }>, reply: FastifyReply) => {
+      const { membershipNumber } = request.params;
+      app.logger.info({ membershipNumber }, 'Fetching member profile');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.membershipNumber, membershipNumber));
+
+        if (result.length === 0) {
+          app.logger.warn({ membershipNumber }, 'Member profile not found');
+          reply.status(404);
+          return { success: false, error: 'Member not found' };
+        }
+
+        const member = result[0];
+        app.logger.info({ membershipNumber }, 'Member profile fetched successfully');
+
+        return {
+          success: true,
+          data: {
+            id: member.id,
+            fullName: member.fullName,
+            nina: member.nina || null,
+            commune: member.commune,
+            profession: member.profession,
+            phone: member.phone,
+            email: member.email || null,
+            membershipNumber: member.membershipNumber,
+            status: member.status,
+            role: member.role,
+            createdAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
+          },
+        };
+      } catch (error) {
+        app.logger.error({ err: error, membershipNumber }, 'Failed to fetch member profile');
+        throw error;
+      }
+    }
+  );
+
 }
