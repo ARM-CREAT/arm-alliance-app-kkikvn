@@ -28,13 +28,17 @@ export const members = pgTable('members', {
 export const leadership = pgTable('leadership', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
   position: text('position').notNull(), // président, vice-président, secrétaire général, etc.
   phone: text('phone'),
   email: text('email'),
   address: text('address'),
   location: text('location'),
   photoUrl: text('photo_url'),
+  bio: text('bio'),
   order: integer('order').notNull().default(0),
+  orderIndex: integer('order_index'),
   createdBy: text('created_by'),
 });
 
@@ -116,9 +120,13 @@ export const media = pgTable('media', {
   id: uuid('id').primaryKey().defaultRandom(),
   key: text('key').notNull().unique(), // Storage key from file upload
   fileName: text('file_name').notNull(),
+  title: text('title'),
+  type: text('type'), // image, video, document, etc.
+  category: text('category'),
   mimeType: text('mime_type').notNull(),
   size: integer('size').notNull(),
   url: text('url'),
+  uploadedBy: text('uploaded_by'),
   uploadedAt: timestamp('uploaded_at').notNull().defaultNow(),
 });
 
@@ -359,10 +367,12 @@ export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),
   content: text('content').notNull(),
+  body: text('body'), // Alias for content
   type: text('type').notNull(), // 'public', 'militants', 'all'
   category: text('category').notNull(), // 'actualite', 'evenement', 'annonce', 'urgent'
   imageUrl: text('image_url'),
   isPublished: boolean('is_published').notNull().default(true),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
   createdBy: text('created_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
