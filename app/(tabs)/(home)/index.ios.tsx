@@ -199,6 +199,12 @@ export default function HomeScreen() {
     router.push('/ai-assistant');
   };
 
+  const handleProgram = () => {
+    console.log('[HomeScreen iOS] Bouton Notre Programme appuyé');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/program');
+  };
+
   const handleVoirToutNotifications = () => {
     console.log('[HomeScreen iOS] Bouton Voir tout (notifications) appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -475,6 +481,21 @@ export default function HomeScreen() {
                   />
                   <Text style={styles.actionTitle}>Assistant IA</Text>
                   <Text style={[styles.actionSubtitle, { color: '#1565C0' }]}>Posez vos questions</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionCard, styles.actionCardProgram]}
+                  onPress={handleProgram}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol
+                    ios_icon_name="doc.text"
+                    android_material_icon_name="description"
+                    size={32}
+                    color="#1B5E20"
+                  />
+                  <Text style={styles.actionTitle}>Notre Programme</Text>
+                  <Text style={[styles.actionSubtitle, { color: '#1B5E20' }]}>Programme politique</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -858,6 +879,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#1565C020',
     backgroundColor: '#EEF4FF',
+  },
+  actionCardProgram: {
+    borderWidth: 1.5,
+    borderColor: '#1B5E2020',
+    backgroundColor: '#F1F8F1',
   },
   actionTitle: {
     fontSize: 14,
