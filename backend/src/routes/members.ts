@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or, ilike, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -60,16 +60,17 @@ export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
   // GET /api/members - Get all members (authenticated, admin only)
-  fastify.get<{ Querystring: { status?: string } }>(
+  fastify.get<{ Querystring: { status?: string; search?: string } }>(
     '/api/members',
     {
       schema: {
-        description: 'Get all members (admin only)',
+        description: 'Get all members with optional filtering by status and search',
         tags: ['members'],
         querystring: {
           type: 'object',
           properties: {
-            status: { type: 'string', enum: ['active', 'inactive'] },
+            status: { type: 'string', enum: ['active', 'pending', 'suspended'] },
+            search: { type: 'string', description: 'Search by full name, phone, or commune' },
           },
         },
         response: {
@@ -82,12 +83,19 @@ export function register(app: App, fastify: FastifyInstance) {
                   type: 'object',
                   properties: {
                     id: { type: 'string', format: 'uuid' },
+                    fullName: { type: 'string' },
                     firstName: { type: 'string' },
                     lastName: { type: 'string' },
                     email: { type: 'string' },
                     phone: { type: 'string' },
-                    membershipDate: { type: 'string', format: 'date-time' },
+                    commune: { type: 'string' },
+                    region: { type: 'string' },
+                    cercle: { type: 'string' },
+                    profession: { type: 'string' },
+                    membershipNumber: { type: 'string' },
                     status: { type: 'string' },
+                    role: { type: 'string' },
+                    joinedAt: { type: 'string', format: 'date-time' },
                   },
                 },
               },
@@ -110,9 +118,9 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!session) return;
 
       const userId = session.user.id;
-      const statusFilter = (request.query as any).status;
+      const { status, search } = request.query as { status?: string; search?: string };
 
-      app.logger.info({ userId, statusFilter }, 'Fetching members');
+      app.logger.info({ userId, status, search }, 'Fetching members');
 
       try {
         // Check if user is admin
@@ -127,32 +135,46 @@ export function register(app: App, fastify: FastifyInstance) {
           return { error: 'Accès refusé' };
         }
 
-        // Query members with optional status filter
-        let query = app.db.select().from(schema.members);
+        // Query members from memberProfiles with optional filters
+        let query = app.db.select().from(schema.memberProfiles);
 
-        if (statusFilter && ['active', 'inactive'].includes(statusFilter)) {
-          query = query.where(eq(schema.members.status, statusFilter)) as any;
+        if (status) {
+          query = query.where(eq(schema.memberProfiles.status, status)) as any;
         }
 
-        const result = await query;
+        if (search) {
+          const searchTerm = `%${search}%`;
+          query = query.where(
+            or(
+              ilike(schema.memberProfiles.fullName, searchTerm),
+              ilike(schema.memberProfiles.phone, searchTerm),
+              ilike(schema.memberProfiles.commune, searchTerm)
+            )
+          ) as any;
+        }
+
+        // Order by created_at DESC
+        const result = (await (query.orderBy(desc(schema.memberProfiles.createdAt)) as any)) as any[];
 
         // Format response
-        const members = result.map((member: any) => {
-          const firstName = member.firstName || (member.name.split(' ')[0] || '');
-          const lastName = member.lastName || (member.name.split(' ').slice(1).join(' ') || '');
-
-          return {
-            id: member.id,
-            firstName,
-            lastName,
-            email: member.email,
-            phone: member.phone,
-            membershipDate: member.membershipDate instanceof Date
-              ? member.membershipDate.toISOString()
-              : new Date(member.membershipDate).toISOString(),
-            status: member.status,
-          };
-        });
+        const members = result.map((member: any) => ({
+          id: member.id,
+          fullName: member.fullName,
+          firstName: member.firstName,
+          lastName: member.lastName,
+          email: member.email,
+          phone: member.phone,
+          commune: member.commune,
+          region: member.region,
+          cercle: member.cercle,
+          profession: member.profession,
+          membershipNumber: member.membershipNumber,
+          status: member.status,
+          role: member.role,
+          joinedAt: member.createdAt instanceof Date
+            ? member.createdAt.toISOString()
+            : new Date(member.createdAt).toISOString(),
+        }));
 
         app.logger.info({ count: members.length }, 'Members fetched');
         return {

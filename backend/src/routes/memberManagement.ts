@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc, and, sql, count as countFn, gte, or } from 'drizzle-orm';
+import { eq, desc, and, sql, count as countFn, gte, or, ilike } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -30,6 +30,19 @@ interface ConfirmCotisationBody {
 
 interface UpdateMemberStatusBody {
   status: 'active' | 'pending' | 'suspended' | 'rejected';
+}
+
+interface UpdateMemberBody {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  commune?: string;
+  region?: string;
+  cercle?: string;
+  profession?: string;
+  nina?: string;
+  motivation?: string;
 }
 
 const FRENCH_MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -194,7 +207,7 @@ export function register(app: App, fastify: FastifyInstance) {
           app.logger.warn({ phone }, 'Phone already registered (constraint violation)');
           try {
             const existing = await app.db
-              .select({ membershipNumber: schema.memberProfiles.membershipNumber })
+              .select({ id: schema.memberProfiles.id, membershipNumber: schema.memberProfiles.membershipNumber })
               .from(schema.memberProfiles)
               .where(eq(schema.memberProfiles.phone, phone))
               .limit(1);
@@ -204,6 +217,7 @@ export function register(app: App, fastify: FastifyInstance) {
               return {
                 error: 'Déjà inscrit',
                 membershipNumber: existing[0].membershipNumber,
+                id: existing[0].id,
               };
             }
           } catch (queryError) {
@@ -731,4 +745,267 @@ export function register(app: App, fastify: FastifyInstance) {
       }
     }
   );
+
+  // PUT /api/members/:id - Update member (AUTHENTICATED)
+  fastify.put<{ Params: { id: string }; Body: UpdateMemberBody }>(
+    '/api/members/:id',
+    {
+      schema: {
+        description: 'Update member profile (authenticated)',
+        tags: ['members'],
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            firstName: { type: 'string' },
+            lastName: { type: 'string' },
+            phone: { type: 'string' },
+            email: { type: 'string' },
+            commune: { type: 'string' },
+            region: { type: 'string' },
+            cercle: { type: 'string' },
+            profession: { type: 'string' },
+            nina: { type: 'string' },
+            motivation: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const { id } = request.params;
+      const { firstName, lastName, phone, email, commune, region, cercle, profession, nina, motivation } = request.body;
+
+      app.logger.info({ userId: session.user.id, memberId: id }, 'Updating member profile');
+
+      try {
+        // Prepare update values
+        const updateValues: any = { updatedAt: new Date() };
+
+        if (firstName) updateValues.firstName = firstName.toString().trim();
+        if (lastName) updateValues.lastName = lastName.toString().trim();
+        if (phone) updateValues.phone = phone.toString().trim();
+        if (email) updateValues.email = email.toString().trim();
+        if (commune) updateValues.commune = commune.toString().trim();
+        if (region) updateValues.region = region.toString().trim();
+        if (cercle) updateValues.cercle = cercle.toString().trim();
+        if (profession) updateValues.profession = profession.toString().trim();
+        if (nina) updateValues.nina = nina.toString().trim();
+        if (motivation) updateValues.motivation = motivation.toString().trim();
+
+        // Update full_name if firstName or lastName changed
+        if (firstName || lastName) {
+          const member = await app.db.select().from(schema.memberProfiles).where(eq(schema.memberProfiles.id, id as any)).limit(1);
+          if (member.length > 0) {
+            const newFirstName = firstName || member[0].firstName;
+            const newLastName = lastName || member[0].lastName;
+            updateValues.fullName = `${newFirstName} ${newLastName}`;
+          }
+        }
+
+        const result = await app.db
+          .update(schema.memberProfiles)
+          .set(updateValues)
+          .where(eq(schema.memberProfiles.id, id as any))
+          .returning();
+
+        if (result.length === 0) {
+          reply.status(404);
+          return { error: 'Membre non trouvé' };
+        }
+
+        const updated = result[0];
+        app.logger.info({ memberId: id }, 'Member profile updated');
+
+        return {
+          id: updated.id,
+          fullName: updated.fullName,
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          phone: updated.phone,
+          email: updated.email,
+          commune: updated.commune,
+          region: updated.region,
+          cercle: updated.cercle,
+          profession: updated.profession,
+          membershipNumber: updated.membershipNumber,
+          status: updated.status,
+          role: updated.role,
+          joinedAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : new Date(updated.createdAt).toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id, memberId: id }, 'Failed to update member');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/cotisations/all - Get all cotisations (AUTHENTICATED)
+  fastify.get(
+    '/api/cotisations/all',
+    {
+      schema: {
+        description: 'Get all cotisations with member details (admin)',
+        tags: ['cotisations'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              cotisations: { type: 'array' },
+              total: { type: 'number' },
+              totalAmount: { type: 'string' },
+            },
+          },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      app.logger.info({ userId: session.user.id }, 'Fetching all cotisations');
+
+      try {
+        const cotisations = await app.db.select().from(schema.cotisations).orderBy(desc(schema.cotisations.createdAt));
+
+        // Get member details for each cotisation
+        const withMembers = await Promise.all(
+          cotisations.map(async (c: any) => {
+            const member = await app.db
+              .select()
+              .from(schema.memberProfiles)
+              .where(eq(schema.memberProfiles.id, c.memberId))
+              .limit(1);
+
+            return {
+              id: c.id,
+              amount: c.amount,
+              type: c.type,
+              paymentMethod: c.paymentMethod,
+              transactionId: c.transactionId,
+              status: c.status,
+              paidAt: c.paidAt instanceof Date ? c.paidAt.toISOString() : c.paidAt ? new Date(c.paidAt).toISOString() : null,
+              createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : new Date(c.createdAt).toISOString(),
+              memberName: member[0]?.fullName || 'Unknown',
+              membershipNumber: member[0]?.membershipNumber || 'Unknown',
+            };
+          })
+        );
+
+        const totalAmount = cotisations
+          .filter((c: any) => c.status === 'completed')
+          .reduce((sum: any, c: any) => sum + parseFloat(c.amount), 0)
+          .toFixed(2);
+
+        app.logger.info({ count: withMembers.length, totalAmount }, 'All cotisations fetched');
+        return { cotisations: withMembers, total: withMembers.length, totalAmount };
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch cotisations');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/admin/dashboard - Get admin dashboard stats (AUTHENTICATED)
+  fastify.get(
+    '/api/admin/dashboard',
+    {
+      schema: {
+        description: 'Get admin dashboard statistics',
+        tags: ['admin'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              totalMembers: { type: 'number' },
+              activeMembers: { type: 'number' },
+              pendingMembers: { type: 'number' },
+              totalCotisations: { type: 'number' },
+              totalAmount: { type: 'string' },
+              recentMembers: { type: 'array' },
+            },
+          },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      app.logger.info({ userId: session.user.id }, 'Fetching admin dashboard stats');
+
+      try {
+        // Get member counts
+        const totalMembersResult = await app.db.select({ count: countFn() }).from(schema.memberProfiles);
+        const totalMembers = totalMembersResult[0]?.count ?? 0;
+
+        const activeMembersResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'active'));
+        const activeMembers = activeMembersResult[0]?.count ?? 0;
+
+        const pendingMembersResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'pending'));
+        const pendingMembers = pendingMembersResult[0]?.count ?? 0;
+
+        // Get cotisation stats
+        const cotisationsResult = await app.db.select({ count: countFn() }).from(schema.cotisations);
+        const totalCotisations = cotisationsResult[0]?.count ?? 0;
+
+        const completedCotisations = await app.db
+          .select()
+          .from(schema.cotisations)
+          .where(eq(schema.cotisations.status, 'completed'));
+
+        const totalAmount = completedCotisations
+          .reduce((sum: number, c: any) => sum + parseFloat(c.amount), 0)
+          .toFixed(2);
+
+        // Get recent members (5 most recent)
+        const recentMembersData = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .orderBy(desc(schema.memberProfiles.createdAt))
+          .limit(5);
+
+        const recentMembers = recentMembersData.map((m: any) => ({
+          id: m.id,
+          fullName: m.fullName,
+          status: m.status,
+          joinedAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : new Date(m.createdAt).toISOString(),
+          membershipNumber: m.membershipNumber,
+        }));
+
+        app.logger.info({ totalMembers, activeMembers, totalCotisations }, 'Admin dashboard stats retrieved');
+
+        return {
+          totalMembers,
+          activeMembers,
+          pendingMembers,
+          totalCotisations,
+          totalAmount,
+          recentMembers,
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch admin dashboard stats');
+        throw error;
+      }
+    }
+  );
+
 }
