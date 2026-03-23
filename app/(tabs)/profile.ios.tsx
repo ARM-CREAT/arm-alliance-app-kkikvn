@@ -13,7 +13,6 @@ import {
 import { Stack, useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
-import { apiCall } from "@/utils/api";
 import * as Haptics from "expo-haptics";
 
 export default function MembershipScreen() {
@@ -62,44 +61,58 @@ export default function MembershipScreen() {
     console.log("[Profile iOS] POST /api/members/register", payload);
 
     try {
-      const response = await apiCall<{ membershipNumber: string }>(
-        "/api/members/register",
-        { method: "POST", body: JSON.stringify(payload) }
-      );
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      console.log("[Profile iOS] Registration success:", response.membershipNumber);
-      router.push({
-        pathname: "/member/card",
-        params: { membershipNumber: response.membershipNumber },
+      const BACKEND_URL = "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev";
+      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-    } catch (error: any) {
-      setLoading(false);
-      const msg: string = error?.message || "";
-      console.error("[Profile iOS] Registration error:", msg);
 
-      const numMatch = msg.match(/([A-Z0-9\-]{6,})/);
-      if (msg.includes("409") || msg.toLowerCase().includes("déjà") || msg.toLowerCase().includes("already") || msg.toLowerCase().includes("duplicate")) {
-        const existingNumber = numMatch ? numMatch[1] : "";
-        console.log("[Profile iOS] Duplicate phone, existing number:", existingNumber);
+      const data = await response.json();
+
+      if (response.status === 409) {
+        console.log("[Profile iOS] Duplicate phone, existing number:", data.membershipNumber);
         Alert.alert(
           "Déjà inscrit",
-          `Vous êtes déjà inscrit. Numéro: ${existingNumber}`,
+          `Vous êtes déjà enregistré.\nNuméro d'adhésion: ${data.membershipNumber}`,
           [
             {
               text: "Voir ma carte",
               onPress: () =>
                 router.push({
                   pathname: "/member/card",
-                  params: { membershipNumber: existingNumber },
+                  params: { membershipNumber: data.membershipNumber },
                 }),
             },
             { text: "OK", style: "cancel" },
           ]
         );
-      } else {
-        Alert.alert("Erreur", msg || "Une erreur est survenue. Veuillez réessayer.");
+        return;
       }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || `Erreur ${response.status}`);
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      console.log("[Profile iOS] Registration success:", data.membershipNumber);
+      Alert.alert(
+        "Inscription réussie !",
+        `Bienvenue ! Votre numéro d'adhésion est: ${data.membershipNumber}`,
+        [
+          {
+            text: "Voir ma carte",
+            onPress: () =>
+              router.push({
+                pathname: "/member/card",
+                params: { membershipNumber: data.membershipNumber },
+              }),
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error("[Profile iOS] Registration error:", error.message);
+      Alert.alert("Erreur", error.message || "Une erreur est survenue. Veuillez réessayer.");
     } finally {
       setLoading(false);
     }

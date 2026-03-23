@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { apiCall } from '@/utils/api';
 
 interface SuccessData {
   membershipNumber: string;
@@ -68,10 +67,26 @@ export default function RegisterScreen() {
     console.log('[Register] POST /api/members/register', JSON.stringify(payload));
 
     try {
-      const data = await apiCall<Record<string, unknown>>(
-        '/api/members/register',
-        { method: 'POST', body: JSON.stringify(payload) }
-      );
+      const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.status === 409) {
+        const existingNumber = (data.membershipNumber as string) || '';
+        console.log('[Register] Duplicate phone detected, existing number:', existingNumber);
+        setDuplicateNumber(existingNumber);
+        setErrorMessage(`Vous êtes déjà inscrit${existingNumber ? `.\nNuméro d'adhésion: ${existingNumber}` : '.'}`);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error((data.error as string) || (data.message as string) || `Erreur ${response.status}`);
+      }
 
       const membershipNumber =
         (data.membershipNumber as string) ||
@@ -86,17 +101,7 @@ export default function RegisterScreen() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.log('[Register] Error:', message);
-
-      // Handle 409 duplicate phone
-      if (message.includes('409') || message.toLowerCase().includes('déjà') || message.toLowerCase().includes('already') || message.toLowerCase().includes('duplicate')) {
-        const numMatch = message.match(/([A-Z]{2,4}-\d{4}-\d+)/);
-        const existingNumber = numMatch ? numMatch[1] : '';
-        console.log('[Register] Duplicate phone detected, existing number:', existingNumber);
-        setDuplicateNumber(existingNumber);
-        setErrorMessage(`Vous êtes déjà inscrit${existingNumber ? `. Numéro: ${existingNumber}` : '.'}`);
-      } else {
-        setErrorMessage(message || 'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
-      }
+      setErrorMessage(message || 'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
     } finally {
       setLoading(false);
     }
