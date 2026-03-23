@@ -1,7 +1,55 @@
-const tintColorLight = "#0a7ea4";
-const tintColorDark = "#fff";
+export const Colors = {
+  light: {
+    primary: '#1B7A3E',
+    primaryLight: '#2A9D5C',
+    primaryMuted: '#E8F5EE',
+    accent: '#F5C518',
+    accentMuted: '#FEF9E7',
+    background: '#F7FAF8',
+    surface: '#FFFFFF',
+    surfaceSecondary: '#EEF5F1',
+    text: '#0D2818',
+    textSecondary: '#4A7060',
+    textTertiary: '#8AAF9A',
+    success: '#1B7A3E',
+    warning: '#F5C518',
+    danger: '#DC2626',
+    info: '#2563EB',
+    border: 'rgba(27, 122, 62, 0.12)',
+    divider: 'rgba(27, 122, 62, 0.06)',
+    tabIconDefault: '#8AAF9A',
+    tabIconSelected: '#1B7A3E',
+    tint: '#1B7A3E',
+  },
+  dark: {
+    primary: '#2A9D5C',
+    primaryLight: '#34C471',
+    primaryMuted: '#0D2818',
+    accent: '#F5C518',
+    accentMuted: '#2A2200',
+    background: '#0A1A0F',
+    surface: '#0F2318',
+    surfaceSecondary: '#162D1E',
+    text: '#E8F5EE',
+    textSecondary: '#8AAF9A',
+    textTertiary: '#4A7060',
+    success: '#2A9D5C',
+    warning: '#F5C518',
+    danger: '#EF4444',
+    info: '#3B82F6',
+    border: 'rgba(42, 157, 92, 0.15)',
+    divider: 'rgba(42, 157, 92, 0.08)',
+    tabIconDefault: '#4A7060',
+    tabIconSelected: '#2A9D5C',
+    tint: '#2A9D5C',
+  }
+};
+
+const tintColorLight = "#1B7A3E";
+const tintColorDark = "#2A9D5C";
 
 export const zincColors = {
+
   50: "#fafafa",
   100: "#f4f4f5",
   200: "#e4e4e7",
@@ -20,24 +68,7 @@ export const appleRed = "#FF3B30";
 
 export const borderColor = "#A1A1AA80";
 export const appleGreen = "#34C759";
-export const Colors = {
-  light: {
-    text: "#11181C",
-    background: "#fff",
-    tint: tintColorLight,
-    icon: "#687076",
-    tabIconDefault: "#687076",
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: "#ECEDEE",
-    background: "#151718",
-    tint: tintColorDark,
-    icon: "#9BA1A6",
-    tabIconDefault: "#9BA1A6",
-    tabIconSelected: tintColorDark,
-  },
-};
+
 
 export const backgroundColors = [
   "#fef2f2",

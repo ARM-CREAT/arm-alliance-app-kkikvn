@@ -5,9 +5,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   RefreshControl,
   Animated,
   Platform,
@@ -15,7 +13,9 @@ import {
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet } from '@/utils/api';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
+
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 interface Member {
   id: string;
@@ -23,37 +23,27 @@ interface Member {
   firstName: string;
   lastName: string;
   phone?: string;
-  email?: string;
   commune?: string;
-  region?: string;
-  cercle?: string;
-  profession?: string;
   membershipNumber: string;
   status: string;
-  role?: string;
   joinedAt?: string;
 }
 
-interface MembersResponse {
-  members: Member[];
-  total: number;
-}
-
-type FilterTab = 'all' | 'active' | 'pending';
+type FilterTab = 'all' | 'active' | 'pending' | 'suspended';
 
 function getStatusColor(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'active' || s === 'actif') return '#34C759';
-  if (s === 'pending' || s === 'en attente') return '#FF9500';
-  if (s === 'suspended' || s === 'suspendu') return '#FF3B30';
-  return '#8E8E93';
+  if (s === 'active') return '#1B7A3E';
+  if (s === 'pending') return '#D97706';
+  if (s === 'suspended') return '#DC2626';
+  return colors.textSecondary;
 }
 
 function getStatusLabel(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'active' || s === 'actif') return 'Actif';
-  if (s === 'pending' || s === 'en attente') return 'En attente';
-  if (s === 'suspended' || s === 'suspendu') return 'Suspendu';
+  if (s === 'active') return 'Actif';
+  if (s === 'pending') return 'En attente';
+  if (s === 'suspended') return 'Suspendu';
   return String(status || '—');
 }
 
@@ -98,40 +88,24 @@ function AnimatedMemberRow({ item, index }: { item: Member; index: number }) {
     <Animated.View style={{ opacity, transform: [{ translateY }] }}>
       <View style={styles.memberCard}>
         <View style={styles.memberCardRow}>
-          {/* Avatar */}
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
-
-          {/* Info */}
           <View style={styles.memberInfo}>
-            <Text style={styles.memberName} numberOfLines={1}>
-              {displayName}
-            </Text>
-
+            <Text style={styles.memberName} numberOfLines={1}>{displayName}</Text>
             <View style={styles.memberDetailRow}>
               <Text style={styles.memberDetailIcon}>📞</Text>
-              <Text style={styles.memberDetailText} numberOfLines={1}>
-                {phoneStr}
-              </Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>{phoneStr}</Text>
             </View>
-
             <View style={styles.memberDetailRow}>
               <Text style={styles.memberDetailIcon}>📍</Text>
-              <Text style={styles.memberDetailText} numberOfLines={1}>
-                {communeStr}
-              </Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>{communeStr}</Text>
             </View>
-
             <Text style={styles.memberNumber}>{item.membershipNumber}</Text>
           </View>
-
-          {/* Status badge */}
           <View style={styles.memberRight}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {statusLabel}
-              </Text>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
+              <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
             </View>
           </View>
         </View>
@@ -150,6 +124,7 @@ function SkeletonRow() {
         Animated.timing(opacity, { toValue: 0.3, duration: 700, useNativeDriver: true }),
       ])
     ).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -176,35 +151,36 @@ export default function MembersListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
-  const buildEndpoint = (tab: FilterTab, search: string) => {
+  const buildUrl = (tab: FilterTab, search: string) => {
     const params: string[] = [];
-    if (tab !== 'all') {
-      const statusMap: Record<string, string> = { active: 'active', pending: 'pending' };
-      params.push(`status=${statusMap[tab]}`);
-    }
-    if (search.trim()) {
-      params.push(`search=${encodeURIComponent(search.trim())}`);
-    }
-    return `/api/members${params.length ? '?' + params.join('&') : ''}`;
+    if (tab !== 'all') params.push(`status=${tab}`);
+    if (search.trim()) params.push(`search=${encodeURIComponent(search.trim())}`);
+    return `${BACKEND_URL}/api/members${params.length ? '?' + params.join('&') : ''}`;
   };
 
   const loadMembers = useCallback(async (tab?: FilterTab, search?: string) => {
     const currentTab = tab ?? activeTab;
     const currentSearch = search ?? searchQuery;
-    const endpoint = buildEndpoint(currentTab, currentSearch);
+    const url = buildUrl(currentTab, currentSearch);
 
-    console.log('[MembersList] GET', endpoint);
+    console.log('[MembersList] GET', url);
     setError(null);
 
     try {
-      const data = await apiGet<MembersResponse>(endpoint);
+      const response = await fetch(url);
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('[MembersList] Erreur:', response.status, text);
+        throw new Error(`Erreur ${response.status}`);
+      }
+      const data = await response.json();
       const list: Member[] = data?.members ?? (Array.isArray(data) ? data : []);
       const count: number = data?.total ?? list.length;
-      console.log('[MembersList] Members loaded:', list.length, '/ total:', count);
+      console.log('[MembersList] Adhérents chargés:', list.length, '/ total:', count);
       setAllMembers(list);
       setTotal(count);
     } catch (err: any) {
-      console.error('[MembersList] Error loading members:', err);
+      console.error('[MembersList] Erreur chargement:', err.message);
       setError(err.message || 'Impossible de charger les adhérents.');
     } finally {
       setLoading(false);
@@ -220,19 +196,19 @@ export default function MembersListScreen() {
   }, [activeTab]);
 
   const onRefresh = useCallback(() => {
-    console.log('[MembersList] Pull-to-refresh triggered');
+    console.log('[MembersList] Pull-to-refresh');
     setRefreshing(true);
     loadMembers(activeTab, searchQuery);
   }, [activeTab, searchQuery, loadMembers]);
 
   const handleTabPress = (tab: FilterTab) => {
-    console.log('[MembersList] User tapped filter tab:', tab);
+    console.log('[MembersList] Filtre sélectionné:', tab);
     setSearchQuery('');
     setActiveTab(tab);
   };
 
   const handleSearchSubmit = () => {
-    console.log('[MembersList] Search submitted:', searchQuery);
+    console.log('[MembersList] Recherche soumise:', searchQuery);
     setLoading(true);
     loadMembers(activeTab, searchQuery);
   };
@@ -240,14 +216,13 @@ export default function MembersListScreen() {
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     if (!text.trim()) {
-      // Clear search — reload without filter
       setLoading(true);
       loadMembers(activeTab, '');
     }
   };
 
   const handleRetry = () => {
-    console.log('[MembersList] User tapped retry');
+    console.log('[MembersList] Bouton Réessayer appuyé');
     setLoading(true);
     loadMembers(activeTab, searchQuery);
   };
@@ -256,15 +231,16 @@ export default function MembersListScreen() {
     { value: 'all', label: 'Tous' },
     { value: 'active', label: 'Actifs' },
     { value: 'pending', label: 'En attente' },
+    { value: 'suspended', label: 'Suspendus' },
   ];
 
-  const totalLabel = `${total} adhérent${total !== 1 ? 's' : ''}`;
+  const totalLabel = `${total} adhérent${total !== 1 ? 's' : ''} inscrits`;
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Liste des Adhérents',
+          title: 'Adhérents ARM',
           headerShown: true,
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: '#FFFFFF',
@@ -286,7 +262,7 @@ export default function MembersListScreen() {
             <TextInput
               style={styles.searchInput}
               placeholder="Rechercher par nom, téléphone, commune..."
-              placeholderTextColor={colors.textSecondary}
+              placeholderTextColor={colors.textTertiary}
               value={searchQuery}
               onChangeText={handleSearchChange}
               onSubmitEditing={handleSearchSubmit}
@@ -295,14 +271,14 @@ export default function MembersListScreen() {
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity
+              <AnimatedPressable
                 onPress={() => {
-                  console.log('[MembersList] User cleared search');
+                  console.log('[MembersList] Recherche effacée');
                   setSearchQuery('');
                   setLoading(true);
                   loadMembers(activeTab, '');
                 }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.clearBtn}
               >
                 <IconSymbol
                   ios_icon_name="xmark.circle.fill"
@@ -310,7 +286,7 @@ export default function MembersListScreen() {
                   size={18}
                   color={colors.textSecondary}
                 />
-              </TouchableOpacity>
+              </AnimatedPressable>
             )}
           </View>
         </View>
@@ -320,16 +296,15 @@ export default function MembersListScreen() {
           {tabs.map((tab) => {
             const isActive = activeTab === tab.value;
             return (
-              <TouchableOpacity
+              <AnimatedPressable
                 key={tab.value}
                 style={[styles.tab, isActive && styles.tabActive]}
                 onPress={() => handleTabPress(tab.value)}
-                activeOpacity={0.7}
               >
                 <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
                   {tab.label}
                 </Text>
-              </TouchableOpacity>
+              </AnimatedPressable>
             );
           })}
         </View>
@@ -337,30 +312,27 @@ export default function MembersListScreen() {
         {/* Count header */}
         {!loading && !error && (
           <View style={styles.countRow}>
-            <Text style={styles.countText}>{totalLabel}</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{totalLabel}</Text>
+            </View>
           </View>
         )}
 
         {/* Content */}
         {loading ? (
           <View style={styles.skeletonContainer}>
-            {[0, 1, 2, 3, 4].map((i) => (
-              <SkeletonRow key={i} />
-            ))}
+            {[0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)}
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <IconSymbol
-              ios_icon_name="exclamationmark.triangle.fill"
-              android_material_icon_name="warning"
-              size={44}
-              color={colors.danger}
-            />
+            <View style={styles.errorIconCircle}>
+              <Text style={styles.errorIconText}>⚠️</Text>
+            </View>
             <Text style={styles.errorTitle}>Impossible de charger les adhérents</Text>
             <Text style={styles.errorSubtitle}>{error}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
+            <AnimatedPressable style={styles.retryBtn} onPress={handleRetry}>
               <Text style={styles.retryBtnText}>Réessayer</Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           </View>
         ) : (
           <FlatList
@@ -384,18 +356,13 @@ export default function MembersListScreen() {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <IconSymbol
-                    ios_icon_name="person.3"
-                    android_material_icon_name="group"
-                    size={32}
-                    color={colors.primary}
-                  />
+                  <Text style={styles.emptyIconText}>👥</Text>
                 </View>
                 <Text style={styles.emptyTitle}>Aucun adhérent trouvé</Text>
                 <Text style={styles.emptySubtitle}>
                   {searchQuery.trim()
                     ? 'Essayez un autre nom, téléphone ou commune.'
-                    : 'Les adhérents apparaîtront ici.'}
+                    : 'Les adhérents apparaîtront ici après inscription.'}
                 </Text>
               </View>
             }
@@ -410,7 +377,7 @@ export default function MembersListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: colors.background,
   },
   searchContainer: {
     backgroundColor: colors.card,
@@ -422,8 +389,8 @@ const styles = StyleSheet.create({
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 10,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === 'ios' ? 9 : 6,
     gap: 8,
@@ -436,13 +403,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: 0,
   },
+  clearBtn: {
+    padding: 2,
+  },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingHorizontal: 16,
-    gap: 4,
+    paddingHorizontal: 8,
+    gap: 2,
   },
   tab: {
     flex: 1,
@@ -455,7 +425,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.primary,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -466,12 +436,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  countBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryMuted,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   countText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
   },
   listContent: {
     paddingHorizontal: 12,
@@ -483,15 +460,15 @@ const styles = StyleSheet.create({
   },
   memberCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
     elevation: 2,
   },
   memberCardRow: {
@@ -499,18 +476,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary + '22',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.primaryMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     flexShrink: 0,
+    borderWidth: 1.5,
+    borderColor: colors.border,
   },
   avatarText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: colors.primary,
   },
   memberInfo: {
@@ -539,7 +518,7 @@ const styles = StyleSheet.create({
   },
   memberNumber: {
     fontSize: 11,
-    color: colors.textSecondary,
+    color: colors.textTertiary,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     marginTop: 4,
   },
@@ -563,7 +542,7 @@ const styles = StyleSheet.create({
   },
   skeletonCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
@@ -571,10 +550,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   skeletonAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.border,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.surfaceSecondary,
     marginRight: 12,
   },
   skeletonInfo: {
@@ -583,7 +562,7 @@ const styles = StyleSheet.create({
   skeletonLine: {
     height: 13,
     borderRadius: 6,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
     width: '80%',
   },
   skeletonRight: {
@@ -594,7 +573,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 22,
     borderRadius: 8,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
   },
   errorContainer: {
     flex: 1,
@@ -602,6 +581,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 32,
     gap: 12,
+  },
+  errorIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  errorIconText: {
+    fontSize: 32,
   },
   errorTitle: {
     fontSize: 16,
@@ -618,7 +609,7 @@ const styles = StyleSheet.create({
   retryBtn: {
     marginTop: 8,
     backgroundColor: colors.primary,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 28,
     paddingVertical: 12,
   },
@@ -635,13 +626,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: colors.primary + '18',
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: colors.primaryMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 4,
+  },
+  emptyIconText: {
+    fontSize: 36,
   },
   emptyTitle: {
     fontSize: 17,

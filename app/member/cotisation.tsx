@@ -5,7 +5,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Platform,
   ActivityIndicator,
   TextInput,
@@ -15,10 +14,13 @@ import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { authenticatedPost, authenticatedGet } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 
-type PaymentMethod = 'orange_money' | 'moov_money' | 'cash';
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+
+type PaymentMethod = 'orange_money' | 'moov_money' | 'virement';
 type CotisationType = 'mensuelle' | 'trimestrielle' | 'annuelle';
 
 interface Cotisation {
@@ -36,24 +38,20 @@ function formatDate(dateString?: string) {
   if (!dateString) return '—';
   try {
     return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
+      day: '2-digit', month: 'short', year: 'numeric',
     });
-  } catch {
-    return dateString;
-  }
+  } catch { return dateString; }
 }
 
 function getStatusColor(status: string) {
-  const s = status.toLowerCase();
-  if (s === 'paid' || s === 'payé' || s === 'completed') return '#34C759';
-  if (s === 'pending' || s === 'en attente') return '#FF9500';
-  return '#8E8E93';
+  const s = (status || '').toLowerCase();
+  if (s === 'paid' || s === 'payé' || s === 'completed') return colors.success;
+  if (s === 'pending' || s === 'en attente') return colors.warning;
+  return colors.textSecondary;
 }
 
 function getStatusLabel(status: string) {
-  const s = status.toLowerCase();
+  const s = (status || '').toLowerCase();
   if (s === 'paid' || s === 'completed') return 'Payé';
   if (s === 'pending') return 'En attente';
   return status;
@@ -67,12 +65,12 @@ export default function CotisationScreen() {
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'info' | 'success' | 'error'>('info');
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
 
   const [selectedType, setSelectedType] = useState<CotisationType>('mensuelle');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('orange_money');
   const [amountInput, setAmountInput] = useState('5000');
 
-  // After initiation
   const [cotisationId, setCotisationId] = useState<string | null>(null);
   const [paymentInstructions, setPaymentInstructions] = useState<string | null>(null);
   const [transactionId, setTransactionId] = useState('');
@@ -92,11 +90,14 @@ export default function CotisationScreen() {
     try {
       const response = await authenticatedGet<{ cotisations: Cotisation[] }>('/api/cotisations/my-history');
       const list = response?.cotisations ?? [];
-      console.log('[Cotisation] History loaded:', list.length, 'items');
+      console.log('[Cotisation] Historique chargé:', list.length, 'éléments');
       setHistory(list);
+      setIsAuthenticated(true);
     } catch (error: any) {
-      console.error('[Cotisation] Error loading history:', error);
-      // Not authenticated or no history — show empty
+      console.error('[Cotisation] Erreur historique:', error.message);
+      if (error.message?.includes('token') || error.message?.includes('Authentication') || error.message?.includes('401')) {
+        setIsAuthenticated(false);
+      }
       setHistory([]);
     } finally {
       setHistoryLoading(false);
@@ -109,13 +110,13 @@ export default function CotisationScreen() {
   }, [loadHistory]);
 
   const onRefresh = useCallback(() => {
-    console.log('[Cotisation] Pull-to-refresh triggered');
+    console.log('[Cotisation] Pull-to-refresh');
     setRefreshing(true);
     loadHistory();
   }, [loadHistory]);
 
   const handleInitiate = async () => {
-    console.log('[Cotisation] User tapped Initier le paiement');
+    console.log('[Cotisation] Bouton Initier le paiement appuyé');
 
     const amount = parseInt(amountInput, 10);
     if (!amountInput || isNaN(amount) || amount <= 0) {
@@ -123,13 +124,11 @@ export default function CotisationScreen() {
       return;
     }
 
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     setLoading(true);
     const payload = { amount, type: selectedType, paymentMethod: selectedPaymentMethod };
-    console.log('[Cotisation] POST /api/cotisations/initiate payload:', JSON.stringify(payload));
+    console.log('[Cotisation] POST /api/cotisations/initiate', JSON.stringify(payload));
 
     try {
       const response = await authenticatedPost<{
@@ -138,15 +137,14 @@ export default function CotisationScreen() {
         paymentInstructions: string;
       }>('/api/cotisations/initiate', payload);
 
-      console.log('[Cotisation] Initiation response:', JSON.stringify(response));
-
+      console.log('[Cotisation] Initiation réussie:', JSON.stringify(response));
       setCotisationId(response.cotisationId);
       const instructions = typeof response.paymentInstructions === 'string'
         ? response.paymentInstructions
-        : `ID de cotisation: ${response.cotisationId}\n\nVeuillez effectuer votre paiement et entrer l'ID de transaction ci-dessous.`;
+        : `ID de cotisation: ${response.cotisationId}\n\nEffectuez votre paiement et entrez l'ID de transaction ci-dessous.`;
       setPaymentInstructions(instructions);
     } catch (error: any) {
-      console.error('[Cotisation] Initiation error:', error);
+      console.error('[Cotisation] Erreur initiation:', error.message);
       showModal('Erreur', error?.message || 'Une erreur est survenue. Veuillez réessayer.', 'error');
     } finally {
       setLoading(false);
@@ -154,53 +152,49 @@ export default function CotisationScreen() {
   };
 
   const handleConfirm = async () => {
-    console.log('[Cotisation] User tapped Confirmer le paiement');
+    console.log('[Cotisation] Bouton Confirmer le paiement appuyé');
 
     if (!transactionId.trim()) {
-      showModal('Erreur', 'Veuillez entrer l\'ID de transaction', 'error');
+      showModal('Erreur', "Veuillez entrer l'ID de transaction", 'error');
       return;
     }
     if (!cotisationId) return;
 
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     setConfirmLoading(true);
     const payload = { cotisationId, transactionId: transactionId.trim() };
-    console.log('[Cotisation] POST /api/cotisations/confirm payload:', JSON.stringify(payload));
+    console.log('[Cotisation] POST /api/cotisations/confirm', JSON.stringify(payload));
 
     try {
       const response = await authenticatedPost<{ success: boolean; message: string }>(
-        '/api/cotisations/confirm',
-        payload
+        '/api/cotisations/confirm', payload
       );
-      console.log('[Cotisation] Confirm response:', JSON.stringify(response));
-
-      showModal('Paiement Confirmé', response.message || 'Votre cotisation a été confirmée avec succès!', 'success');
+      console.log('[Cotisation] Confirmation réussie:', JSON.stringify(response));
+      showModal('Paiement confirmé', response.message || 'Votre cotisation a été confirmée !', 'success');
       setCotisationId(null);
       setPaymentInstructions(null);
       setTransactionId('');
       setAmountInput('5000');
       loadHistory();
     } catch (error: any) {
-      console.error('[Cotisation] Confirm error:', error);
+      console.error('[Cotisation] Erreur confirmation:', error.message);
       showModal('Erreur', error?.message || 'Impossible de confirmer le paiement.', 'error');
     } finally {
       setConfirmLoading(false);
     }
   };
 
-  const typeOptions: { value: CotisationType; label: string; amount: string }[] = [
-    { value: 'mensuelle', label: 'Mensuelle', amount: '5 000 FCFA' },
-    { value: 'trimestrielle', label: 'Trimestrielle', amount: '14 000 FCFA' },
-    { value: 'annuelle', label: 'Annuelle', amount: '50 000 FCFA' },
+  const typeOptions: { value: CotisationType; label: string; amount: string; desc: string }[] = [
+    { value: 'mensuelle', label: 'Mensuelle', amount: '5 000 FCFA', desc: 'Par mois' },
+    { value: 'trimestrielle', label: 'Trimestrielle', amount: '14 000 FCFA', desc: 'Par trimestre' },
+    { value: 'annuelle', label: 'Annuelle', amount: '50 000 FCFA', desc: 'Par an' },
   ];
 
   const paymentOptions: { value: PaymentMethod; label: string; color: string; abbr: string }[] = [
     { value: 'orange_money', label: 'Orange Money', color: '#FF6600', abbr: 'OM' },
     { value: 'moov_money', label: 'Moov Money', color: '#0066CC', abbr: 'MM' },
-    { value: 'cash', label: 'Espèces', color: '#34C759', abbr: '💵' },
+    { value: 'virement', label: 'Virement', color: colors.primary, abbr: '🏦' },
   ];
 
   return (
@@ -224,20 +218,26 @@ export default function CotisationScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
         }
       >
+        {/* Header */}
         <View style={styles.header}>
-          <IconSymbol
-            ios_icon_name="creditcard.fill"
-            android_material_icon_name="payment"
-            size={48}
-            color={colors.primary}
-          />
+          <View style={styles.headerIcon}>
+            <Text style={styles.headerIconText}>💳</Text>
+          </View>
           <Text style={styles.headerTitle}>Cotisation Militant</Text>
-          <Text style={styles.headerSubtitle}>
-            Contribuez au financement du parti
-          </Text>
+          <Text style={styles.headerSubtitle}>Contribuez au financement du parti</Text>
         </View>
 
-        {/* Payment instructions + confirm step */}
+        {/* Non authentifié */}
+        {!isAuthenticated && (
+          <View style={styles.authWarning}>
+            <Text style={styles.authWarningIcon}>🔒</Text>
+            <Text style={styles.authWarningText}>
+              Connectez-vous pour accéder aux cotisations et consulter votre historique.
+            </Text>
+          </View>
+        )}
+
+        {/* Étape confirmation */}
         {paymentInstructions ? (
           <View style={styles.section}>
             <View style={styles.instructionsBox}>
@@ -250,127 +250,121 @@ export default function CotisationScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Entrez l'ID de transaction reçu"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor={colors.textTertiary}
                 value={transactionId}
                 onChangeText={setTransactionId}
                 autoCapitalize="none"
               />
             </View>
 
-            <TouchableOpacity
+            <AnimatedPressable
               style={[styles.primaryButton, confirmLoading && styles.buttonDisabled]}
               onPress={handleConfirm}
               disabled={confirmLoading}
-              activeOpacity={0.8}
             >
               {confirmLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <Text style={styles.primaryButtonText}>Confirmer le paiement</Text>
               )}
-            </TouchableOpacity>
+            </AnimatedPressable>
 
-            <TouchableOpacity
+            <AnimatedPressable
               style={styles.cancelButton}
               onPress={() => {
-                console.log('[Cotisation] User cancelled payment confirmation');
+                console.log('[Cotisation] Annulation confirmation paiement');
                 setCotisationId(null);
                 setPaymentInstructions(null);
                 setTransactionId('');
               }}
-              activeOpacity={0.8}
             >
               <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           </View>
         ) : (
           <>
-            {/* Type Selection */}
+            {/* Type de cotisation */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Type de cotisation</Text>
               {typeOptions.map((opt) => {
                 const isSelected = selectedType === opt.value;
                 return (
-                  <TouchableOpacity
+                  <AnimatedPressable
                     key={opt.value}
                     style={[styles.optionCard, isSelected && styles.optionCardSelected]}
                     onPress={() => {
-                      console.log('[Cotisation] User selected type:', opt.value);
+                      console.log('[Cotisation] Type sélectionné:', opt.value);
                       setSelectedType(opt.value);
                     }}
-                    activeOpacity={0.8}
                   >
                     <View style={styles.optionRow}>
                       <View style={styles.optionTextBlock}>
                         <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
                           {opt.label}
                         </Text>
-                        <Text style={styles.optionAmount}>{opt.amount}</Text>
+                        <Text style={styles.optionDesc}>{opt.desc}</Text>
                       </View>
+                      <Text style={[styles.optionAmount, isSelected && { color: colors.primary }]}>
+                        {opt.amount}
+                      </Text>
                       {isSelected && (
-                        <IconSymbol
-                          ios_icon_name="checkmark.circle.fill"
-                          android_material_icon_name="check-circle"
-                          size={22}
-                          color={colors.primary}
-                        />
+                        <View style={styles.checkCircle}>
+                          <Text style={styles.checkMark}>✓</Text>
+                        </View>
                       )}
                     </View>
-                  </TouchableOpacity>
+                  </AnimatedPressable>
                 );
               })}
             </View>
 
-            {/* Amount */}
+            {/* Montant */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Montant (FCFA)</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Ex: 5000"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor={colors.textTertiary}
                 value={amountInput}
                 onChangeText={setAmountInput}
                 keyboardType="numeric"
               />
             </View>
 
-            {/* Payment Method */}
+            {/* Mode de paiement */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Mode de paiement</Text>
               {paymentOptions.map((opt) => {
                 const isSelected = selectedPaymentMethod === opt.value;
                 return (
-                  <TouchableOpacity
+                  <AnimatedPressable
                     key={opt.value}
                     style={[styles.paymentCard, isSelected && styles.paymentCardSelected]}
                     onPress={() => {
-                      console.log('[Cotisation] User selected payment method:', opt.value);
+                      console.log('[Cotisation] Mode de paiement sélectionné:', opt.value);
                       setSelectedPaymentMethod(opt.value);
                     }}
-                    activeOpacity={0.8}
                   >
                     <View style={[styles.paymentIcon, { backgroundColor: opt.color }]}>
                       <Text style={styles.paymentIconText}>{opt.abbr}</Text>
                     </View>
-                    <Text style={styles.paymentName}>{opt.label}</Text>
+                    <Text style={[styles.paymentName, isSelected && { color: colors.primary }]}>
+                      {opt.label}
+                    </Text>
                     {isSelected && (
-                      <IconSymbol
-                        ios_icon_name="checkmark.circle.fill"
-                        android_material_icon_name="check-circle"
-                        size={20}
-                        color={colors.primary}
-                      />
+                      <View style={styles.checkCircle}>
+                        <Text style={styles.checkMark}>✓</Text>
+                      </View>
                     )}
-                  </TouchableOpacity>
+                  </AnimatedPressable>
                 );
               })}
             </View>
 
-            <TouchableOpacity
+            <AnimatedPressable
               style={[styles.primaryButton, styles.primaryButtonMargin, loading && styles.buttonDisabled]}
               onPress={handleInitiate}
               disabled={loading}
-              activeOpacity={0.8}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -385,15 +379,19 @@ export default function CotisationScreen() {
                   />
                 </>
               )}
-            </TouchableOpacity>
+            </AnimatedPressable>
           </>
         )}
 
-        {/* History */}
+        {/* Historique */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Historique des cotisations</Text>
           {historyLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+          ) : !isAuthenticated ? (
+            <View style={styles.emptyHistory}>
+              <Text style={styles.emptyHistoryText}>Connectez-vous pour voir votre historique</Text>
+            </View>
           ) : history.length === 0 ? (
             <View style={styles.emptyHistory}>
               <Text style={styles.emptyHistoryText}>Aucune cotisation enregistrée</Text>
@@ -403,7 +401,7 @@ export default function CotisationScreen() {
               const statusColor = getStatusColor(item.status);
               const statusLabel = getStatusLabel(item.status);
               const dateStr = formatDate(item.paidAt || item.createdAt);
-              const amountStr = String(Number(item.amount).toLocaleString('fr-FR'));
+              const amountStr = Number(item.amount).toLocaleString('fr-FR');
               return (
                 <View key={item.id} style={styles.historyCard}>
                   <View style={styles.historyRow}>
@@ -412,7 +410,7 @@ export default function CotisationScreen() {
                       <Text style={styles.historyType}>{item.type}</Text>
                       <Text style={styles.historyDate}>{dateStr}</Text>
                     </View>
-                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
                       <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
                     </View>
                   </View>
@@ -449,20 +447,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: 20,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    backgroundColor: colors.primary,
+  },
+  headerIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerIconText: {
+    fontSize: 28,
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    marginTop: 8,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  authWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    margin: 20,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.warning + '40',
+  },
+  authWarningIcon: {
+    fontSize: 20,
+  },
+  authWarningText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#92400E',
+    lineHeight: 20,
   },
   section: {
     padding: 20,
@@ -473,19 +501,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
     marginBottom: 14,
+    letterSpacing: -0.2,
   },
   inputGroup: {
     marginBottom: 16,
   },
   label: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
     marginBottom: 8,
   },
   input: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -496,7 +525,7 @@ const styles = StyleSheet.create({
   },
   optionCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     marginBottom: 10,
     borderWidth: 2,
@@ -504,11 +533,12 @@ const styles = StyleSheet.create({
   },
   optionCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: '#F0FAF2',
+    backgroundColor: colors.primaryMuted,
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   optionTextBlock: {
     flex: 1,
@@ -521,16 +551,34 @@ const styles = StyleSheet.create({
   optionLabelSelected: {
     color: colors.primary,
   },
-  optionAmount: {
-    fontSize: 14,
+  optionDesc: {
+    fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  optionAmount: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkMark: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   paymentCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 10,
     borderWidth: 2,
@@ -539,12 +587,12 @@ const styles = StyleSheet.create({
   },
   paymentCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: '#F0FAF2',
+    backgroundColor: colors.primaryMuted,
   },
   paymentIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -565,7 +613,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -579,7 +627,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   buttonDisabled: {
@@ -596,7 +644,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   instructionsBox: {
-    backgroundColor: '#EBF5FB',
+    backgroundColor: colors.primaryMuted,
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
@@ -617,9 +665,11 @@ const styles = StyleSheet.create({
   emptyHistory: {
     alignItems: 'center',
     paddingVertical: 32,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: 12,
   },
   emptyHistoryText: {
-    fontSize: 15,
+    fontSize: 14,
     color: colors.textSecondary,
   },
   historyCard: {
@@ -650,7 +700,7 @@ const styles = StyleSheet.create({
   },
   historyDate: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.textTertiary,
     marginTop: 2,
   },
   statusBadge: {

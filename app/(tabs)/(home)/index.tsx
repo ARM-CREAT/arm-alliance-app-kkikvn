@@ -21,6 +21,10 @@ import {
 
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
+interface MemberStats {
+  totalMembers: number;
+}
+
 interface NotificationItem {
   id: string;
   title: string;
@@ -73,6 +77,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
+  const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +88,7 @@ export default function HomeScreen() {
     setError(null);
 
     try {
-      const [notifResult, leaderResult] = await Promise.allSettled([
+      const [notifResult, leaderResult, statsResult] = await Promise.allSettled([
         fetch(`${BACKEND_URL}/api/notifications`).then(async (res) => {
           if (!res.ok) {
             const text = await res.text();
@@ -92,6 +97,10 @@ export default function HomeScreen() {
           return res.json();
         }),
         apiGet<LeadershipMember[]>('/api/leadership'),
+        fetch(`${BACKEND_URL}/api/members/stats`).then(async (res) => {
+          if (!res.ok) throw new Error(`Stats: ${res.status}`);
+          return res.json();
+        }),
       ]);
 
       if (notifResult.status === 'fulfilled' && Array.isArray(notifResult.value)) {
@@ -106,6 +115,11 @@ export default function HomeScreen() {
         setLeadership(leaderResult.value);
       } else {
         console.warn('[HomeScreen] Échec du chargement de la direction:', leaderResult);
+      }
+
+      if (statsResult.status === 'fulfilled') {
+        console.log('[HomeScreen] Stats membres chargées:', statsResult.value);
+        setMemberStats(statsResult.value);
       }
 
       const allFailed = notifResult.status === 'rejected' && leaderResult.status === 'rejected';
@@ -279,6 +293,12 @@ export default function HomeScreen() {
               <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
               <View style={styles.mottoLine} />
             </View>
+            {memberStats != null && (
+              <View style={styles.statsBanner}>
+                <Text style={styles.statsBannerNumber}>{String(memberStats.totalMembers)}</Text>
+                <Text style={styles.statsBannerLabel}>membres inscrits</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.section}>
@@ -961,6 +981,28 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
     marginVertical: 2,
+  },
+  statsBanner: {
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  statsBannerNumber: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: colors.accent,
+    letterSpacing: -0.5,
+  },
+  statsBannerLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+    marginTop: 2,
   },
   bottomSpacer: {
     height: 20,
