@@ -16,13 +16,11 @@ import {
   RefreshControl,
 } from "react-native";
 import * as Clipboard from 'expo-clipboard';
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { Modal } from "@/components/ui/Modal";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BACKEND_URL } from "@/utils/api-helpers";
-import { getBearerToken } from "@/utils/api";
 
 // Try to import QRCode, fall back gracefully
 let QRCode: any = null;
@@ -34,7 +32,6 @@ try {
 
 const DARK_GREEN = "#1B5E20";
 const GOLD = "#FFD700";
-const GOLD_DARK = "#B8860B";
 
 interface MemberCardData {
   id: string;
@@ -96,11 +93,10 @@ function formatDate(dateString?: string) {
 
 export default function MemberCardScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const { membershipNumber: paramMembershipNumber } = useLocalSearchParams<{ membershipNumber: string }>();
   const [memberData, setMemberData] = useState<MemberCardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [sharing, setSharing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState("");
   const [modalMessage, setModalMessage] = useState("");
@@ -113,74 +109,58 @@ export default function MemberCardScreen() {
     setModalVisible(true);
   }, []);
 
+  const fetchCardByNumber = useCallback(
+    async (memberNumber: string) => {
+      console.log("[MemberCard] GET /api/members/card/" + memberNumber);
+      const res = await fetch(`${BACKEND_URL}/api/members/card/${memberNumber}`, {
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("[MemberCard] Public lookup error:", res.status, errText);
+        if (res.status === 404) {
+          showModal(
+            "Membre Non Trouvé",
+            "Aucun membre trouvé avec ce numéro. Vérifiez votre numéro ou inscrivez-vous."
+          );
+          setShowInput(true);
+        } else {
+          showModal("Erreur", "Impossible de charger votre carte. Veuillez réessayer.");
+        }
+        return;
+      }
+
+      const data: MemberCardData = await res.json();
+      console.log("[MemberCard] Card data received:", data.membershipNumber);
+      setMemberData(data);
+      setShowInput(false);
+      await AsyncStorage.setItem("membershipNumber", memberNumber);
+    },
+    [showModal]
+  );
+
   const loadMemberCard = useCallback(
     async (memberNumber?: string) => {
       console.log("[MemberCard] Loading member card");
       setLoading(true);
       try {
-        let storedNumber = memberNumber;
-        if (!storedNumber) {
-          storedNumber = (await AsyncStorage.getItem("membershipNumber")) || "";
-        }
-
-        // Try authenticated endpoint first if we have a token
-        const token = await getBearerToken();
-        if (token) {
-          try {
-            console.log("[MemberCard] GET /api/membership/my-card (authenticated)");
-            const res = await fetch(`${BACKEND_URL}/api/membership/my-card`, {
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-            });
-            if (res.ok) {
-              const data: MemberCardData = await res.json();
-              console.log("[MemberCard] Authenticated card loaded:", data.membershipNumber);
-              setMemberData(data);
-              setShowInput(false);
-              if (data.membershipNumber) {
-                await AsyncStorage.setItem("membershipNumber", data.membershipNumber);
-              }
-              return;
-            }
-          } catch (authErr) {
-            console.warn("[MemberCard] Authenticated endpoint failed, trying public lookup");
-          }
-        }
-
-        // No token or auth failed — use public lookup
-        if (!storedNumber) {
-          console.log("[MemberCard] No membership number — showing input");
-          setShowInput(true);
+        // If a specific number is provided (from params or manual input), use it directly
+        if (memberNumber) {
+          await fetchCardByNumber(memberNumber);
           return;
         }
 
-        console.log("[MemberCard] GET /api/members/card/" + storedNumber);
-        const res = await fetch(`${BACKEND_URL}/api/members/card/${storedNumber}`, {
-          headers: { "Content-Type": "application/json" },
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error("[MemberCard] Public lookup error:", res.status, errText);
-          if (res.status === 404) {
-            showModal(
-              "Membre Non Trouvé",
-              "Aucun membre trouvé avec ce numéro. Vérifiez votre numéro ou inscrivez-vous."
-            );
-            setShowInput(true);
-          } else {
-            showModal("Erreur", "Impossible de charger votre carte. Veuillez réessayer.");
-          }
+        // Check AsyncStorage for previously saved number
+        const storedNumber = await AsyncStorage.getItem("membershipNumber");
+        if (storedNumber) {
+          await fetchCardByNumber(storedNumber);
           return;
         }
 
-        const data: MemberCardData = await res.json();
-        console.log("[MemberCard] Card data received:", data.membershipNumber);
-        setMemberData(data);
-        setShowInput(false);
-        await AsyncStorage.setItem("membershipNumber", storedNumber);
+        // No number available — show input
+        console.log("[MemberCard] No membership number — showing input");
+        setShowInput(true);
       } catch (error: any) {
         console.error("[MemberCard] Error:", error);
         showModal("Erreur", "Impossible de charger votre carte. Veuillez réessayer.");
@@ -189,18 +169,28 @@ export default function MemberCardScreen() {
         setRefreshing(false);
       }
     },
-    [showModal]
+    [fetchCardByNumber, showModal]
   );
 
   useEffect(() => {
-    loadMemberCard();
-  }, [loadMemberCard]);
+    if (paramMembershipNumber) {
+      console.log("[MemberCard] Route param membershipNumber:", paramMembershipNumber);
+      loadMemberCard(paramMembershipNumber);
+    } else {
+      loadMemberCard();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onRefresh = useCallback(() => {
     console.log("[MemberCard] Pull-to-refresh triggered");
     setRefreshing(true);
-    loadMemberCard();
-  }, [loadMemberCard]);
+    if (memberData?.membershipNumber) {
+      loadMemberCard(memberData.membershipNumber);
+    } else {
+      loadMemberCard();
+    }
+  }, [loadMemberCard, memberData]);
 
   const handleLookupCard = () => {
     console.log("[MemberCard] User tapped Rechercher with:", inputValue);
@@ -211,6 +201,7 @@ export default function MemberCardScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+    setLoading(true);
     loadMemberCard(inputValue.trim());
   };
 
@@ -313,7 +304,7 @@ export default function MemberCardScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={styles.secondaryButtonText}>S'inscrire Maintenant</Text>
+              <Text style={styles.secondaryButtonText}>S&apos;inscrire Maintenant</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -345,7 +336,7 @@ export default function MemberCardScreen() {
         }}
       />
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -410,7 +401,7 @@ export default function MemberCardScreen() {
                   </>
                 ) : null}
 
-                <Text style={styles.cardLabel}>DATE D'ADHÉSION</Text>
+                <Text style={styles.cardLabel}>DATE D&apos;ADHÉSION</Text>
                 <Text style={styles.cardValue}>{joinDateStr}</Text>
               </View>
 
@@ -660,6 +651,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
+    paddingBottom: 40,
   },
   cardOuter: {
     shadowColor: "#000",

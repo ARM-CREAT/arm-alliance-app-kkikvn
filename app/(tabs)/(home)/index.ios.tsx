@@ -205,6 +205,12 @@ export default function HomeScreen() {
     router.push('/program');
   };
 
+  const handleMembersList = () => {
+    console.log('[HomeScreen iOS] Bouton Liste des adhérents appuyé');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/members-list');
+  };
+
   const handleVoirToutNotifications = () => {
     console.log('[HomeScreen iOS] Bouton Voir tout (notifications) appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -496,6 +502,21 @@ export default function HomeScreen() {
                   />
                   <Text style={styles.actionTitle}>Notre Programme</Text>
                   <Text style={[styles.actionSubtitle, { color: '#1B5E20' }]}>Programme politique</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionCard, styles.actionCardMembers]}
+                  onPress={handleMembersList}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol
+                    ios_icon_name="person.3.fill"
+                    android_material_icon_name="group"
+                    size={32}
+                    color="#0369A1"
+                  />
+                  <Text style={styles.actionTitle}>Adhérents</Text>
+                  <Text style={[styles.actionSubtitle, { color: '#0369A1' }]}>Liste complète</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -884,6 +905,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#1B5E2020',
     backgroundColor: '#F1F8F1',
+  },
+  actionCardMembers: {
+    borderWidth: 1.5,
+    borderColor: '#0369A120',
+    backgroundColor: '#F0F9FF',
   },
   actionTitle: {
     fontSize: 14,

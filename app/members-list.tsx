@@ -15,16 +15,23 @@ import {
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet } from '@/utils/api';
+import { apiGet } from '@/utils/api';
 
 interface Member {
   id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
   phone?: string;
-  membership_date: string;
+  email?: string;
+  commune?: string;
+  region?: string;
+  cercle?: string;
+  profession?: string;
+  membershipNumber: string;
   status: string;
+  role?: string;
+  joinedAt?: string;
 }
 
 interface MembersResponse {
@@ -32,48 +39,33 @@ interface MembersResponse {
   total: number;
 }
 
-type FilterTab = 'all' | 'active' | 'inactive';
-
-function formatDate(dateString?: string): string {
-  if (!dateString) return '—';
-  try {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return String(dateString);
-  }
-}
+type FilterTab = 'all' | 'active' | 'pending';
 
 function getStatusColor(status: string): string {
   const s = (status || '').toLowerCase();
   if (s === 'active' || s === 'actif') return '#34C759';
-  return '#FF3B30';
+  if (s === 'pending' || s === 'en attente') return '#FF9500';
+  if (s === 'suspended' || s === 'suspendu') return '#FF3B30';
+  return '#8E8E93';
 }
 
 function getStatusLabel(status: string): string {
   const s = (status || '').toLowerCase();
   if (s === 'active' || s === 'actif') return 'Actif';
-  if (s === 'inactive' || s === 'inactif') return 'Inactif';
+  if (s === 'pending' || s === 'en attente') return 'En attente';
+  if (s === 'suspended' || s === 'suspendu') return 'Suspendu';
   return String(status || '—');
 }
 
-function getInitials(firstName: string, lastName: string): string {
-  const f = (firstName || '').charAt(0).toUpperCase();
-  const l = (lastName || '').charAt(0).toUpperCase();
-  return f + l || '?';
+function getInitials(fullName: string): string {
+  const parts = (fullName || '').trim().split(' ');
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+  return (fullName || '?').charAt(0).toUpperCase();
 }
 
-// Animated list item with staggered entrance
-function AnimatedMemberRow({
-  item,
-  index,
-}: {
-  item: Member;
-  index: number;
-}) {
+function AnimatedMemberRow({ item, index }: { item: Member; index: number }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
 
@@ -82,24 +74,25 @@ function AnimatedMemberRow({
       Animated.timing(opacity, {
         toValue: 1,
         duration: 300,
-        delay: Math.min(index * 50, 400),
+        delay: Math.min(index * 40, 400),
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
         duration: 300,
-        delay: Math.min(index * 50, 400),
+        delay: Math.min(index * 40, 400),
         useNativeDriver: true,
       }),
     ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const statusColor = getStatusColor(item.status);
   const statusLabel = getStatusLabel(item.status);
-  const initials = getInitials(item.first_name, item.last_name);
-  const fullName = [item.first_name, item.last_name].filter(Boolean).join(' ') || '—';
-  const dateStr = formatDate(item.membership_date);
-  const emailStr = item.email || '—';
+  const initials = getInitials(item.fullName || `${item.firstName} ${item.lastName}`);
+  const displayName = item.fullName || [item.firstName, item.lastName].filter(Boolean).join(' ') || '—';
+  const phoneStr = item.phone || '—';
+  const communeStr = item.commune || '—';
 
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }] }}>
@@ -113,21 +106,33 @@ function AnimatedMemberRow({
           {/* Info */}
           <View style={styles.memberInfo}>
             <Text style={styles.memberName} numberOfLines={1}>
-              {fullName}
+              {displayName}
             </Text>
-            <Text style={styles.memberEmail} numberOfLines={1}>
-              {emailStr}
-            </Text>
+
+            <View style={styles.memberDetailRow}>
+              <Text style={styles.memberDetailIcon}>📞</Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>
+                {phoneStr}
+              </Text>
+            </View>
+
+            <View style={styles.memberDetailRow}>
+              <Text style={styles.memberDetailIcon}>📍</Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>
+                {communeStr}
+              </Text>
+            </View>
+
+            <Text style={styles.memberNumber}>{item.membershipNumber}</Text>
           </View>
 
-          {/* Right side: badge + date */}
+          {/* Status badge */}
           <View style={styles.memberRight}>
             <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
               <Text style={[styles.statusText, { color: statusColor }]}>
                 {statusLabel}
               </Text>
             </View>
-            <Text style={styles.memberDate}>{dateStr}</Text>
           </View>
         </View>
       </View>
@@ -135,7 +140,6 @@ function AnimatedMemberRow({
   );
 }
 
-// Skeleton loader row
 function SkeletonRow() {
   const opacity = useRef(new Animated.Value(0.3)).current;
 
@@ -153,11 +157,11 @@ function SkeletonRow() {
       <View style={styles.skeletonAvatar} />
       <View style={styles.skeletonInfo}>
         <View style={styles.skeletonLine} />
-        <View style={[styles.skeletonLine, { width: '60%', marginTop: 6 }]} />
+        <View style={[styles.skeletonLine, { width: '70%', marginTop: 6 }]} />
+        <View style={[styles.skeletonLine, { width: '50%', marginTop: 6 }]} />
       </View>
       <View style={styles.skeletonRight}>
         <View style={styles.skeletonBadge} />
-        <View style={[styles.skeletonLine, { width: 48, marginTop: 6 }]} />
       </View>
     </Animated.View>
   );
@@ -172,18 +176,28 @@ export default function MembersListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
-  const loadMembers = useCallback(async (tab?: FilterTab) => {
+  const buildEndpoint = (tab: FilterTab, search: string) => {
+    const params: string[] = [];
+    if (tab !== 'all') {
+      const statusMap: Record<string, string> = { active: 'active', pending: 'pending' };
+      params.push(`status=${statusMap[tab]}`);
+    }
+    if (search.trim()) {
+      params.push(`search=${encodeURIComponent(search.trim())}`);
+    }
+    return `/api/members${params.length ? '?' + params.join('&') : ''}`;
+  };
+
+  const loadMembers = useCallback(async (tab?: FilterTab, search?: string) => {
     const currentTab = tab ?? activeTab;
-    const endpoint =
-      currentTab === 'all'
-        ? '/api/members'
-        : `/api/members?status=${currentTab === 'active' ? 'active' : 'inactive'}`;
+    const currentSearch = search ?? searchQuery;
+    const endpoint = buildEndpoint(currentTab, currentSearch);
 
     console.log('[MembersList] GET', endpoint);
     setError(null);
 
     try {
-      const data = await authenticatedGet<MembersResponse>(endpoint);
+      const data = await apiGet<MembersResponse>(endpoint);
       const list: Member[] = data?.members ?? (Array.isArray(data) ? data : []);
       const count: number = data?.total ?? list.length;
       console.log('[MembersList] Members loaded:', list.length, '/ total:', count);
@@ -196,18 +210,20 @@ export default function MembersListScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, searchQuery]);
 
   useEffect(() => {
     setLoading(true);
-    loadMembers(activeTab);
+    loadMembers(activeTab, searchQuery);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const onRefresh = useCallback(() => {
     console.log('[MembersList] Pull-to-refresh triggered');
     setRefreshing(true);
-    loadMembers(activeTab);
-  }, [activeTab, loadMembers]);
+    loadMembers(activeTab, searchQuery);
+  }, [activeTab, searchQuery, loadMembers]);
 
   const handleTabPress = (tab: FilterTab) => {
     console.log('[MembersList] User tapped filter tab:', tab);
@@ -215,39 +231,40 @@ export default function MembersListScreen() {
     setActiveTab(tab);
   };
 
+  const handleSearchSubmit = () => {
+    console.log('[MembersList] Search submitted:', searchQuery);
+    setLoading(true);
+    loadMembers(activeTab, searchQuery);
+  };
+
   const handleSearchChange = (text: string) => {
-    console.log('[MembersList] Search query changed:', text);
     setSearchQuery(text);
+    if (!text.trim()) {
+      // Clear search — reload without filter
+      setLoading(true);
+      loadMembers(activeTab, '');
+    }
   };
 
   const handleRetry = () => {
     console.log('[MembersList] User tapped retry');
     setLoading(true);
-    loadMembers(activeTab);
+    loadMembers(activeTab, searchQuery);
   };
-
-  // Client-side search filter
-  const filteredMembers = allMembers.filter((m) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
-    return fullName.includes(q) || (m.email || '').toLowerCase().includes(q);
-  });
 
   const tabs: { value: FilterTab; label: string }[] = [
     { value: 'all', label: 'Tous' },
     { value: 'active', label: 'Actifs' },
-    { value: 'inactive', label: 'Inactifs' },
+    { value: 'pending', label: 'En attente' },
   ];
 
   const totalLabel = `${total} adhérent${total !== 1 ? 's' : ''}`;
-  const filteredCount = filteredMembers.length;
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Adhérents',
+          title: 'Liste des Adhérents',
           headerShown: true,
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: '#FFFFFF',
@@ -268,10 +285,11 @@ export default function MembersListScreen() {
             />
             <TextInput
               style={styles.searchInput}
-              placeholder="Rechercher par nom ou email..."
+              placeholder="Rechercher par nom, téléphone, commune..."
               placeholderTextColor={colors.textSecondary}
               value={searchQuery}
               onChangeText={handleSearchChange}
+              onSubmitEditing={handleSearchSubmit}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
@@ -281,6 +299,8 @@ export default function MembersListScreen() {
                 onPress={() => {
                   console.log('[MembersList] User cleared search');
                   setSearchQuery('');
+                  setLoading(true);
+                  loadMembers(activeTab, '');
                 }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
@@ -317,9 +337,7 @@ export default function MembersListScreen() {
         {/* Count header */}
         {!loading && !error && (
           <View style={styles.countRow}>
-            <Text style={styles.countText}>
-              {searchQuery.trim() ? `${filteredCount} résultat${filteredCount !== 1 ? 's' : ''}` : totalLabel}
-            </Text>
+            <Text style={styles.countText}>{totalLabel}</Text>
           </View>
         )}
 
@@ -346,14 +364,14 @@ export default function MembersListScreen() {
           </View>
         ) : (
           <FlatList
-            data={filteredMembers}
+            data={allMembers}
             keyExtractor={(item) => item.id}
             renderItem={({ item, index }) => (
               <AnimatedMemberRow item={item} index={index} />
             )}
             contentContainerStyle={[
               styles.listContent,
-              filteredMembers.length === 0 && styles.listContentEmpty,
+              allMembers.length === 0 && styles.listContentEmpty,
             ]}
             refreshControl={
               <RefreshControl
@@ -373,12 +391,10 @@ export default function MembersListScreen() {
                     color={colors.primary}
                   />
                 </View>
-                <Text style={styles.emptyTitle}>
-                  {searchQuery.trim() ? 'Aucun résultat' : 'Aucun adhérent'}
-                </Text>
+                <Text style={styles.emptyTitle}>Aucun adhérent trouvé</Text>
                 <Text style={styles.emptySubtitle}>
                   {searchQuery.trim()
-                    ? 'Essayez un autre nom ou email.'
+                    ? 'Essayez un autre nom, téléphone ou commune.'
                     : 'Les adhérents apparaîtront ici.'}
                 </Text>
               </View>
@@ -396,7 +412,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.backgroundAlt,
   },
-  // Search
   searchContainer: {
     backgroundColor: colors.card,
     paddingHorizontal: 16,
@@ -421,7 +436,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: 0,
   },
-  // Tabs
   tabBar: {
     flexDirection: 'row',
     backgroundColor: colors.card,
@@ -448,7 +462,6 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: colors.primary,
   },
-  // Count row
   countRow: {
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -460,15 +473,14 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
-  // List
   listContent: {
     paddingHorizontal: 12,
     paddingBottom: 40,
+    paddingTop: 4,
   },
   listContentEmpty: {
     flex: 1,
   },
-  // Member card
   memberCard: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -484,7 +496,7 @@ const styles = StyleSheet.create({
   },
   memberCardRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   avatar: {
     width: 44,
@@ -509,32 +521,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
+    marginBottom: 4,
   },
-  memberEmail: {
+  memberDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+    gap: 4,
+  },
+  memberDetailIcon: {
+    fontSize: 11,
+  },
+  memberDetailText: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 3,
+    flex: 1,
+  },
+  memberNumber: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 4,
   },
   memberRight: {
     alignItems: 'flex-end',
-    gap: 4,
     flexShrink: 0,
     marginLeft: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   statusText: {
     fontSize: 11,
     fontWeight: '700',
   },
-  memberDate: {
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  // Skeleton
   skeletonContainer: {
     padding: 12,
     gap: 8,
@@ -569,12 +591,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   skeletonBadge: {
-    width: 44,
-    height: 20,
+    width: 60,
+    height: 22,
     borderRadius: 8,
     backgroundColor: colors.border,
   },
-  // Error
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -606,7 +627,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
-  // Empty
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
