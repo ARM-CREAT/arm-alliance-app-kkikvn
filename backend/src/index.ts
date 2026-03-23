@@ -35,7 +35,6 @@ import * as membershipsRoutes from './routes/memberships.js';
 import * as notificationsRoutes from './routes/notifications.js';
 import * as membersRoutes from './routes/members.js';
 import * as directionRoutes from './routes/direction.js';
-import * as membershipApiRoutes from './routes/membershipApi.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -87,7 +86,6 @@ membershipsRoutes.register(app, app.fastify);
 notificationsRoutes.register(app, app.fastify);
 membersRoutes.register(app, app.fastify);
 directionRoutes.register(app, app.fastify);
-membershipApiRoutes.register(app, app.fastify);
 
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);

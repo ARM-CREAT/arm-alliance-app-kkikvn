@@ -34,56 +34,31 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/health - API health check endpoint with more details
+  // GET /api/health - Public health check endpoint
   fastify.get(
     '/api/health',
     {
       schema: {
-        description: 'API health check endpoint - verifies database connectivity',
+        description: 'Public health check endpoint - no authentication or database queries',
         tags: ['system'],
         response: {
           200: {
             type: 'object',
             properties: {
               status: { type: 'string' },
-              timestamp: { type: 'string' },
-              uptime: { type: 'number' },
-              database: { type: 'string' },
+              timestamp: { type: 'string', format: 'date-time' },
             },
           },
         },
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const uptime = process.uptime();
+      app.logger.info('Health check request');
 
-      try {
-        // Test database connectivity by querying a simple count from members table
-        await app.db.select().from(schema.members).limit(1);
-        const dbStatus = 'connected';
-
-        app.logger.debug({ uptime, database: dbStatus }, 'API health check passed');
-
-        return reply.status(200).send({
-          status: 'healthy',
-          timestamp: new Date().toISOString(),
-          uptime: Math.round(uptime * 100) / 100,
-          database: dbStatus,
-        });
-      } catch (error) {
-        app.logger.error(
-          { err: error, uptime },
-          'API health check failed - database connection issue'
-        );
-
-        return reply.status(503).send({
-          status: 'unhealthy',
-          timestamp: new Date().toISOString(),
-          uptime: Math.round(uptime * 100) / 100,
-          database: 'disconnected',
-          error: 'Database connection failed',
-        });
-      }
+      return reply.status(200).send({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+      });
     }
   );
 
