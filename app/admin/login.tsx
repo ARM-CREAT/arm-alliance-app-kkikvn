@@ -213,6 +213,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  retryButton: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: '#721C24',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 });
 
 const OFFLINE_PASSWORD_KEY = 'admin_offline_password';
@@ -234,22 +247,18 @@ export default function AdminLoginScreen() {
 
 
 
+  const runHealthCheck = React.useCallback(async () => {
+    setBackendStatus('checking');
+    console.log('Admin Login - Checking backend health...');
+    const isHealthy = await checkBackendHealth();
+    setBackendStatus(isHealthy ? 'online' : 'offline');
+    console.log('Admin Login - Backend status:', isHealthy ? 'online' : 'offline');
+  }, []);
+
   // Vérifier l'état du backend au chargement
   React.useEffect(() => {
-    const checkBackend = async () => {
-      if (!backendConfigured) {
-        setBackendStatus('offline');
-        return;
-      }
-
-      console.log('Admin Login - Checking backend health...');
-      const isHealthy = await checkBackendHealth();
-      setBackendStatus(isHealthy ? 'online' : 'offline');
-      console.log('Admin Login - Backend status:', isHealthy ? 'online' : 'offline');
-    };
-
-    checkBackend();
-  }, [backendConfigured]);
+    runHealthCheck();
+  }, [runHealthCheck]);
 
   const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm' = 'info') => {
     console.log('Admin Login - Showing modal:', title, message);
@@ -334,7 +343,7 @@ export default function AdminLoginScreen() {
     const trimmedPassword = password.trim();
 
     // Si le backend n'est pas disponible, essayer directement le mode hors ligne
-    if (!backendConfigured || backendStatus === 'offline') {
+    if (backendStatus === 'offline') {
       console.log('Admin Login - Backend not available, trying offline login');
       await handleOfflineLogin();
       return;
@@ -497,12 +506,21 @@ export default function AdminLoginScreen() {
               </View>
             )}
 
-            {(!backendConfigured || backendStatus === 'offline') && (
+            {backendStatus === 'offline' && (
               <View style={styles.errorBox}>
                 <Text style={styles.errorTitle}>⚠️ Serveur non disponible</Text>
                 <Text style={styles.errorText}>
                   Le serveur backend n'est pas accessible. Utilisez le mode hors ligne pour accéder au tableau de bord.
                 </Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => {
+                    console.log('Admin Login - Retry health check pressed');
+                    runHealthCheck();
+                  }}
+                >
+                  <Text style={styles.retryButtonText}>🔄 Réessayer</Text>
+                </TouchableOpacity>
               </View>
             )}
 
