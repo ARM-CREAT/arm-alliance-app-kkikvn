@@ -73,11 +73,10 @@ export default function AdminMembershipsScreen() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const loadMembers = useCallback(async (status?: FilterStatus) => {
-    const activeFilter = status ?? filter;
-    const endpoint = activeFilter === 'all'
+  const loadMembers = useCallback(async (status: FilterStatus) => {
+    const endpoint = status === 'all'
       ? '/api/admin/memberships'
-      : `/api/admin/memberships?status=${activeFilter}`;
+      : `/api/admin/memberships?status=${status}`;
     console.log('[AdminMemberships] GET', endpoint);
     setError(null);
     try {
@@ -92,7 +91,7 @@ export default function AdminMembershipsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);

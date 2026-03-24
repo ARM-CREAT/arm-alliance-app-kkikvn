@@ -4,7 +4,8 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   View,
@@ -28,6 +29,14 @@ interface EventItem {
   location: string;
 }
 
+const getAdminHeaders = async (): Promise<Record<string, string>> => {
+  const password = await AsyncStorage.getItem('admin_password');
+  return {
+    'Content-Type': 'application/json',
+    ...(password ? { 'x-admin-password': password } : {}),
+  };
+};
+
 export default function AdminEventsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,14 +57,15 @@ export default function AdminEventsScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
-  useEffect(() => {
-    loadEvents();
-  }, []);
-
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     console.log('[AdminEvents] GET /api/events');
     try {
-      const data = await apiGet<EventItem[]>('/api/events');
+      const response = await fetch(`${BACKEND_URL}/api/events`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+      }
+      const data = await response.json();
       const list = Array.isArray(data) ? data : [];
       console.log('[AdminEvents] Events loaded:', list.length);
       setEvents(list);
@@ -66,13 +76,17 @@ export default function AdminEventsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
   const onRefresh = useCallback(() => {
     console.log('[AdminEvents] Pull-to-refresh triggered');
     setRefreshing(true);
     loadEvents();
-  }, []);
+  }, [loadEvents]);
 
   const showModalFunc = (
     title: string,
@@ -89,7 +103,7 @@ export default function AdminEventsScreen() {
 
   const handleAdd = () => {
     console.log('[AdminEvents] User tapped Ajouter event');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingEvent(null);
     setFormTitle('');
     setFormDescription('');
@@ -102,7 +116,7 @@ export default function AdminEventsScreen() {
 
   const handleEdit = (item: EventItem) => {
     console.log('[AdminEvents] User tapped Modifier event:', item.id);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingEvent(item);
     setFormTitle(item.title || '');
     setFormDescription(item.description || '');
@@ -127,7 +141,7 @@ export default function AdminEventsScreen() {
     }
 
     console.log('[AdminEvents] User tapped save event, editing:', editingEvent?.id ?? 'new');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
     const isoDate = formDate.toISOString();
@@ -142,13 +156,30 @@ export default function AdminEventsScreen() {
     console.log('[AdminEvents] Submitting event payload:', JSON.stringify(eventData));
 
     try {
+      const headers = await getAdminHeaders();
       if (editingEvent) {
         console.log('[AdminEvents] PUT /api/events/' + editingEvent.id);
-        await authenticatedPut(`/api/events/${editingEvent.id}`, eventData);
+        const res = await fetch(`${BACKEND_URL}/api/events/${editingEvent.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(eventData),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminEvents] Event updated successfully');
       } else {
         console.log('[AdminEvents] POST /api/events');
-        await authenticatedPost('/api/events', eventData);
+        const res = await fetch(`${BACKEND_URL}/api/events`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(eventData),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminEvents] Event created successfully');
       }
 
@@ -167,7 +198,7 @@ export default function AdminEventsScreen() {
 
   const handleDelete = (id: string) => {
     console.log('[AdminEvents] User tapped Supprimer event:', id);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showModalFunc(
       'Confirmer la suppression',
       'Êtes-vous sûr de vouloir supprimer cet événement?',
@@ -175,7 +206,15 @@ export default function AdminEventsScreen() {
       async () => {
         console.log('[AdminEvents] DELETE /api/events/' + id);
         try {
-          await authenticatedDelete(`/api/events/${id}`);
+          const headers = await getAdminHeaders();
+          const res = await fetch(`${BACKEND_URL}/api/events/${id}`, {
+            method: 'DELETE',
+            headers,
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+          }
           console.log('[AdminEvents] Event deleted successfully');
           await loadEvents();
           showModalFunc('Succès', 'Événement supprimé avec succès!', 'success');
@@ -225,7 +264,7 @@ export default function AdminEventsScreen() {
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.listContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         >
           {events.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -263,7 +302,6 @@ export default function AdminEventsScreen() {
           )}
         </ScrollView>
 
-        {/* Confirm / info modal */}
         <Modal
           visible={showModal && modalType !== 'confirm'}
           onClose={() => setShowModal(false)}
@@ -288,7 +326,6 @@ export default function AdminEventsScreen() {
           cancelText="Annuler"
         />
 
-        {/* Edit / Add inline modal */}
         {showEditModal && (
           <View style={styles.editModalOverlay}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.editModalWrapper}>
@@ -419,7 +456,6 @@ const styles = StyleSheet.create({
   addButtonText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
   listContainer: { padding: 16 },
   eventCard: { backgroundColor: colors.card, borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  eventImage: { width: '100%', height: 160, borderRadius: 8, marginBottom: 12 },
   eventTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 8 },
   eventDescription: { fontSize: 14, color: colors.textSecondary, marginBottom: 8, lineHeight: 20 },
   eventMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 4, gap: 8 },
@@ -440,7 +476,6 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 },
   input: { backgroundColor: colors.card, borderRadius: 8, padding: 12, fontSize: 15, color: colors.text, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
-  imagePreview: { width: '100%', height: 120, borderRadius: 8, marginBottom: 16 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8, marginBottom: 32 },
   modalButton: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, minWidth: 100, alignItems: 'center' },
   cancelButton: { backgroundColor: colors.card },

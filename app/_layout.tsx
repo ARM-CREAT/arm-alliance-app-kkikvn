@@ -230,6 +230,30 @@ export default function RootLayout() {
                       headerShown: false,
                     }}
                   />
+                  <Stack.Screen
+                    name="admin/conferences"
+                    options={{
+                      headerShown: false,
+                    }}
+                  />
+                  <Stack.Screen
+                    name="admin/contacts"
+                    options={{
+                      headerShown: false,
+                    }}
+                  />
+                  <Stack.Screen
+                    name="admin/program"
+                    options={{
+                      headerShown: false,
+                    }}
+                  />
+                  <Stack.Screen
+                    name="admin/app-settings"
+                    options={{
+                      headerShown: false,
+                    }}
+                  />
                 </Stack>
                 <StatusBar style="auto" />
 
