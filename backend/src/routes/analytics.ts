@@ -87,7 +87,7 @@ export function register(app: App, fastify: FastifyInstance) {
           200: {
             type: 'object',
             properties: {
-              byRegion: { type: 'object' },
+              byCommune: { type: 'object' },
               byStatus: { type: 'object' },
               totalMembers: { type: 'number' },
             },
@@ -107,9 +107,9 @@ export function register(app: App, fastify: FastifyInstance) {
           .from(schema.members);
 
         // Count by region
-        const byRegion: Record<string, number> = {};
+        const byCommune: Record<string, number> = {};
         members.forEach(m => {
-          byRegion[m.region] = (byRegion[m.region] || 0) + 1;
+          byCommune[m.commune] = (byCommune[m.commune] || 0) + 1;
         });
 
         // Count by status
@@ -119,7 +119,7 @@ export function register(app: App, fastify: FastifyInstance) {
         });
 
         const analytics = {
-          byRegion,
+          byCommune,
           byStatus,
           totalMembers: members.length,
         };
