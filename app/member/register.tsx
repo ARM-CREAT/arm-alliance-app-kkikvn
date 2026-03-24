@@ -9,270 +9,220 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BACKEND_URL } from '@/utils/api-helpers';
 
-interface SuccessData {
-  membershipNumber: string;
-  id: string;
-  message?: string;
-}
+const PRIMARY = '#2E7D32';
+const ACCENT = '#FFC107';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successData, setSuccessData] = useState<SuccessData | null>(null);
-  const [duplicateNumber, setDuplicateNumber] = useState('');
 
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [region, setRegion] = useState('');
   const [commune, setCommune] = useState('');
-  const [profession, setProfession] = useState('');
 
-  const validate = (): string | null => {
-    if (!firstName.trim() || firstName.trim().length < 2) return 'Le prénom est requis (minimum 2 caractères)';
-    if (!lastName.trim() || lastName.trim().length < 2) return 'Le nom est requis (minimum 2 caractères)';
-    if (!phone.trim()) return 'Le numéro de téléphone est requis';
-    if (!/^[0-9+\s\-]{8,15}$/.test(phone.trim())) return 'Numéro de téléphone invalide (8 à 15 chiffres)';
-    return null;
+  const [fullNameError, setFullNameError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [communeError, setCommuneError] = useState('');
+
+  const validate = (): boolean => {
+    let valid = true;
+    if (!fullName.trim()) {
+      setFullNameError('Le nom complet est requis');
+      valid = false;
+    } else {
+      setFullNameError('');
+    }
+    if (!phone.trim()) {
+      setPhoneError('Le numéro de téléphone est requis');
+      valid = false;
+    } else {
+      setPhoneError('');
+    }
+    if (!commune.trim()) {
+      setCommuneError('La commune ou ville est requise');
+      valid = false;
+    } else {
+      setCommuneError('');
+    }
+    return valid;
   };
 
   const handleSubmit = async () => {
-    console.log('[Register] Submit button pressed');
-    setErrorMessage('');
-    setDuplicateNumber('');
-    const validationError = validate();
-    if (validationError) {
-      console.log('[Register] Validation error:', validationError);
-      setErrorMessage(validationError);
+    console.log('[Register] Bouton S\'inscrire appuyé');
+    if (!validate()) {
+      console.log('[Register] Validation échouée');
       return;
     }
 
     setLoading(true);
     const payload = {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
+      full_name: fullName.trim(),
       phone: phone.trim(),
-      email: email.trim() || undefined,
-      region: region.trim() || undefined,
-      commune: commune.trim() || 'Non spécifiée',
-      profession: profession.trim() || 'Non spécifiée',
+      commune: commune.trim(),
     };
-
-    console.log('[Register] POST /api/members/register', JSON.stringify(payload));
+    console.log('[Register] POST /api/members', JSON.stringify(payload));
 
     try {
-      const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
-      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
+      const response = await fetch(`${BACKEND_URL}/api/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
+      if (!response.ok && response.status !== 409) {
+        const text = await response.text();
+        console.log('[Register] Erreur HTTP', response.status, text);
+        throw new Error(`Erreur ${response.status}: ${text}`);
+      }
+
       const data = await response.json();
+      console.log('[Register] Réponse reçue:', JSON.stringify(data));
 
       if (response.status === 409) {
-        const existingNumber = (data.membershipNumber as string) || '';
-        console.log('[Register] Duplicate phone detected, existing number:', existingNumber);
-        setDuplicateNumber(existingNumber);
-        setErrorMessage(`Vous êtes déjà inscrit${existingNumber ? `.\nNuméro d'adhésion: ${existingNumber}` : '.'}`);
+        console.log('[Register] Doublon détecté, numéro existant:', data.member_number);
+        Alert.alert(
+          'Vous êtes déjà inscrit !',
+          `Votre numéro de membre est : ${data.member_number}`,
+          [
+            { text: 'Annuler', style: 'cancel' },
+            {
+              text: 'Voir ma carte',
+              onPress: () => {
+                console.log('[Register] Navigation vers carte (doublon):', data.member_number);
+                router.push({
+                  pathname: '/member/card',
+                  params: { member: JSON.stringify(data) },
+                });
+              },
+            },
+          ]
+        );
         return;
       }
 
-      if (!response.ok) {
-        throw new Error((data.error as string) || (data.message as string) || `Erreur ${response.status}`);
-      }
-
-      const membershipNumber =
-        (data.membershipNumber as string) ||
-        ((data.member as Record<string, string>)?.membershipNumber) ||
-        '';
-      const id = (data.id as string) || ((data.member as Record<string, string>)?.id) || '';
-      console.log('[Register] Success! membershipNumber:', membershipNumber);
-
-      setSuccessData({ membershipNumber, id, message: data.message as string | undefined });
-      router.push({ pathname: '/member/card', params: { membershipNumber } });
-
+      console.log('[Register] Inscription réussie, numéro:', data.member_number);
+      router.push({
+        pathname: '/member/card',
+        params: { member: JSON.stringify(data) },
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.log('[Register] Error:', message);
-      setErrorMessage(message || 'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+      console.log('[Register] Erreur:', message);
+      Alert.alert('Erreur', message || 'Erreur de connexion. Vérifiez votre connexion internet.');
     } finally {
       setLoading(false);
     }
   };
 
-  // SUCCESS SCREEN
-  if (successData) {
-    const memberFont = Platform.OS === 'ios' ? 'Courier' : 'monospace';
-    return (
-      <View style={styles.container}>
-        <Stack.Screen options={{ title: 'Adhésion au Parti', headerShown: true, headerBackTitle: 'Retour' }} />
-        <ScrollView contentContainerStyle={styles.successContainer}>
-          <View style={styles.successIcon}>
-            <Ionicons name="checkmark-circle" size={80} color="#1B5E20" />
-          </View>
-          <Text style={styles.successTitle}>Inscription réussie !</Text>
-          <Text style={styles.successSubtitle}>Bienvenue dans Alliance ARM</Text>
+  const handleRecover = () => {
+    console.log('[Register] Lien "Déjà inscrit" appuyé');
+    router.push('/member/recover');
+  };
 
-          <View style={styles.memberNumberBox}>
-            <Text style={styles.memberNumberLabel}>Votre numéro de membre</Text>
-            <Text style={[styles.memberNumber, { fontFamily: memberFont }]}>{successData.membershipNumber}</Text>
-            <Text style={styles.memberNumberHint}>Conservez ce numéro précieusement</Text>
-          </View>
-
-          <Text style={styles.pendingNote}>
-            Votre demande est en cours de traitement. Vous recevrez une confirmation de votre adhésion.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => {
-              console.log('[Register] Navigate to member card:', successData.membershipNumber);
-              router.push({ pathname: '/member/card', params: { membershipNumber: successData.membershipNumber } });
-            }}>
-            <Ionicons name="card-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.primaryButtonText}>Voir ma carte de membre</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => {
-              console.log('[Register] Navigate to home');
-              router.replace('/(tabs)/(home)');
-            }}>
-            <Text style={styles.secondaryButtonText}>Retour à l&apos;accueil</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // FORM SCREEN
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen options={{ title: 'Adhésion au Parti', headerShown: true, headerBackTitle: 'Retour' }} />
-      <ScrollView contentContainerStyle={styles.formContainer} keyboardShouldPersistTaps="handled">
-
-        <View style={styles.formHeader}>
-          <Ionicons name="people" size={40} color="#1B5E20" />
-          <Text style={styles.formTitle}>Rejoindre Alliance ARM</Text>
-          <Text style={styles.formSubtitle}>Remplissez le formulaire pour adhérer au parti</Text>
-        </View>
-
-        {errorMessage ? (
-          <View style={styles.errorBox}>
-            <Ionicons name="alert-circle" size={18} color="#C62828" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.errorText}>{errorMessage}</Text>
-              {duplicateNumber ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    console.log('[Register] View existing card:', duplicateNumber);
-                    router.push({ pathname: '/member/card', params: { membershipNumber: duplicateNumber } });
-                  }}
-                  style={styles.viewCardLink}
-                >
-                  <Text style={styles.viewCardLinkText}>Voir ma carte de membre</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <Stack.Screen
+        options={{
+          title: 'Adhésion ARM',
+          headerShown: true,
+          headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: PRIMARY },
+          headerTintColor: '#fff',
+          headerTitleStyle: { fontWeight: '700' },
+        }}
+      />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.iconCircle}>
+            <Ionicons name="people" size={40} color="#fff" />
           </View>
-        ) : null}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Informations personnelles *</Text>
-
-          <Text style={styles.label}>Prénom *</Text>
-          <TextInput
-            style={styles.input}
-            value={firstName}
-            onChangeText={setFirstName}
-            placeholder="Votre prénom"
-            autoCapitalize="words"
-          />
-
-          <Text style={styles.label}>Nom *</Text>
-          <TextInput
-            style={styles.input}
-            value={lastName}
-            onChangeText={setLastName}
-            placeholder="Votre nom de famille"
-            autoCapitalize="words"
-          />
-
-          <Text style={styles.label}>Téléphone *</Text>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="Ex: 76 12 34 56"
-            keyboardType="phone-pad"
-          />
-
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="votre@email.com (optionnel)"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          <Text style={styles.title}>Adhésion ARM</Text>
+          <Text style={styles.subtitle}>Rejoignez le mouvement</Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Localisation</Text>
+        {/* Form Card */}
+        <View style={styles.formCard}>
+          {/* Full Name */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Nom complet</Text>
+            <TextInput
+              style={[styles.input, fullNameError ? styles.inputError : null]}
+              value={fullName}
+              onChangeText={(v) => { setFullName(v); if (v.trim()) setFullNameError(''); }}
+              placeholder="Votre nom et prénom"
+              placeholderTextColor="#9E9E9E"
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+            {fullNameError ? <Text style={styles.fieldError}>{fullNameError}</Text> : null}
+          </View>
 
-          <Text style={styles.label}>Région</Text>
-          <TextInput
-            style={styles.input}
-            value={region}
-            onChangeText={setRegion}
-            placeholder="Ex: Bamako, Sikasso..."
-            autoCapitalize="words"
-          />
+          {/* Phone */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Téléphone</Text>
+            <TextInput
+              style={[styles.input, phoneError ? styles.inputError : null]}
+              value={phone}
+              onChangeText={(v) => { setPhone(v); if (v.trim()) setPhoneError(''); }}
+              placeholder="+223 XX XX XX XX"
+              placeholderTextColor="#9E9E9E"
+              keyboardType="phone-pad"
+              returnKeyType="next"
+            />
+            {phoneError ? <Text style={styles.fieldError}>{phoneError}</Text> : null}
+          </View>
 
-          <Text style={styles.label}>Commune</Text>
-          <TextInput
-            style={styles.input}
-            value={commune}
-            onChangeText={setCommune}
-            placeholder="Votre commune"
-            autoCapitalize="words"
-          />
+          {/* Commune */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Commune / Ville</Text>
+            <TextInput
+              style={[styles.input, communeError ? styles.inputError : null]}
+              value={commune}
+              onChangeText={(v) => { setCommune(v); if (v.trim()) setCommuneError(''); }}
+              placeholder="Votre commune ou ville"
+              placeholderTextColor="#9E9E9E"
+              autoCapitalize="words"
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+            />
+            {communeError ? <Text style={styles.fieldError}>{communeError}</Text> : null}
+          </View>
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.btnIcon} />
+                <Text style={styles.submitButtonText}>S'inscrire</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Informations complémentaires</Text>
-
-          <Text style={styles.label}>Profession</Text>
-          <TextInput
-            style={styles.input}
-            value={profession}
-            onChangeText={setProfession}
-            placeholder="Votre profession"
-            autoCapitalize="words"
-          />
-        </View>
-
-        <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <>
-              <Ionicons name="send" size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.submitButtonText}>Soumettre ma demande d&apos;adhésion</Text>
-            </>
-          )}
+        {/* Recover link */}
+        <TouchableOpacity style={styles.recoverLink} onPress={handleRecover} activeOpacity={0.7}>
+          <Text style={styles.recoverLinkText}>Déjà inscrit ? Retrouver ma carte</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -282,33 +232,122 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  formContainer: { padding: 16 },
-  formHeader: { alignItems: 'center', paddingVertical: 24, marginBottom: 8 },
-  formTitle: { fontSize: 22, fontWeight: '800', color: '#1B5E20', marginTop: 12, textAlign: 'center' },
-  formSubtitle: { fontSize: 14, color: '#666', marginTop: 4, textAlign: 'center' },
-  errorBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFEBEE', borderRadius: 8, padding: 12, marginBottom: 16, gap: 8 },
-  errorText: { flex: 1, color: '#C62828', fontSize: 14 },
-  viewCardLink: { marginTop: 8 },
-  viewCardLinkText: { color: '#1B5E20', fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
-  section: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1B5E20', marginBottom: 12 },
-  label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4, marginTop: 8 },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: '#fafafa', color: '#1a1a1a' },
-  submitButton: { backgroundColor: '#1B5E20', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  submitButtonDisabled: { opacity: 0.6 },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  successContainer: { flexGrow: 1, alignItems: 'center', padding: 24, paddingTop: 48 },
-  successIcon: { marginBottom: 16 },
-  successTitle: { fontSize: 26, fontWeight: '800', color: '#1B5E20', textAlign: 'center' },
-  successSubtitle: { fontSize: 16, color: '#555', marginTop: 4, textAlign: 'center' },
-  memberNumberBox: { backgroundColor: '#1B5E20', borderRadius: 16, padding: 24, alignItems: 'center', marginVertical: 24, width: '100%' },
-  memberNumberLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginBottom: 8 },
-  memberNumber: { color: '#FFD700', fontSize: 28, fontWeight: '900', letterSpacing: 2 },
-  memberNumberHint: { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 8 },
-  pendingNote: { backgroundColor: '#FFF8E1', borderRadius: 8, padding: 12, color: '#E65100', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  primaryButton: { backgroundColor: '#1B5E20', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', marginBottom: 12 },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  secondaryButton: { padding: 16, alignItems: 'center', width: '100%' },
-  secondaryButtonText: { color: '#1B5E20', fontSize: 15, fontWeight: '600' },
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
+  header: {
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingBottom: 48,
+    paddingHorizontal: 24,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: ACCENT,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
+  formCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    marginHorizontal: 20,
+    marginTop: -24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  fieldGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  input: {
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#1A1A1A',
+    backgroundColor: '#FAFAFA',
+  },
+  inputError: {
+    borderColor: '#C62828',
+    backgroundColor: '#FFF5F5',
+  },
+  fieldError: {
+    fontSize: 12,
+    color: '#C62828',
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  submitButton: {
+    backgroundColor: PRIMARY,
+    borderRadius: 14,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  btnIcon: {
+    marginRight: 8,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  recoverLink: {
+    alignItems: 'center',
+    marginTop: 24,
+    paddingVertical: 12,
+  },
+  recoverLinkText: {
+    fontSize: 15,
+    color: PRIMARY,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
 });

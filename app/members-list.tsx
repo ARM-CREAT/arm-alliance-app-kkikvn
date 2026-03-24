@@ -8,6 +8,7 @@ import {
   TextInput,
   RefreshControl,
   Animated,
+  Alert,
   Platform,
 } from 'react-native';
 import { Stack } from 'expo-router';
@@ -16,17 +17,23 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'x-admin-password': 'admin123' };
 
 interface Member {
   id: string;
-  fullName: string;
-  firstName: string;
-  lastName: string;
-  phone?: string;
-  commune?: string;
-  membershipNumber: string;
+  member_number: string;
+  full_name: string;
+  phone: string;
+  commune: string;
   status: string;
-  joinedAt?: string;
+  created_at: string;
+}
+
+interface Stats {
+  total: number;
+  active: number;
+  pending: number;
+  suspended: number;
 }
 
 type FilterTab = 'all' | 'active' | 'pending' | 'suspended';
@@ -55,7 +62,28 @@ function getInitials(fullName: string): string {
   return (fullName || '?').charAt(0).toUpperCase();
 }
 
-function AnimatedMemberRow({ item, index }: { item: Member; index: number }) {
+function formatDate(dateString?: string): string {
+  if (!dateString) return '—';
+  try {
+    const d = new Date(dateString);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateString;
+  }
+}
+
+function AnimatedMemberRow({
+  item,
+  index,
+  onLongPress,
+}: {
+  item: Member;
+  index: number;
+  onLongPress: (member: Member) => void;
+}) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
 
@@ -79,29 +107,38 @@ function AnimatedMemberRow({ item, index }: { item: Member; index: number }) {
 
   const statusColor = getStatusColor(item.status);
   const statusLabel = getStatusLabel(item.status);
-  const initials = getInitials(item.fullName || `${item.firstName} ${item.lastName}`);
-  const displayName = item.fullName || [item.firstName, item.lastName].filter(Boolean).join(' ') || '—';
-  const phoneStr = item.phone || '—';
-  const communeStr = item.commune || '—';
+  const initials = getInitials(item.full_name);
+  const dateStr = formatDate(item.created_at);
 
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-      <View style={styles.memberCard}>
+      <AnimatedPressable
+        style={styles.memberCard}
+        onLongPress={() => {
+          console.log('[MembersList] Long-press sur membre:', item.full_name, item.id);
+          onLongPress(item);
+        }}
+        delayLongPress={400}
+      >
         <View style={styles.memberCardRow}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
           <View style={styles.memberInfo}>
-            <Text style={styles.memberName} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.memberName} numberOfLines={1}>{item.full_name}</Text>
+            <Text style={styles.memberNumber}>{item.member_number}</Text>
             <View style={styles.memberDetailRow}>
               <Text style={styles.memberDetailIcon}>📞</Text>
-              <Text style={styles.memberDetailText} numberOfLines={1}>{phoneStr}</Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>{item.phone || '—'}</Text>
             </View>
             <View style={styles.memberDetailRow}>
               <Text style={styles.memberDetailIcon}>📍</Text>
-              <Text style={styles.memberDetailText} numberOfLines={1}>{communeStr}</Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>{item.commune || '—'}</Text>
             </View>
-            <Text style={styles.memberNumber}>{item.membershipNumber}</Text>
+            <View style={styles.memberDetailRow}>
+              <Text style={styles.memberDetailIcon}>📅</Text>
+              <Text style={styles.memberDetailText}>{dateStr}</Text>
+            </View>
           </View>
           <View style={styles.memberRight}>
             <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
@@ -109,7 +146,7 @@ function AnimatedMemberRow({ item, index }: { item: Member; index: number }) {
             </View>
           </View>
         </View>
-      </View>
+      </AnimatedPressable>
     </Animated.View>
   );
 }
@@ -132,6 +169,7 @@ function SkeletonRow() {
       <View style={styles.skeletonAvatar} />
       <View style={styles.skeletonInfo}>
         <View style={styles.skeletonLine} />
+        <View style={[styles.skeletonLine, { width: '60%', marginTop: 6 }]} />
         <View style={[styles.skeletonLine, { width: '70%', marginTop: 6 }]} />
         <View style={[styles.skeletonLine, { width: '50%', marginTop: 6 }]} />
       </View>
@@ -143,7 +181,8 @@ function SkeletonRow() {
 }
 
 export default function MembersListScreen() {
-  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -151,33 +190,50 @@ export default function MembersListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
-  const buildUrl = (tab: FilterTab, search: string) => {
-    const params: string[] = [];
+  const buildMembersUrl = (tab: FilterTab, search: string) => {
+    const params: string[] = ['limit=50'];
     if (tab !== 'all') params.push(`status=${tab}`);
     if (search.trim()) params.push(`search=${encodeURIComponent(search.trim())}`);
-    return `${BACKEND_URL}/api/members${params.length ? '?' + params.join('&') : ''}`;
+    return `${BACKEND_URL}/api/members?${params.join('&')}`;
   };
+
+  const loadStats = useCallback(async () => {
+    console.log('[MembersList] GET /api/members/stats');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[MembersList] Stats erreur:', res.status, text);
+        return;
+      }
+      const data = await res.json();
+      console.log('[MembersList] Stats chargées:', JSON.stringify(data));
+      setStats(data);
+    } catch (err: any) {
+      console.error('[MembersList] Stats erreur réseau:', err.message);
+    }
+  }, []);
 
   const loadMembers = useCallback(async (tab?: FilterTab, search?: string) => {
     const currentTab = tab ?? activeTab;
     const currentSearch = search ?? searchQuery;
-    const url = buildUrl(currentTab, currentSearch);
+    const url = buildMembersUrl(currentTab, currentSearch);
 
     console.log('[MembersList] GET', url);
     setError(null);
 
     try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('[MembersList] Erreur:', response.status, text);
-        throw new Error(`Erreur ${response.status}`);
+      const res = await fetch(url, { headers: ADMIN_HEADERS });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[MembersList] Erreur:', res.status, text);
+        throw new Error(`Erreur ${res.status}`);
       }
-      const data = await response.json();
-      const list: Member[] = data?.members ?? (Array.isArray(data) ? data : []);
+      const data = await res.json();
+      const list: Member[] = data?.members ?? [];
       const count: number = data?.total ?? list.length;
       console.log('[MembersList] Adhérents chargés:', list.length, '/ total:', count);
-      setAllMembers(list);
+      setMembers(list);
       setTotal(count);
     } catch (err: any) {
       console.error('[MembersList] Erreur chargement:', err.message);
@@ -191,15 +247,15 @@ export default function MembersListScreen() {
 
   useEffect(() => {
     setLoading(true);
-    loadMembers(activeTab, searchQuery);
+    Promise.all([loadStats(), loadMembers(activeTab, searchQuery)]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const onRefresh = useCallback(() => {
     console.log('[MembersList] Pull-to-refresh');
     setRefreshing(true);
-    loadMembers(activeTab, searchQuery);
-  }, [activeTab, searchQuery, loadMembers]);
+    Promise.all([loadStats(), loadMembers(activeTab, searchQuery)]);
+  }, [activeTab, searchQuery, loadStats, loadMembers]);
 
   const handleTabPress = (tab: FilterTab) => {
     console.log('[MembersList] Filtre sélectionné:', tab);
@@ -224,7 +280,62 @@ export default function MembersListScreen() {
   const handleRetry = () => {
     console.log('[MembersList] Bouton Réessayer appuyé');
     setLoading(true);
-    loadMembers(activeTab, searchQuery);
+    Promise.all([loadStats(), loadMembers(activeTab, searchQuery)]);
+  };
+
+  const handleChangeStatus = async (member: Member, newStatus: string) => {
+    console.log('[MembersList] PATCH /api/members/:id/status', member.id, '->', newStatus);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
+        method: 'PATCH',
+        headers: ADMIN_HEADERS,
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[MembersList] Erreur changement statut:', res.status, text);
+        Alert.alert('Erreur', `Impossible de modifier le statut (${res.status})`);
+        return;
+      }
+      console.log('[MembersList] Statut mis à jour avec succès:', member.full_name, '->', newStatus);
+      setMembers((prev) =>
+        prev.map((m) => (m.id === member.id ? { ...m, status: newStatus } : m))
+      );
+      loadStats();
+    } catch (err: any) {
+      console.error('[MembersList] Erreur réseau changement statut:', err.message);
+      Alert.alert('Erreur', 'Impossible de modifier le statut.');
+    }
+  };
+
+  const handleLongPress = (member: Member) => {
+    const options: { text: string; status?: string; style?: 'cancel' | 'destructive' }[] = [];
+
+    if (member.status !== 'active') {
+      options.push({ text: 'Activer', status: 'active' });
+    }
+    if (member.status !== 'pending') {
+      options.push({ text: 'Mettre en attente', status: 'pending' });
+    }
+    if (member.status !== 'suspended') {
+      options.push({ text: 'Suspendre', status: 'suspended', style: 'destructive' });
+    }
+    options.push({ text: 'Annuler', style: 'cancel' });
+
+    Alert.alert(
+      member.full_name,
+      `Statut actuel : ${getStatusLabel(member.status)}\nChoisissez une action :`,
+      options.map((opt) => ({
+        text: opt.text,
+        style: opt.style,
+        onPress: opt.status
+          ? () => {
+              console.log('[MembersList] Action statut sélectionnée:', opt.text, 'pour', member.full_name);
+              handleChangeStatus(member, opt.status!);
+            }
+          : undefined,
+      }))
+    );
   };
 
   const tabs: { value: FilterTab; label: string }[] = [
@@ -234,7 +345,7 @@ export default function MembersListScreen() {
     { value: 'suspended', label: 'Suspendus' },
   ];
 
-  const totalLabel = `${total} adhérent${total !== 1 ? 's' : ''} inscrits`;
+  const totalLabel = `${total} adhérent${total !== 1 ? 's' : ''}`;
 
   return (
     <>
@@ -250,6 +361,31 @@ export default function MembersListScreen() {
       />
 
       <View style={styles.container}>
+        {/* Stats bar */}
+        {stats && (
+          <View style={styles.statsBar}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{stats.total}</Text>
+              <Text style={styles.statLabel}>Total</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: '#1B7A3E' }]}>{stats.active}</Text>
+              <Text style={styles.statLabel}>Actifs</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: '#D97706' }]}>{stats.pending}</Text>
+              <Text style={styles.statLabel}>En attente</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: '#DC2626' }]}>{stats.suspended}</Text>
+              <Text style={styles.statLabel}>Suspendus</Text>
+            </View>
+          </View>
+        )}
+
         {/* Search bar */}
         <View style={styles.searchContainer}>
           <View style={styles.searchInputWrapper}>
@@ -315,6 +451,7 @@ export default function MembersListScreen() {
             <View style={styles.countBadge}>
               <Text style={styles.countText}>{totalLabel}</Text>
             </View>
+            <Text style={styles.longPressHint}>Appui long pour modifier le statut</Text>
           </View>
         )}
 
@@ -336,14 +473,14 @@ export default function MembersListScreen() {
           </View>
         ) : (
           <FlatList
-            data={allMembers}
+            data={members}
             keyExtractor={(item) => item.id}
             renderItem={({ item, index }) => (
-              <AnimatedMemberRow item={item} index={index} />
+              <AnimatedMemberRow item={item} index={index} onLongPress={handleLongPress} />
             )}
             contentContainerStyle={[
               styles.listContent,
-              allMembers.length === 0 && styles.listContentEmpty,
+              members.length === 0 && styles.listContentEmpty,
             ]}
             refreshControl={
               <RefreshControl
@@ -378,6 +515,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  statsBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    marginVertical: 4,
   },
   searchContainer: {
     backgroundColor: colors.card,
@@ -425,7 +589,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.primary,
   },
   tabText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -434,7 +598,10 @@ const styles = StyleSheet.create({
   },
   countRow: {
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   countBadge: {
     alignSelf: 'flex-start',
@@ -449,6 +616,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
+  },
+  longPressHint: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    fontStyle: 'italic',
   },
   listContent: {
     paddingHorizontal: 12,
@@ -500,6 +672,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
+    marginBottom: 2,
+  },
+  memberNumber: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFC107',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     marginBottom: 4,
   },
   memberDetailRow: {
@@ -515,12 +694,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     flex: 1,
-  },
-  memberNumber: {
-    fontSize: 11,
-    color: colors.textTertiary,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    marginTop: 4,
   },
   memberRight: {
     alignItems: 'flex-end',

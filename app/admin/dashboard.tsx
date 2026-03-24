@@ -17,23 +17,22 @@ import { AnimatedPressable } from '@/components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
 
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'x-admin-password': 'admin123' };
 
-interface DashboardStats {
-  totalMembers: number;
-  activeMembers: number;
-  pendingMembers: number;
-  suspendedMembers: number;
-  totalCotisations?: number;
-  recentMembers?: RecentMember[];
+interface Stats {
+  total: number;
+  active: number;
+  pending: number;
+  suspended: number;
 }
 
 interface RecentMember {
   id: string;
-  fullName: string;
-  commune?: string;
-  membershipNumber: string;
+  member_number: string;
+  full_name: string;
+  commune: string;
   status: string;
-  joinedAt?: string;
+  created_at: string;
 }
 
 function getStatusColor(status: string) {
@@ -61,29 +60,42 @@ function formatDate(dateString?: string) {
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [recentMembers, setRecentMembers] = useState<RecentMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showQuickSetup, setShowQuickSetup] = useState(false);
 
   const loadDashboard = useCallback(async () => {
-    console.log('[AdminDashboard] GET /api/admin/dashboard');
+    console.log('[AdminDashboard] GET /api/members/stats + /api/members?limit=5');
     setError(null);
     try {
-      const adminPassword = await AsyncStorage.getItem('admin_password');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (adminPassword) headers['x-admin-password'] = adminPassword;
+      const [statsRes, membersRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS }),
+        fetch(`${BACKEND_URL}/api/members?limit=5`, { headers: ADMIN_HEADERS }),
+      ]);
 
-      const response = await fetch(`${BACKEND_URL}/api/admin/dashboard`, { headers });
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('[AdminDashboard] Erreur:', response.status, text);
-        throw new Error(`Erreur ${response.status}`);
+      if (!statsRes.ok) {
+        const text = await statsRes.text();
+        console.error('[AdminDashboard] Stats erreur:', statsRes.status, text);
+        throw new Error(`Erreur stats ${statsRes.status}`);
       }
-      const data = await response.json();
-      console.log('[AdminDashboard] Stats chargées:', JSON.stringify(data));
-      setStats(data);
+      if (!membersRes.ok) {
+        const text = await membersRes.text();
+        console.error('[AdminDashboard] Members erreur:', membersRes.status, text);
+        throw new Error(`Erreur membres ${membersRes.status}`);
+      }
+
+      const [statsData, membersData] = await Promise.all([
+        statsRes.json(),
+        membersRes.json(),
+      ]);
+
+      console.log('[AdminDashboard] Stats chargées:', JSON.stringify(statsData));
+      console.log('[AdminDashboard] Derniers adhérents chargés:', membersData?.members?.length ?? 0);
+
+      setStats(statsData);
+      setRecentMembers(membersData?.members ?? []);
     } catch (err: any) {
       console.error('[AdminDashboard] Erreur chargement:', err.message);
       setError(err.message || 'Impossible de charger les statistiques.');
@@ -95,8 +107,7 @@ export default function AdminDashboardScreen() {
 
   useEffect(() => {
     const checkSetup = async () => {
-      const completed = await AsyncStorage.getItem('quick_setup_completed');
-      setShowQuickSetup(!completed);
+      await AsyncStorage.getItem('quick_setup_completed');
     };
     checkSetup();
     loadDashboard();
@@ -125,13 +136,10 @@ export default function AdminDashboardScreen() {
     }
   };
 
-  const totalStr = String(stats?.totalMembers ?? 0);
-  const activeStr = String(stats?.activeMembers ?? 0);
-  const pendingStr = String(stats?.pendingMembers ?? 0);
-  const suspendedStr = String(stats?.suspendedMembers ?? 0);
-  const cotisationsStr = stats?.totalCotisations != null
-    ? Number(stats.totalCotisations).toLocaleString('fr-FR') + ' FCFA'
-    : '—';
+  const totalStr = String(stats?.total ?? 0);
+  const activeStr = String(stats?.active ?? 0);
+  const pendingStr = String(stats?.pending ?? 0);
+  const suspendedStr = String(stats?.suspended ?? 0);
 
   return (
     <>
@@ -163,7 +171,14 @@ export default function AdminDashboardScreen() {
             <View style={styles.errorBox}>
               <Text style={styles.errorTitle}>Impossible de charger les stats</Text>
               <Text style={styles.errorText}>{error}</Text>
-              <AnimatedPressable style={styles.retryBtn} onPress={() => { console.log('[AdminDashboard] Bouton Réessayer appuyé'); setLoading(true); loadDashboard(); }}>
+              <AnimatedPressable
+                style={styles.retryBtn}
+                onPress={() => {
+                  console.log('[AdminDashboard] Bouton Réessayer appuyé');
+                  setLoading(true);
+                  loadDashboard();
+                }}
+              >
                 <Text style={styles.retryBtnText}>Réessayer</Text>
               </AnimatedPressable>
             </View>
@@ -191,30 +206,30 @@ export default function AdminDashboardScreen() {
                 </View>
               </View>
 
-              {/* Cotisations */}
-              <View style={styles.cotisationCard}>
-                <Text style={styles.cotisationLabel}>Total cotisations collectées</Text>
-                <Text style={styles.cotisationAmount}>{cotisationsStr}</Text>
-              </View>
-
               {/* Recent members */}
-              {stats?.recentMembers && stats.recentMembers.length > 0 && (
+              {recentMembers.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Derniers adhérents</Text>
-                  {stats.recentMembers.slice(0, 5).map((member) => {
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Derniers adhérents</Text>
+                    <AnimatedPressable onPress={() => handleNavigation('/members-list', 'Adhérents')}>
+                      <Text style={styles.sectionLink}>Voir tous →</Text>
+                    </AnimatedPressable>
+                  </View>
+                  {recentMembers.map((member) => {
                     const statusColor = getStatusColor(member.status);
                     const statusLabel = getStatusLabel(member.status);
-                    const dateStr = formatDate(member.joinedAt);
+                    const dateStr = formatDate(member.created_at);
+                    const initial = (member.full_name || '?').charAt(0).toUpperCase();
                     return (
                       <View key={member.id} style={styles.memberRow}>
                         <View style={styles.memberAvatar}>
-                          <Text style={styles.memberAvatarText}>
-                            {(member.fullName || '?').charAt(0).toUpperCase()}
-                          </Text>
+                          <Text style={styles.memberAvatarText}>{initial}</Text>
                         </View>
                         <View style={styles.memberInfo}>
-                          <Text style={styles.memberName} numberOfLines={1}>{member.fullName}</Text>
-                          <Text style={styles.memberMeta}>{member.commune || '—'} • {dateStr}</Text>
+                          <Text style={styles.memberName} numberOfLines={1}>{member.full_name}</Text>
+                          <Text style={styles.memberNumber}>{member.member_number}</Text>
+                          <Text style={styles.memberMeta}>{member.commune || '—'}</Text>
+                          <Text style={styles.memberDate}>{dateStr}</Text>
                         </View>
                         <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
                           <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
@@ -378,7 +393,7 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   statCard: {
     flex: 1,
@@ -403,37 +418,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
-  cotisationCard: {
-    backgroundColor: colors.accentMuted,
-    borderRadius: 14,
-    padding: 16,
+  section: {
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.accent + '40',
+  },
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  cotisationLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '600',
-    flex: 1,
-  },
-  cotisationAmount: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  section: {
-    marginBottom: 24,
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 12,
     letterSpacing: -0.2,
+  },
+  sectionLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
   },
   memberRow: {
     flexDirection: 'row',
@@ -467,10 +470,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
+  memberNumber: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFC107',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 1,
+  },
   memberMeta: {
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  memberDate: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    marginTop: 1,
   },
   statusBadge: {
     paddingHorizontal: 8,
