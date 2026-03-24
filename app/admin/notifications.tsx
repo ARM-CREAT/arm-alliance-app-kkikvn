@@ -18,7 +18,8 @@ import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
-import { BACKEND_URL, apiPost, apiPut, apiDelete } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface NotificationItem {
   id: string;
@@ -148,6 +149,14 @@ export default function AdminNotificationsScreen() {
     resetForm();
   };
 
+  const getAdminHeaders = async (): Promise<Record<string, string>> => {
+    const password = await AsyncStorage.getItem('admin_password');
+    return {
+      'Content-Type': 'application/json',
+      ...(password ? { 'x-admin-password': password } : {}),
+    };
+  };
+
   const handleSubmit = async () => {
     console.log('[AdminNotifications] Bouton Enregistrer appuyé, editing:', editingNotification?.id ?? 'nouveau');
 
@@ -173,13 +182,30 @@ export default function AdminNotificationsScreen() {
     console.log('[AdminNotifications] Payload:', JSON.stringify(payload));
 
     try {
+      const headers = await getAdminHeaders();
       if (editingNotification) {
         console.log('[AdminNotifications] PUT /api/notifications/' + editingNotification.id);
-        await apiPut(`/api/notifications/${editingNotification.id}`, payload);
+        const res = await fetch(`${BACKEND_URL}/api/notifications/${editingNotification.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminNotifications] Notification modifiée avec succès');
       } else {
         console.log('[AdminNotifications] POST /api/notifications');
-        await apiPost('/api/notifications', payload);
+        const res = await fetch(`${BACKEND_URL}/api/notifications`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminNotifications] Notification créée avec succès');
       }
 
@@ -210,7 +236,15 @@ export default function AdminNotificationsScreen() {
           onPress: async () => {
             console.log('[AdminNotifications] DELETE /api/notifications/' + item.id);
             try {
-              await apiDelete(`/api/notifications/${item.id}`);
+              const headers = await getAdminHeaders();
+              const res = await fetch(`${BACKEND_URL}/api/notifications/${item.id}`, {
+                method: 'DELETE',
+                headers,
+              });
+              if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+              }
               console.log('[AdminNotifications] Suppression réussie');
               if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               await loadNotifications();
@@ -228,8 +262,17 @@ export default function AdminNotificationsScreen() {
     const newPublished = !isPublished(item);
     console.log('[AdminNotifications] Toggle publié pour:', item.id, '->', newPublished);
     try {
+      const headers = await getAdminHeaders();
       console.log('[AdminNotifications] PUT /api/notifications/' + item.id, { published: newPublished });
-      await apiPut(`/api/notifications/${item.id}`, { published: newPublished });
+      const res = await fetch(`${BACKEND_URL}/api/notifications/${item.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ published: newPublished }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+      }
       console.log('[AdminNotifications] Toggle publié réussi');
       setNotifications(prev =>
         prev.map(n => n.id === item.id ? { ...n, published: newPublished, is_published: newPublished } : n)

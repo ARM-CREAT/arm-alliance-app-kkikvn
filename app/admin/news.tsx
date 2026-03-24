@@ -17,7 +17,8 @@ import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
-import { apiGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface NewsItem {
   id: string;
@@ -26,6 +27,14 @@ interface NewsItem {
   imageUrl?: string;
   publishedAt: string;
 }
+
+const getAdminHeaders = async (): Promise<Record<string, string>> => {
+  const password = await AsyncStorage.getItem('admin_password');
+  return {
+    'Content-Type': 'application/json',
+    ...(password ? { 'x-admin-password': password } : {}),
+  };
+};
 
 export default function AdminNewsScreen() {
   const [loading, setLoading] = useState(true);
@@ -46,7 +55,12 @@ export default function AdminNewsScreen() {
   const loadNews = useCallback(async () => {
     console.log('[AdminNews] GET /api/news');
     try {
-      const data = await apiGet<NewsItem[]>('/api/news');
+      const response = await fetch(`${BACKEND_URL}/api/news`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+      }
+      const data = await response.json();
       const list: NewsItem[] = Array.isArray(data) ? data : [];
       console.log('[AdminNews] Loaded news:', list.length);
       setNews(list);
@@ -83,7 +97,7 @@ export default function AdminNewsScreen() {
     setFormContent('');
     setFormImageUrl('');
     setShowForm(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleEdit = (item: NewsItem) => {
@@ -93,7 +107,7 @@ export default function AdminNewsScreen() {
     setFormContent(item.content || '');
     setFormImageUrl(item.imageUrl || '');
     setShowForm(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleCancel = () => {
@@ -125,23 +139,40 @@ export default function AdminNewsScreen() {
     console.log('[AdminNews] Submitting payload:', JSON.stringify(payload));
 
     try {
+      const headers = await getAdminHeaders();
       if (editingId) {
         console.log('[AdminNews] PUT /api/admin/news/' + editingId);
-        await authenticatedPut(`/api/admin/news/${editingId}`, payload);
+        const res = await fetch(`${BACKEND_URL}/api/admin/news/${editingId}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminNews] News updated successfully');
       } else {
         console.log('[AdminNews] POST /api/admin/news');
-        await authenticatedPost('/api/admin/news', payload);
+        const res = await fetch(`${BACKEND_URL}/api/admin/news`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminNews] News created successfully');
       }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       handleCancel();
       await loadNews();
       showModal('Succès', editingId ? 'Actualité modifiée avec succès!' : 'Actualité créée avec succès!', 'success');
     } catch (error: any) {
       console.error('[AdminNews] Submit error:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showModal('Erreur', error.message || "Échec de l'opération.", 'error');
     } finally {
       setSubmitting(false);
@@ -153,14 +184,22 @@ export default function AdminNewsScreen() {
     setDeleteConfirmId(null);
 
     try {
-      await authenticatedDelete(`/api/admin/news/${id}`);
+      const headers = await getAdminHeaders();
+      const res = await fetch(`${BACKEND_URL}/api/admin/news/${id}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+      }
       console.log('[AdminNews] Delete successful');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await loadNews();
       showModal('Succès', 'Actualité supprimée avec succès!', 'success');
     } catch (error: any) {
       console.error('[AdminNews] Delete error:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showModal('Erreur', error.message || 'Échec de la suppression.', 'error');
     }
   };

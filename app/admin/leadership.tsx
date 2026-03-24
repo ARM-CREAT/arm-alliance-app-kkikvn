@@ -4,7 +4,8 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet, apiPost, apiPut, apiDelete } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -29,6 +30,14 @@ interface LeadershipMember {
   bio?: string;
   order_index?: number;
 }
+
+const getAdminHeaders = async (): Promise<Record<string, string>> => {
+  const password = await AsyncStorage.getItem('admin_password');
+  return {
+    'Content-Type': 'application/json',
+    ...(password ? { 'x-admin-password': password } : {}),
+  };
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
@@ -93,31 +102,37 @@ export default function AdminLeadershipScreen() {
   const [formOrderIndex, setFormOrderIndex] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadMembers();
-  }, []);
-
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     console.log('[AdminLeadership] GET /api/direction');
     try {
-      const data = await apiGet('/api/direction');
+      const headers = await getAdminHeaders();
+      const response = await fetch(`${BACKEND_URL}/api/direction`, { headers });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+      }
+      const data = await response.json();
       const list = Array.isArray(data) ? data : [];
       console.log('[AdminLeadership] Members loaded:', list.length);
       setMembers(list);
     } catch (error: any) {
       console.error('[AdminLeadership] Error loading members:', error);
-      showModalFunc('Erreur', 'Impossible de charger les membres de la direction.', 'error');
+      showModalFunc('Erreur', 'Impossible de charger les membres de la direction: ' + error.message, 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadMembers();
+  }, [loadMembers]);
 
   const onRefresh = useCallback(() => {
     console.log('[AdminLeadership] Pull-to-refresh triggered');
     setRefreshing(true);
     loadMembers();
-  }, []);
+  }, [loadMembers]);
 
   const showModalFunc = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm', callback?: () => void) => {
     setModalTitle(title);
@@ -129,7 +144,7 @@ export default function AdminLeadershipScreen() {
 
   const handleAdd = () => {
     console.log('[AdminLeadership] User tapped Ajouter member');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingMember(null);
     setFormFirstName('');
     setFormLastName('');
@@ -142,7 +157,7 @@ export default function AdminLeadershipScreen() {
 
   const handleEdit = (item: LeadershipMember) => {
     console.log('[AdminLeadership] User tapped Modifier member:', item.id);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingMember(item);
     setFormFirstName(item.first_name || '');
     setFormLastName(item.last_name || '');
@@ -166,7 +181,7 @@ export default function AdminLeadershipScreen() {
     }
 
     console.log('[AdminLeadership] User tapped save member, editing:', editingMember?.id ?? 'new');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
     const memberData: Record<string, any> = {
@@ -179,13 +194,30 @@ export default function AdminLeadershipScreen() {
     if (formOrderIndex.trim()) memberData.order_index = parseInt(formOrderIndex.trim(), 10);
 
     try {
+      const headers = await getAdminHeaders();
       if (editingMember) {
         console.log('[AdminLeadership] PUT /api/direction/' + editingMember.id, memberData);
-        await apiPut(`/api/direction/${editingMember.id}`, memberData);
+        const response = await fetch(`${BACKEND_URL}/api/direction/${editingMember.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(memberData),
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminLeadership] Member updated successfully');
       } else {
         console.log('[AdminLeadership] POST /api/direction', memberData);
-        await apiPost('/api/direction', memberData);
+        const response = await fetch(`${BACKEND_URL}/api/direction`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(memberData),
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminLeadership] Member created successfully');
       }
 
@@ -204,7 +236,7 @@ export default function AdminLeadershipScreen() {
 
   const handleDelete = (id: string) => {
     console.log('[AdminLeadership] User tapped Supprimer member:', id);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showModalFunc(
       'Confirmer la suppression',
       'Êtes-vous sûr de vouloir supprimer ce membre de la direction?',
@@ -212,7 +244,15 @@ export default function AdminLeadershipScreen() {
       async () => {
         console.log('[AdminLeadership] DELETE /api/direction/' + id);
         try {
-          await apiDelete(`/api/direction/${id}`);
+          const headers = await getAdminHeaders();
+          const response = await fetch(`${BACKEND_URL}/api/direction/${id}`, {
+            method: 'DELETE',
+            headers,
+          });
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+          }
           console.log('[AdminLeadership] Member deleted successfully');
           await loadMembers();
           showModalFunc('Succès', 'Membre supprimé avec succès!', 'success');
@@ -250,7 +290,7 @@ export default function AdminLeadershipScreen() {
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.listContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         >
           {members.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -259,7 +299,7 @@ export default function AdminLeadershipScreen() {
             </View>
           ) : (
             members.map((member) => {
-              const fullName = `${member.first_name} ${member.last_name}`.trim();
+              const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim();
               const initial = (member.first_name || member.last_name || '?').charAt(0).toUpperCase();
               return (
                 <View key={member.id} style={styles.memberCard}>

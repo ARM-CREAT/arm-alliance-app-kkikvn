@@ -4,7 +4,8 @@ import { Modal } from '@/components/ui/Modal';
 import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -31,6 +32,14 @@ interface ProgramItem {
 const ICON_OPTIONS = ['🏛️', '💰', '🛡️', '📚', '🏥', '🏗️', '🌾', '🌍', '⚖️', '🤝', '🌱', '🔬'];
 const COLOR_OPTIONS = ['#1B5E20', '#1565C0', '#E65100', '#6A1B9A', '#00695C', '#C62828', '#F57F17', '#37474F'];
 
+const getAdminHeaders = async (): Promise<Record<string, string>> => {
+  const password = await AsyncStorage.getItem('admin_password');
+  return {
+    'Content-Type': 'application/json',
+    ...(password ? { 'x-admin-password': password } : {}),
+  };
+};
+
 export default function AdminProgramScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,14 +59,15 @@ export default function AdminProgramScreen() {
   const [formContent, setFormContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadPrograms();
-  }, []);
-
-  const loadPrograms = async () => {
+  const loadPrograms = useCallback(async () => {
     console.log('[AdminProgram] GET /api/programs');
     try {
-      const data = await apiGet<ProgramItem[]>('/api/programs');
+      const response = await fetch(`${BACKEND_URL}/api/programs`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+      }
+      const data = await response.json();
       console.log('[AdminProgram] Programs loaded:', Array.isArray(data) ? data.length : 0);
       setPrograms(Array.isArray(data) ? data : []);
     } catch (error: any) {
@@ -67,13 +77,17 @@ export default function AdminProgramScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadPrograms();
+  }, [loadPrograms]);
 
   const onRefresh = useCallback(() => {
     console.log('[AdminProgram] Pull-to-refresh triggered');
     setRefreshing(true);
     loadPrograms();
-  }, []);
+  }, [loadPrograms]);
 
   const showModalFunc = (
     title: string,
@@ -90,7 +104,7 @@ export default function AdminProgramScreen() {
 
   const handleAdd = () => {
     console.log('[AdminProgram] User tapped Ajouter program');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingProgram(null);
     setFormTitle('');
     setFormDescription('');
@@ -102,7 +116,7 @@ export default function AdminProgramScreen() {
 
   const handleEdit = (item: ProgramItem) => {
     console.log('[AdminProgram] User tapped Modifier program:', item.id);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setEditingProgram(item);
     setFormTitle(item.title || '');
     setFormDescription(item.description || '');
@@ -125,7 +139,7 @@ export default function AdminProgramScreen() {
     }
 
     console.log('[AdminProgram] User tapped save program, editing:', editingProgram?.id ?? 'new');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
     const programData: Record<string, string> = {
@@ -139,13 +153,30 @@ export default function AdminProgramScreen() {
     console.log('[AdminProgram] Submitting payload:', JSON.stringify(programData));
 
     try {
+      const headers = await getAdminHeaders();
       if (editingProgram) {
         console.log('[AdminProgram] PUT /api/programs/' + editingProgram.id);
-        await authenticatedPut(`/api/programs/${editingProgram.id}`, programData);
+        const res = await fetch(`${BACKEND_URL}/api/programs/${editingProgram.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(programData),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminProgram] Program updated successfully');
       } else {
         console.log('[AdminProgram] POST /api/programs');
-        await authenticatedPost('/api/programs', programData);
+        const res = await fetch(`${BACKEND_URL}/api/programs`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(programData),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminProgram] Program created successfully');
       }
 
@@ -164,7 +195,7 @@ export default function AdminProgramScreen() {
 
   const handleDelete = (id: string) => {
     console.log('[AdminProgram] User tapped Supprimer program:', id);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showModalFunc(
       'Confirmer la suppression',
       "Êtes-vous sûr de vouloir supprimer cet élément du programme?",
@@ -172,7 +203,15 @@ export default function AdminProgramScreen() {
       async () => {
         console.log('[AdminProgram] DELETE /api/programs/' + id);
         try {
-          await authenticatedDelete(`/api/programs/${id}`);
+          const headers = await getAdminHeaders();
+          const res = await fetch(`${BACKEND_URL}/api/programs/${id}`, {
+            method: 'DELETE',
+            headers,
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+          }
           console.log('[AdminProgram] Program deleted successfully');
           await loadPrograms();
           showModalFunc('Succès', 'Programme supprimé avec succès!', 'success');
@@ -210,7 +249,7 @@ export default function AdminProgramScreen() {
         <ScrollView
           style={styles.container}
           contentContainerStyle={styles.listContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
         >
           {programs.length === 0 ? (
             <View style={styles.emptyContainer}>

@@ -16,7 +16,8 @@ import {
 import { Stack } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/styles/commonStyles';
-import { apiGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Contact {
   id: string;
@@ -49,6 +50,14 @@ const emptyForm = {
   type: 'general',
 };
 
+const getAdminHeaders = async (): Promise<Record<string, string>> => {
+  const password = await AsyncStorage.getItem('admin_password');
+  return {
+    'Content-Type': 'application/json',
+    ...(password ? { 'x-admin-password': password } : {}),
+  };
+};
+
 export default function AdminContactsScreen() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +74,12 @@ export default function AdminContactsScreen() {
   const fetchContacts = useCallback(async () => {
     console.log('[AdminContacts] GET /api/contacts');
     try {
-      const data = await apiGet<Contact[]>('/api/contacts');
+      const response = await fetch(`${BACKEND_URL}/api/contacts`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
+      }
+      const data = await response.json();
       const list: Contact[] = Array.isArray(data) ? data : [];
       console.log('[AdminContacts] Contacts loaded:', list.length);
       setContacts(list);
@@ -142,6 +156,7 @@ export default function AdminContactsScreen() {
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSaving(true);
     try {
+      const headers = await getAdminHeaders();
       const body = {
         name: form.name.trim(),
         role: form.role.trim(),
@@ -151,11 +166,27 @@ export default function AdminContactsScreen() {
       };
       if (editingContact) {
         console.log('[AdminContacts] PUT /api/contacts/' + editingContact.id);
-        await authenticatedPut(`/api/contacts/${editingContact.id}`, body);
+        const res = await fetch(`${BACKEND_URL}/api/contacts/${editingContact.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminContacts] Contact updated successfully');
       } else {
         console.log('[AdminContacts] POST /api/contacts');
-        await authenticatedPost('/api/contacts', body);
+        const res = await fetch(`${BACKEND_URL}/api/contacts`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+        }
         console.log('[AdminContacts] Contact created successfully');
       }
       closeFormModal();
@@ -173,7 +204,15 @@ export default function AdminContactsScreen() {
     console.log('[AdminContacts] DELETE /api/contacts/' + deletingId);
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     try {
-      await authenticatedDelete(`/api/contacts/${deletingId}`);
+      const headers = await getAdminHeaders();
+      const res = await fetch(`${BACKEND_URL}/api/contacts/${deletingId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+      }
       console.log('[AdminContacts] Contact deleted successfully');
       closeDeleteModal();
       await fetchContacts();

@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet } from '@/utils/api';
+// No auth import needed — uses direct fetch with admin password header
 
 interface Stats {
   total: number;
