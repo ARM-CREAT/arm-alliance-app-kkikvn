@@ -963,6 +963,12 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.memberProfiles.status, 'pending'));
         const pendingMembers = pendingMembersResult[0]?.count ?? 0;
 
+        const suspendedMembersResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'suspended'));
+        const suspendedMembers = suspendedMembersResult[0]?.count ?? 0;
+
         // Get cotisation stats
         const cotisationsResult = await app.db.select({ count: countFn() }).from(schema.cotisations);
         const totalCotisations = cotisationsResult[0]?.count ?? 0;
@@ -997,6 +1003,7 @@ export function register(app: App, fastify: FastifyInstance) {
           totalMembers,
           activeMembers,
           pendingMembers,
+          suspendedMembers,
           totalCotisations,
           totalAmount,
           recentMembers,

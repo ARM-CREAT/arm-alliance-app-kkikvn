@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, sql } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -64,7 +64,7 @@ export function register(app: App, fastify: FastifyInstance) {
         const result = await app.db
           .select()
           .from(schema.leadership)
-          .orderBy(asc(schema.leadership.order));
+          .orderBy(asc(sql`COALESCE(${schema.leadership.orderIndex}, ${schema.leadership.order}, 999)`));
 
         app.logger.info({ count: result.length }, 'Direction members fetched');
         return {
