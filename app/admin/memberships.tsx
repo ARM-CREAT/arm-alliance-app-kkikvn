@@ -1,36 +1,31 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Modal,
   Platform,
 } from 'react-native';
-import { Stack } from 'expo-router';
-import { colors } from '@/styles/commonStyles';
-import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPatch } from '@/utils/api';
+import { Stack, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/constants/Colors';
+import { BACKEND_URL } from '@/utils/api-helpers';
+
+const C = Colors.light;
+const ADMIN_PASSWORD = 'admin123';
 
 interface Member {
   id: string;
-  fullName: string;
-  membershipNumber: string;
-  commune?: string;
-  region?: string;
-  profession?: string;
-  phone?: string;
-  email?: string;
-  status: string;
-  role?: string;
-  createdAt: string;
+  member_number: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  location: string;
+  created_at: string;
 }
-
-type FilterStatus = 'all' | 'pending' | 'active' | 'suspended';
 
 function formatDate(dateString?: string): string {
   if (!dateString) return '—';
@@ -45,106 +40,116 @@ function formatDate(dateString?: string): string {
   }
 }
 
-function getStatusColor(status: string): string {
-  const s = (status || '').toLowerCase();
-  if (s === 'active') return '#34C759';
-  if (s === 'pending') return '#FF9500';
-  if (s === 'suspended') return '#FF3B30';
-  if (s === 'rejected') return '#8E8E93';
-  return '#8E8E93';
-}
-
-function getStatusLabel(status: string): string {
-  const s = (status || '').toLowerCase();
-  if (s === 'active') return 'Actif';
-  if (s === 'pending') return 'En attente';
-  if (s === 'suspended') return 'Suspendu';
-  if (s === 'rejected') return 'Rejeté';
-  return status || '—';
+function getInitials(firstName: string, lastName: string): string {
+  const f = (firstName || '').charAt(0).toUpperCase();
+  const l = (lastName || '').charAt(0).toUpperCase();
+  return f + l || '?';
 }
 
 export default function AdminMembershipsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
-  const [filter, setFilter] = useState<FilterStatus>('all');
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [detailVisible, setDetailVisible] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
 
-  const loadMembers = useCallback(async (status: FilterStatus) => {
-    const endpoint = status === 'all'
-      ? '/api/admin/memberships'
-      : `/api/admin/memberships?status=${status}`;
-    console.log('[AdminMemberships] GET', endpoint);
+  const loadMembers = useCallback(async (isRefresh = false) => {
+    console.log('[AdminMemberships] GET /api/members');
+    if (!isRefresh) setLoading(true);
     setError(null);
+
     try {
-      const data = await authenticatedGet<{ members: Member[] }>(endpoint);
-      const list: Member[] = data?.members ?? (Array.isArray(data) ? data : []);
-      console.log('[AdminMemberships] Members loaded:', list.length);
-      setMembers(list);
-    } catch (err: any) {
-      console.error('[AdminMemberships] Error loading members:', err);
-      setError(err.message || 'Impossible de charger les adhésions.');
+      const [membersRes, countRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/members`, {
+          headers: { 'x-admin-password': ADMIN_PASSWORD },
+        }),
+        fetch(`${BACKEND_URL}/api/members/count`),
+      ]);
+
+      if (!membersRes.ok) {
+        const text = await membersRes.text();
+        console.log('[AdminMemberships] Erreur HTTP', membersRes.status, text);
+        throw new Error(`Erreur ${membersRes.status}: impossible de charger les membres`);
+      }
+
+      const membersData: Member[] = await membersRes.json();
+      console.log('[AdminMemberships] Membres chargés:', membersData.length);
+      setMembers(Array.isArray(membersData) ? membersData : []);
+
+      if (countRes.ok) {
+        const countData = await countRes.json();
+        setTotalCount(typeof countData.count === 'number' ? countData.count : null);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.log('[AdminMemberships] Erreur:', message);
+      setError(message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    loadMembers(filter);
-  }, [filter, loadMembers]);
+  useFocusEffect(
+    useCallback(() => {
+      loadMembers(false);
+    }, [loadMembers])
+  );
 
   const onRefresh = useCallback(() => {
-    console.log('[AdminMemberships] Pull-to-refresh triggered');
+    console.log('[AdminMemberships] Pull-to-refresh déclenché');
     setRefreshing(true);
-    loadMembers(filter);
-  }, [filter, loadMembers]);
+    loadMembers(true);
+  }, [loadMembers]);
 
-  const handleFilterChange = (newFilter: FilterStatus) => {
-    console.log('[AdminMemberships] User changed filter to:', newFilter);
-    setFilter(newFilter);
+  const displayCount = totalCount !== null ? String(totalCount) : String(members.length);
+
+  const renderItem = ({ item }: { item: Member }) => {
+    const initials = getInitials(item.first_name, item.last_name);
+    const fullName = `${item.first_name} ${item.last_name}`.trim();
+    const dateStr = formatDate(item.created_at);
+
+    return (
+      <View style={styles.memberCard}>
+        <View style={styles.memberCardRow}>
+          <View style={styles.memberAvatar}>
+            <Text style={styles.memberAvatarText}>{initials}</Text>
+          </View>
+          <View style={styles.memberInfo}>
+            <Text style={styles.memberName} numberOfLines={1}>{fullName}</Text>
+            <Text style={styles.memberNumber}>{item.member_number}</Text>
+            <View style={styles.memberMetaRow}>
+              <Ionicons name="call-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
+              <Text style={styles.memberMeta} numberOfLines={1}>{item.phone || '—'}</Text>
+            </View>
+            <View style={styles.memberMetaRow}>
+              <Ionicons name="location-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
+              <Text style={styles.memberMeta} numberOfLines={1}>{item.location || '—'}</Text>
+            </View>
+          </View>
+          <View style={styles.memberRight}>
+            <Text style={styles.memberDate}>{dateStr}</Text>
+          </View>
+        </View>
+      </View>
+    );
   };
 
-  const handleMemberPress = (member: Member) => {
-    console.log('[AdminMemberships] User tapped member:', member.id, member.fullName);
-    setSelectedMember(member);
-    setDetailVisible(true);
-  };
+  const ListHeader = () => (
+    <View style={styles.statsBar}>
+      <View style={styles.statItem}>
+        <Text style={styles.statNumber}>{displayCount}</Text>
+        <Text style={styles.statLabel}>Total membres</Text>
+      </View>
+    </View>
+  );
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!selectedMember) return;
-    console.log('[AdminMemberships] User tapped status change:', selectedMember.id, '->', newStatus);
-    setActionLoading(true);
-    try {
-      const response = await authenticatedPatch<{ success: boolean; member: Member }>(
-        `/api/admin/memberships/${selectedMember.id}/status`,
-        { status: newStatus }
-      );
-      console.log('[AdminMemberships] Status change response:', JSON.stringify(response));
-      setDetailVisible(false);
-      setSelectedMember(null);
-      loadMembers(filter);
-    } catch (err: any) {
-      console.error('[AdminMemberships] Status change error:', err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const filterTabs: { value: FilterStatus; label: string }[] = [
-    { value: 'all', label: 'Tous' },
-    { value: 'pending', label: 'En attente' },
-    { value: 'active', label: 'Actifs' },
-    { value: 'suspended', label: 'Suspendus' },
-  ];
-
-  const totalCount = String(members.length);
-  const activeCount = String(members.filter(m => m.status === 'active').length);
-  const pendingCount = String(members.filter(m => m.status === 'pending').length);
+  const ListEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="people-outline" size={56} color={C.textTertiary} />
+      <Text style={styles.emptyText}>Aucun membre inscrit</Text>
+    </View>
+  );
 
   return (
     <>
@@ -152,226 +157,51 @@ export default function AdminMembershipsScreen() {
         options={{
           headerShown: true,
           title: 'Adhésions',
-          headerStyle: { backgroundColor: colors.primary },
+          headerStyle: { backgroundColor: C.primary },
           headerTintColor: '#FFFFFF',
           headerTitleStyle: { fontWeight: 'bold' },
         }}
       />
       <View style={styles.container}>
-        {/* Stats bar */}
-        <View style={styles.statsBar}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{totalCount}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{activeCount}</Text>
-            <Text style={styles.statLabel}>Actifs</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{pendingCount}</Text>
-            <Text style={styles.statLabel}>En attente</Text>
-          </View>
-        </View>
-
-        {/* Filter tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterBar}
-          contentContainerStyle={styles.filterBarContent}
-        >
-          {filterTabs.map((tab) => {
-            const isActive = filter === tab.value;
-            return (
-              <TouchableOpacity
-                key={tab.value}
-                style={[styles.filterTab, isActive && styles.filterTabActive]}
-                onPress={() => handleFilterChange(tab.value)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.filterTabText, isActive && styles.filterTabTextActive]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <ActivityIndicator size="large" color={C.primary} />
             <Text style={styles.loadingText}>Chargement...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <IconSymbol ios_icon_name="exclamationmark.triangle" android_material_icon_name="warning" size={40} color={colors.danger} />
+            <Ionicons name="alert-circle-outline" size={48} color={C.danger} />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               style={styles.retryBtn}
-              onPress={() => { setLoading(true); loadMembers(filter); }}
+              onPress={() => {
+                console.log('[AdminMemberships] Bouton Réessayer appuyé');
+                loadMembers(false);
+              }}
             >
               <Text style={styles.retryBtnText}>Réessayer</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
+          <FlatList
+            data={members}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={ListEmpty}
+            contentContainerStyle={styles.listContent}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[C.primary]}
+                tintColor={C.primary}
+              />
             }
-          >
-            {members.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <IconSymbol ios_icon_name="person.3" android_material_icon_name="group" size={56} color={colors.textSecondary} />
-                <Text style={styles.emptyText}>Aucun membre trouvé</Text>
-              </View>
-            ) : (
-              members.map((member) => {
-                const statusColor = getStatusColor(member.status);
-                const statusLabel = getStatusLabel(member.status);
-                const dateStr = formatDate(member.createdAt);
-                return (
-                  <TouchableOpacity
-                    key={member.id}
-                    style={styles.memberCard}
-                    onPress={() => handleMemberPress(member)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.memberCardRow}>
-                      <View style={styles.memberAvatar}>
-                        <Text style={styles.memberAvatarText}>
-                          {(member.fullName || '?').charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <View style={styles.memberInfo}>
-                        <Text style={styles.memberName} numberOfLines={1}>{member.fullName}</Text>
-                        <Text style={styles.memberNumber}>{member.membershipNumber}</Text>
-                        <Text style={styles.memberMeta} numberOfLines={1}>
-                          {member.commune || member.region || '—'}
-                        </Text>
-                      </View>
-                      <View style={styles.memberRight}>
-                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
-                          <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
-                        </View>
-                        <Text style={styles.memberDate}>{dateStr}</Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </ScrollView>
+            showsVerticalScrollIndicator={false}
+          />
         )}
       </View>
-
-      {/* Member Detail Modal */}
-      <Modal
-        visible={detailVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setDetailVisible(false)}
-      >
-        {selectedMember && (
-          <View style={styles.detailContainer}>
-            <View style={styles.detailHeader}>
-              <Text style={styles.detailTitle} numberOfLines={1}>{selectedMember.fullName}</Text>
-              <TouchableOpacity
-                style={styles.detailCloseBtn}
-                onPress={() => {
-                  console.log('[AdminMemberships] User closed member detail');
-                  setDetailVisible(false);
-                }}
-              >
-                <Text style={styles.detailCloseBtnText}>Fermer</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.detailScroll} contentContainerStyle={styles.detailScrollContent}>
-              {/* Status badge */}
-              <View style={styles.detailStatusRow}>
-                <View style={[styles.statusBadgeLarge, { backgroundColor: getStatusColor(selectedMember.status) + '22' }]}>
-                  <Text style={[styles.statusTextLarge, { color: getStatusColor(selectedMember.status) }]}>
-                    {getStatusLabel(selectedMember.status)}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Info rows */}
-              {[
-                { label: 'Numéro de membre', value: selectedMember.membershipNumber },
-                { label: 'Téléphone', value: selectedMember.phone },
-                { label: 'Email', value: selectedMember.email },
-                { label: 'Commune', value: selectedMember.commune },
-                { label: 'Région', value: selectedMember.region },
-                { label: 'Profession', value: selectedMember.profession },
-                { label: 'Rôle', value: selectedMember.role },
-                { label: 'Date d\'inscription', value: formatDate(selectedMember.createdAt) },
-              ].map((row) => {
-                if (!row.value) return null;
-                return (
-                  <View key={row.label} style={styles.detailRow}>
-                    <Text style={styles.detailRowLabel}>{row.label}</Text>
-                    <Text style={styles.detailRowValue}>{row.value}</Text>
-                  </View>
-                );
-              })}
-
-              {/* Action buttons */}
-              <Text style={styles.actionsTitle}>Actions</Text>
-
-              {selectedMember.status !== 'active' && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnApprove, actionLoading && styles.actionBtnDisabled]}
-                  onPress={() => handleStatusChange('active')}
-                  disabled={actionLoading}
-                  activeOpacity={0.8}
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.actionBtnText}>Approuver</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-
-              {selectedMember.status !== 'suspended' && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnSuspend, actionLoading && styles.actionBtnDisabled]}
-                  onPress={() => handleStatusChange('suspended')}
-                  disabled={actionLoading}
-                  activeOpacity={0.8}
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.actionBtnText}>Suspendre</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-
-              {selectedMember.status !== 'rejected' && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionBtnReject, actionLoading && styles.actionBtnDisabled]}
-                  onPress={() => handleStatusChange('rejected')}
-                  disabled={actionLoading}
-                  activeOpacity={0.8}
-                >
-                  {actionLoading ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.actionBtnText}>Rejeter</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          </View>
-        )}
-      </Modal>
     </>
   );
 }
@@ -379,64 +209,34 @@ export default function AdminMembershipsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: C.background,
   },
   statsBar: {
-    flexDirection: 'row',
-    backgroundColor: colors.primary,
-    paddingVertical: 14,
+    backgroundColor: C.primary,
+    paddingVertical: 16,
     paddingHorizontal: 20,
+    marginBottom: 12,
   },
   statItem: {
-    flex: 1,
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '900',
     color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    marginVertical: 4,
-  },
-  filterBar: {
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    maxHeight: 52,
-  },
-  filterBarContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    flexDirection: 'row',
-  },
-  filterTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: colors.backgroundAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  filterTabActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  filterTabText: {
-    fontSize: 13,
     fontWeight: '600',
-    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  filterTabTextActive: {
-    color: '#FFFFFF',
+  listContent: {
+    paddingBottom: 32,
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -446,7 +246,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 15,
-    color: colors.textSecondary,
+    color: C.textSecondary,
   },
   errorContainer: {
     flex: 1,
@@ -457,12 +257,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 15,
-    color: colors.danger,
+    color: C.danger,
     textAlign: 'center',
     lineHeight: 22,
   },
   retryBtn: {
-    backgroundColor: colors.primary,
+    backgroundColor: C.primary,
     borderRadius: 10,
     paddingHorizontal: 24,
     paddingVertical: 12,
@@ -472,13 +272,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 12,
-    paddingBottom: 32,
-  },
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -486,16 +279,17 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: colors.textSecondary,
+    color: C.textSecondary,
     textAlign: 'center',
   },
   memberCard: {
-    backgroundColor: colors.card,
+    backgroundColor: C.surface,
     borderRadius: 12,
     padding: 14,
+    marginHorizontal: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: C.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -507,157 +301,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   memberAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary + '22',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: C.primaryMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     flexShrink: 0,
   },
   memberAvatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.primary,
   },
   memberInfo: {
     flex: 1,
+    gap: 2,
   },
   memberName: {
     fontSize: 15,
     fontWeight: '700',
-    color: colors.text,
+    color: C.text,
   },
   memberNumber: {
     fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: 2,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    color: C.primary,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    letterSpacing: 0.5,
+  },
+  memberMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   memberMeta: {
     fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
+    color: C.textSecondary,
+    flex: 1,
   },
   memberRight: {
     alignItems: 'flex-end',
-    gap: 4,
     flexShrink: 0,
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
+    marginLeft: 8,
   },
   memberDate: {
     fontSize: 11,
-    color: colors.textSecondary,
-  },
-  // Detail modal
-  detailContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  detailHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: Platform.OS === 'ios' ? 56 : 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.card,
-    gap: 12,
-  },
-  detailTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  detailCloseBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 8,
-    flexShrink: 0,
-  },
-  detailCloseBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  detailScroll: {
-    flex: 1,
-  },
-  detailScrollContent: {
-    padding: 20,
-    paddingBottom: 60,
-  },
-  detailStatusRow: {
-    marginBottom: 20,
-  },
-  statusBadgeLarge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  statusTextLarge: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  detailRow: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  detailRowLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  detailRowValue: {
-    fontSize: 15,
-    color: colors.text,
+    color: C.textTertiary,
     fontWeight: '500',
-  },
-  actionsTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-    marginTop: 24,
-    marginBottom: 12,
-  },
-  actionBtn: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  actionBtnApprove: {
-    backgroundColor: '#34C759',
-  },
-  actionBtnSuspend: {
-    backgroundColor: '#FF9500',
-  },
-  actionBtnReject: {
-    backgroundColor: '#FF3B30',
-  },
-  actionBtnDisabled: {
-    opacity: 0.6,
-  },
-  actionBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
 });
