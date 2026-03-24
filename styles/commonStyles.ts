@@ -2,22 +2,29 @@
 import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
 export const colors = {
-  primary: '#2D8B3C',      // Green from Mali flag
-  secondary: '#F4C430',    // Yellow/Gold from Mali flag
-  accent: '#E63946',       // Red accent
-  background: '#FFFFFF',   // White background
-  backgroundAlt: '#F8F9FA', // Light grey
-  text: '#1A1A1A',        // Dark text
-  textSecondary: '#6C757D', // Grey text
-  card: '#FFFFFF',        // White cards
-  border: '#DEE2E6',      // Light border
-  success: '#28A745',     // Success green
-  warning: '#FFC107',     // Warning yellow
-  danger: '#DC3545',      // Danger red
-  error: '#DC3545',       // Error red (alias for danger)
-  highlight: '#2D8B3C',   // Green highlight
-  // AI assistant accent
-  aiAccent: '#1565C0',    // Blue for AI features
+  primary: '#1B7A3E',        // Vert Mali profond
+  primaryLight: '#2A9D5C',   // Vert clair
+  primaryMuted: '#E8F5EE',   // Vert très clair
+  secondary: '#F5C518',      // Jaune/or Mali
+  accent: '#F5C518',         // Jaune/or Mali
+  accentMuted: '#FEF9E7',    // Jaune très clair
+  background: '#F7FAF8',     // Blanc cassé teinté vert
+  backgroundAlt: '#EEF5F1',  // Vert très clair
+  surface: '#FFFFFF',
+  surfaceSecondary: '#EEF5F1',
+  text: '#0D2818',           // Noir très foncé teinté vert
+  textSecondary: '#4A7060',  // Gris teinté vert
+  textTertiary: '#8AAF9A',   // Gris clair teinté vert
+  card: '#FFFFFF',
+  border: 'rgba(27, 122, 62, 0.12)',
+  divider: 'rgba(27, 122, 62, 0.06)',
+  success: '#1B7A3E',
+  warning: '#F5C518',
+  danger: '#DC2626',
+  error: '#DC2626',
+  info: '#2563EB',
+  highlight: '#1B7A3E',
+  aiAccent: '#2563EB',
 };
 
 export const buttonStyles = StyleSheet.create({

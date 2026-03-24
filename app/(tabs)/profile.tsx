@@ -1,196 +1,357 @@
 
 import React, { useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   Platform,
   TextInput,
-  TouchableOpacity,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
-import * as Haptics from 'expo-haptics';
+import { AnimatedPressable } from "@/components/AnimatedPressable";
+import * as Haptics from "expo-haptics";
+
+const BACKEND_URL = "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev";
+
+interface FormErrors {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  commune?: string;
+  profession?: string;
+}
 
 export default function MembershipScreen() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [region, setRegion] = useState('');
-  const [cercle, setCercle] = useState('');
-  const [commune, setCommune] = useState('');
+  const router = useRouter();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [region, setRegion] = useState("");
+  const [commune, setCommune] = useState("");
+  const [profession, setProfession] = useState("");
+  const [nina, setNina] = useState("");
+  const [motivation, setMotivation] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const validate = (): boolean => {
+    const newErrors: FormErrors = {};
+    if (!firstName.trim()) newErrors.firstName = "Le prénom est requis";
+    if (!lastName.trim()) newErrors.lastName = "Le nom est requis";
+    if (!phone.trim()) newErrors.phone = "Le téléphone est requis";
+    if (!commune.trim()) newErrors.commune = "La commune est requise";
+    if (!profession.trim()) newErrors.profession = "La profession est requise";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async () => {
-    console.log('User tapped Submit Membership button');
-    
-    if (!name || !email || !phone || !region) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+    console.log("[Profile] Bouton 'Envoyer ma demande' appuyé");
+
+    if (!validate()) {
+      console.log("[Profile] Validation échouée", errors);
       return;
     }
 
-    if (Platform.OS === 'ios') {
+    if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
     setLoading(true);
-    console.log('Submitting membership:', { name, email, phone, region, cercle, commune });
+    const payload = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phone: phone.trim(),
+      email: email.trim() || undefined,
+      region: region.trim() || undefined,
+      commune: commune.trim() || "Non spécifiée",
+      profession: profession.trim() || "Non spécifiée",
+      nina: nina.trim() || undefined,
+      motivation: motivation.trim() || undefined,
+    };
+    console.log("[Profile] POST /api/members/register", payload);
 
     try {
-      const { apiCall } = await import('@/utils/api');
-      await apiCall('/api/membership', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          email,
-          phone,
-          region,
-          cercle: cercle || undefined,
-          commune: commune || undefined,
-        }),
+      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      setLoading(false);
+      const data = await response.json();
 
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (response.status === 409) {
+        console.log("[Profile] Déjà inscrit, numéro:", data.membershipNumber);
+        Alert.alert(
+          "Déjà inscrit",
+          `Vous êtes déjà enregistré.\nNuméro: ${data.membershipNumber}`,
+          [
+            {
+              text: "Voir ma carte",
+              onPress: () =>
+                router.push({
+                  pathname: "/member/card",
+                  params: { membershipNumber: data.membershipNumber },
+                }),
+            },
+            { text: "OK", style: "cancel" },
+          ]
+        );
+        return;
       }
 
+      if (!response.ok) {
+        throw new Error(data.error || data.message || `Erreur ${response.status}`);
+      }
+
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      console.log("[Profile] Inscription réussie:", data.membershipNumber);
       Alert.alert(
-        'Demande envoyée',
-        'Votre demande d\'adhésion a été envoyée avec succès. Nous vous contactons bientôt.',
-        [{ text: 'OK', onPress: () => {
-          setName('');
-          setEmail('');
-          setPhone('');
-          setRegion('');
-          setCercle('');
-          setCommune('');
-        }}]
+        "Inscription réussie !",
+        `Bienvenue ! Numéro: ${data.membershipNumber}`,
+        [
+          {
+            text: "Voir ma carte",
+            onPress: () =>
+              router.push({
+                pathname: "/member/card",
+                params: { membershipNumber: data.membershipNumber },
+              }),
+          },
+        ]
       );
-    } catch (error) {
+    } catch (error: any) {
+      console.error("[Profile] Erreur inscription:", error.message);
+      Alert.alert("Erreur", error.message || "Une erreur est survenue. Veuillez réessayer.");
+    } finally {
       setLoading(false);
-      console.error('Error submitting membership:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue. Veuillez réessayer.');
     }
   };
 
+  const inputStyle = (field: string, hasError?: boolean) => [
+    styles.input,
+    focusedField === field && styles.inputFocused,
+    hasError && styles.inputError,
+  ];
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Header */}
       <View style={styles.header}>
-        <IconSymbol 
-          ios_icon_name="person.badge.plus.fill" 
-          android_material_icon_name="person-add" 
-          size={48} 
-          color={colors.primary} 
-        />
-        <Text style={styles.title}>Adhérer au Parti</Text>
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}>ARM</Text>
+        </View>
+        <Text style={styles.title}>Adhésion ARM</Text>
         <Text style={styles.subtitle}>
-          Rejoignez l&apos;Alliance pour le Rassemblement Malien
+          Rejoignez l'Alliance pour le Rassemblement Malien
         </Text>
       </View>
 
       <View style={styles.form}>
+        {/* Prénom */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Nom complet *</Text>
+          <Text style={styles.label}>
+            Prénom <Text style={styles.required}>*</Text>
+          </Text>
           <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Votre nom complet"
-            placeholderTextColor={colors.textSecondary}
+            style={inputStyle("firstName", !!errors.firstName)}
+            value={firstName}
+            onChangeText={(t) => {
+              setFirstName(t);
+              if (errors.firstName) setErrors((e) => ({ ...e, firstName: undefined }));
+            }}
+            placeholder="Votre prénom"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
             editable={!loading}
+            onFocus={() => setFocusedField("firstName")}
+            onBlur={() => setFocusedField(null)}
           />
+          {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
         </View>
 
+        {/* Nom */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email *</Text>
+          <Text style={styles.label}>
+            Nom <Text style={styles.required}>*</Text>
+          </Text>
           <TextInput
-            style={styles.input}
+            style={inputStyle("lastName", !!errors.lastName)}
+            value={lastName}
+            onChangeText={(t) => {
+              setLastName(t);
+              if (errors.lastName) setErrors((e) => ({ ...e, lastName: undefined }));
+            }}
+            placeholder="Votre nom de famille"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
+            editable={!loading}
+            onFocus={() => setFocusedField("lastName")}
+            onBlur={() => setFocusedField(null)}
+          />
+          {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
+        </View>
+
+        {/* Téléphone */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>
+            Téléphone <Text style={styles.required}>*</Text>
+          </Text>
+          <TextInput
+            style={inputStyle("phone", !!errors.phone)}
+            value={phone}
+            onChangeText={(t) => {
+              setPhone(t);
+              if (errors.phone) setErrors((e) => ({ ...e, phone: undefined }));
+            }}
+            placeholder="+223 XX XX XX XX"
+            placeholderTextColor={colors.textTertiary}
+            keyboardType="phone-pad"
+            editable={!loading}
+            onFocus={() => setFocusedField("phone")}
+            onBlur={() => setFocusedField(null)}
+          />
+          {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+        </View>
+
+        {/* Email */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={inputStyle("email")}
             value={email}
             onChangeText={setEmail}
-            placeholder="votre@email.com"
-            placeholderTextColor={colors.textSecondary}
+            placeholder="votre@email.com (optionnel)"
+            placeholderTextColor={colors.textTertiary}
             keyboardType="email-address"
             autoCapitalize="none"
             editable={!loading}
+            onFocus={() => setFocusedField("email")}
+            onBlur={() => setFocusedField(null)}
           />
         </View>
 
+        {/* Région */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Téléphone *</Text>
+          <Text style={styles.label}>Région</Text>
           <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+223 XX XX XX XX"
-            placeholderTextColor={colors.textSecondary}
-            keyboardType="phone-pad"
-            editable={!loading}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Région *</Text>
-          <TextInput
-            style={styles.input}
+            style={inputStyle("region")}
             value={region}
             onChangeText={setRegion}
-            placeholder="Votre région"
-            placeholderTextColor={colors.textSecondary}
+            placeholder="Votre région (optionnel)"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
             editable={!loading}
+            onFocus={() => setFocusedField("region")}
+            onBlur={() => setFocusedField(null)}
           />
         </View>
 
+        {/* Commune */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Cercle</Text>
+          <Text style={styles.label}>
+            Commune <Text style={styles.required}>*</Text>
+          </Text>
           <TextInput
-            style={styles.input}
-            value={cercle}
-            onChangeText={setCercle}
-            placeholder="Votre cercle (optionnel)"
-            placeholderTextColor={colors.textSecondary}
-            editable={!loading}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Commune</Text>
-          <TextInput
-            style={styles.input}
+            style={inputStyle("commune", !!errors.commune)}
             value={commune}
-            onChangeText={setCommune}
-            placeholder="Votre commune (optionnel)"
-            placeholderTextColor={colors.textSecondary}
+            onChangeText={(t) => {
+              setCommune(t);
+              if (errors.commune) setErrors((e) => ({ ...e, commune: undefined }));
+            }}
+            placeholder="Votre commune"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
             editable={!loading}
+            onFocus={() => setFocusedField("commune")}
+            onBlur={() => setFocusedField(null)}
+          />
+          {errors.commune ? <Text style={styles.errorText}>{errors.commune}</Text> : null}
+        </View>
+
+        {/* Profession */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>
+            Profession <Text style={styles.required}>*</Text>
+          </Text>
+          <TextInput
+            style={inputStyle("profession", !!errors.profession)}
+            value={profession}
+            onChangeText={(t) => {
+              setProfession(t);
+              if (errors.profession) setErrors((e) => ({ ...e, profession: undefined }));
+            }}
+            placeholder="Votre profession"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
+            editable={!loading}
+            onFocus={() => setFocusedField("profession")}
+            onBlur={() => setFocusedField(null)}
+          />
+          {errors.profession ? <Text style={styles.errorText}>{errors.profession}</Text> : null}
+        </View>
+
+        {/* NINA */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>NINA</Text>
+          <TextInput
+            style={inputStyle("nina")}
+            value={nina}
+            onChangeText={setNina}
+            placeholder="Numéro d'identification (optionnel)"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="characters"
+            editable={!loading}
+            onFocus={() => setFocusedField("nina")}
+            onBlur={() => setFocusedField(null)}
           />
         </View>
 
-        <TouchableOpacity 
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+        {/* Motivation */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Motivation</Text>
+          <TextInput
+            style={[inputStyle("motivation"), styles.textArea]}
+            value={motivation}
+            onChangeText={setMotivation}
+            placeholder="Pourquoi souhaitez-vous adhérer ? (optionnel)"
+            placeholderTextColor={colors.textTertiary}
+            multiline
+            numberOfLines={4}
+            editable={!loading}
+            onFocus={() => setFocusedField("motivation")}
+            onBlur={() => setFocusedField(null)}
+          />
+        </View>
+
+        <AnimatedPressable
           onPress={handleSubmit}
           disabled={loading}
-          activeOpacity={0.8}
+          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
         >
           {loading ? (
-            <ActivityIndicator color={colors.background} />
+            <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.submitButtonText}>Envoyer ma demande</Text>
           )}
-        </TouchableOpacity>
+        </AnimatedPressable>
 
         <View style={styles.infoBox}>
-          <IconSymbol 
-            ios_icon_name="info.circle.fill" 
-            android_material_icon_name="info" 
-            size={20} 
-            color={colors.primary} 
-          />
+          <Text style={styles.infoIcon}>ℹ️</Text>
           <Text style={styles.infoText}>
-            Votre demande sera examinée par notre équipe. Vous recevrez une confirmation par email.
+            Votre demande sera examinée par notre équipe. Vous recevrez une confirmation.
           </Text>
         </View>
       </View>
@@ -206,41 +367,64 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 48 : 0,
+    paddingTop: Platform.OS === "android" ? 48 : 0,
     paddingBottom: 100,
   },
   header: {
-    alignItems: 'center',
-    paddingVertical: 32,
+    alignItems: "center",
+    paddingVertical: 36,
     paddingHorizontal: 20,
+    backgroundColor: colors.primary,
+  },
+  headerBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.accent,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  headerBadgeText: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: colors.primary,
+    letterSpacing: 1,
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 16,
+    fontWeight: "800",
+    color: "#FFFFFF",
     marginBottom: 8,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    fontSize: 15,
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center",
+    lineHeight: 22,
   },
   form: {
     paddingHorizontal: 20,
+    paddingTop: 24,
   },
   inputGroup: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: "600",
     color: colors.text,
     marginBottom: 8,
   },
+  required: {
+    color: colors.danger,
+  },
   input: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -248,11 +432,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
+  inputFocused: {
+    borderColor: colors.primary,
+    backgroundColor: "#FFFFFF",
+  },
+  inputError: {
+    borderColor: colors.danger,
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: "top",
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: 4,
+    fontWeight: "500",
+  },
   submitButton: {
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
+    borderRadius: 14,
+    alignItems: "center",
     marginTop: 8,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
@@ -264,22 +465,27 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.background,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   infoBox: {
-    flexDirection: 'row',
-    backgroundColor: colors.backgroundAlt,
+    flexDirection: "row",
+    backgroundColor: colors.primaryMuted,
     borderRadius: 12,
     padding: 16,
     marginTop: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  infoIcon: {
+    fontSize: 18,
+    marginRight: 10,
   },
   infoText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
-    marginLeft: 12,
     lineHeight: 20,
   },
   bottomSpacer: {

@@ -7,14 +7,11 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 interface SuccessData {
   membershipNumber: string;
@@ -27,17 +24,15 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successData, setSuccessData] = useState<SuccessData | null>(null);
+  const [duplicateNumber, setDuplicateNumber] = useState('');
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [region, setRegion] = useState('');
-  const [cercle, setCercle] = useState('');
   const [commune, setCommune] = useState('');
   const [profession, setProfession] = useState('');
-  const [nina, setNina] = useState('');
-  const [motivation, setMotivation] = useState('');
 
   const validate = (): string | null => {
     if (!firstName.trim() || firstName.trim().length < 2) return 'Le prénom est requis (minimum 2 caractères)';
@@ -50,6 +45,7 @@ export default function RegisterScreen() {
   const handleSubmit = async () => {
     console.log('[Register] Submit button pressed');
     setErrorMessage('');
+    setDuplicateNumber('');
     const validationError = validate();
     if (validationError) {
       console.log('[Register] Validation error:', validationError);
@@ -58,86 +54,54 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
+    const payload = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phone: phone.trim(),
+      email: email.trim() || undefined,
+      region: region.trim() || undefined,
+      commune: commune.trim() || 'Non spécifiée',
+      profession: profession.trim() || 'Non spécifiée',
+    };
+
+    console.log('[Register] POST /api/members/register', JSON.stringify(payload));
+
     try {
-      const payload: Record<string, string> = {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone.trim(),
-      };
-      if (email.trim()) payload.email = email.trim();
-      if (region.trim()) payload.region = region.trim();
-      if (cercle.trim()) payload.cercle = cercle.trim();
-      if (commune.trim()) payload.commune = commune.trim();
-      if (profession.trim()) payload.profession = profession.trim();
-      if (nina.trim()) payload.nina = nina.trim();
-      if (motivation.trim()) payload.motivation = motivation.trim();
-
-      console.log('[Register] Sending payload:', JSON.stringify(payload));
-      console.log('[Register] URL:', `${BACKEND_URL}/api/members/register`);
-
+      const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
       const response = await fetch(`${BACKEND_URL}/api/members/register`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      console.log('[Register] Response status:', response.status);
-
-      let data: Record<string, unknown> = {};
-      try {
-        const text = await response.text();
-        console.log('[Register] Response text:', text);
-        data = text ? JSON.parse(text) : {};
-      } catch (parseErr) {
-        console.log('[Register] Failed to parse response:', parseErr);
-      }
+      const data = await response.json();
 
       if (response.status === 409) {
-        const existingNumber =
-          (data.membershipNumber as string) ||
-          ((data.member as Record<string, string>)?.membershipNumber) ||
-          ((data.member as Record<string, string>)?.membership_number) ||
-          '';
-        Alert.alert(
-          'Déjà inscrit',
-          `Vous êtes déjà membre du parti.\nVotre numéro: ${existingNumber}`,
-          [
-            { text: 'Voir ma carte', onPress: () => router.push({ pathname: '/member/card', params: { membershipNumber: existingNumber } }) },
-            { text: 'OK', style: 'cancel' },
-          ]
-        );
+        const existingNumber = (data.membershipNumber as string) || '';
+        console.log('[Register] Duplicate phone detected, existing number:', existingNumber);
+        setDuplicateNumber(existingNumber);
+        setErrorMessage(`Vous êtes déjà inscrit${existingNumber ? `.\nNuméro d'adhésion: ${existingNumber}` : '.'}`);
         return;
       }
 
       if (!response.ok) {
-        const errMsg =
-          (data.details as string) ||
-          (data.error as string) ||
-          (data.message as string) ||
-          `Erreur serveur (${response.status})`;
-        console.log('[Register] Error response:', errMsg);
-        setErrorMessage(errMsg);
-        return;
+        throw new Error((data.error as string) || (data.message as string) || `Erreur ${response.status}`);
       }
 
-      // Success
       const membershipNumber =
         (data.membershipNumber as string) ||
         ((data.member as Record<string, string>)?.membershipNumber) ||
-        ((data.member as Record<string, string>)?.membership_number) ||
         '';
       const id = (data.id as string) || ((data.member as Record<string, string>)?.id) || '';
       console.log('[Register] Success! membershipNumber:', membershipNumber);
 
       setSuccessData({ membershipNumber, id, message: data.message as string | undefined });
+      router.push({ pathname: '/member/card', params: { membershipNumber } });
 
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.log('[Register] Network error:', message);
-      setErrorMessage('Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+      console.log('[Register] Error:', message);
+      setErrorMessage(message || 'Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
     } finally {
       setLoading(false);
     }
@@ -182,7 +146,7 @@ export default function RegisterScreen() {
               console.log('[Register] Navigate to home');
               router.replace('/(tabs)/(home)');
             }}>
-            <Text style={styles.secondaryButtonText}>Retour à l'accueil</Text>
+            <Text style={styles.secondaryButtonText}>Retour à l&apos;accueil</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -204,7 +168,20 @@ export default function RegisterScreen() {
         {errorMessage ? (
           <View style={styles.errorBox}>
             <Ionicons name="alert-circle" size={18} color="#C62828" />
-            <Text style={styles.errorText}>{errorMessage}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+              {duplicateNumber ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    console.log('[Register] View existing card:', duplicateNumber);
+                    router.push({ pathname: '/member/card', params: { membershipNumber: duplicateNumber } });
+                  }}
+                  style={styles.viewCardLink}
+                >
+                  <Text style={styles.viewCardLinkText}>Voir ma carte de membre</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         ) : null}
 
@@ -261,15 +238,6 @@ export default function RegisterScreen() {
             autoCapitalize="words"
           />
 
-          <Text style={styles.label}>Cercle</Text>
-          <TextInput
-            style={styles.input}
-            value={cercle}
-            onChangeText={setCercle}
-            placeholder="Votre cercle"
-            autoCapitalize="words"
-          />
-
           <Text style={styles.label}>Commune</Text>
           <TextInput
             style={styles.input}
@@ -291,26 +259,6 @@ export default function RegisterScreen() {
             placeholder="Votre profession"
             autoCapitalize="words"
           />
-
-          <Text style={styles.label}>Numéro NINA</Text>
-          <TextInput
-            style={styles.input}
-            value={nina}
-            onChangeText={setNina}
-            placeholder="Numéro NINA (optionnel)"
-            autoCapitalize="characters"
-          />
-
-          <Text style={styles.label}>Motivation</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={motivation}
-            onChangeText={setMotivation}
-            placeholder="Pourquoi souhaitez-vous adhérer à Alliance ARM ?"
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
         </View>
 
         <TouchableOpacity
@@ -322,7 +270,7 @@ export default function RegisterScreen() {
           ) : (
             <>
               <Ionicons name="send" size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.submitButtonText}>Soumettre ma demande d'adhésion</Text>
+              <Text style={styles.submitButtonText}>Soumettre ma demande d&apos;adhésion</Text>
             </>
           )}
         </TouchableOpacity>
@@ -339,13 +287,14 @@ const styles = StyleSheet.create({
   formHeader: { alignItems: 'center', paddingVertical: 24, marginBottom: 8 },
   formTitle: { fontSize: 22, fontWeight: '800', color: '#1B5E20', marginTop: 12, textAlign: 'center' },
   formSubtitle: { fontSize: 14, color: '#666', marginTop: 4, textAlign: 'center' },
-  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', borderRadius: 8, padding: 12, marginBottom: 16, gap: 8 },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFEBEE', borderRadius: 8, padding: 12, marginBottom: 16, gap: 8 },
   errorText: { flex: 1, color: '#C62828', fontSize: 14 },
+  viewCardLink: { marginTop: 8 },
+  viewCardLinkText: { color: '#1B5E20', fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
   section: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1B5E20', marginBottom: 12 },
   label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 4, marginTop: 8 },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: '#fafafa', color: '#1a1a1a' },
-  textArea: { height: 100, textAlignVertical: 'top' },
   submitButton: { backgroundColor: '#1B5E20', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   submitButtonDisabled: { opacity: 0.6 },
   submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },

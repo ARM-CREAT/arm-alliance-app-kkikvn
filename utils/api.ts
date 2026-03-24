@@ -36,7 +36,7 @@ export const checkBackendHealth = async (): Promise<boolean> => {
   try {
     console.log('[API] Checking backend health:', BACKEND_URL);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
     const response = await fetch(`${BACKEND_URL}/api/health`, {
       method: 'GET',
@@ -44,11 +44,13 @@ export const checkBackendHealth = async (): Promise<boolean> => {
     });
 
     clearTimeout(timeoutId);
-    const isHealthy = response.ok;
-    console.log('[API] Backend health check:', isHealthy ? 'OK' : 'FAILED');
+    // Any response below 500 means the server is reachable and online.
+    // Only a network failure (fetch throws) or a 5xx response means offline.
+    const isHealthy = response.status < 500;
+    console.log('[API] Backend health check status:', response.status, isHealthy ? 'ONLINE' : 'OFFLINE');
     return isHealthy;
   } catch (error: any) {
-    console.error('[API] Backend health check failed:', error.message);
+    console.error('[API] Backend health check failed (network error):', error.message);
     return false;
   }
 };

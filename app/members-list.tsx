@@ -5,9 +5,7 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   RefreshControl,
   Animated,
   Platform,
@@ -15,65 +13,49 @@ import {
 import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet } from '@/utils/api';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
+
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 interface Member {
   id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
   phone?: string;
-  membership_date: string;
+  commune?: string;
+  membershipNumber: string;
   status: string;
+  joinedAt?: string;
 }
 
-interface MembersResponse {
-  members: Member[];
-  total: number;
-}
-
-type FilterTab = 'all' | 'active' | 'inactive';
-
-function formatDate(dateString?: string): string {
-  if (!dateString) return '—';
-  try {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return String(dateString);
-  }
-}
+type FilterTab = 'all' | 'active' | 'pending' | 'suspended';
 
 function getStatusColor(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'active' || s === 'actif') return '#34C759';
-  return '#FF3B30';
+  if (s === 'active') return '#1B7A3E';
+  if (s === 'pending') return '#D97706';
+  if (s === 'suspended') return '#DC2626';
+  return colors.textSecondary;
 }
 
 function getStatusLabel(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'active' || s === 'actif') return 'Actif';
-  if (s === 'inactive' || s === 'inactif') return 'Inactif';
+  if (s === 'active') return 'Actif';
+  if (s === 'pending') return 'En attente';
+  if (s === 'suspended') return 'Suspendu';
   return String(status || '—');
 }
 
-function getInitials(firstName: string, lastName: string): string {
-  const f = (firstName || '').charAt(0).toUpperCase();
-  const l = (lastName || '').charAt(0).toUpperCase();
-  return f + l || '?';
+function getInitials(fullName: string): string {
+  const parts = (fullName || '').trim().split(' ');
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+  return (fullName || '?').charAt(0).toUpperCase();
 }
 
-// Animated list item with staggered entrance
-function AnimatedMemberRow({
-  item,
-  index,
-}: {
-  item: Member;
-  index: number;
-}) {
+function AnimatedMemberRow({ item, index }: { item: Member; index: number }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
 
@@ -82,52 +64,49 @@ function AnimatedMemberRow({
       Animated.timing(opacity, {
         toValue: 1,
         duration: 300,
-        delay: Math.min(index * 50, 400),
+        delay: Math.min(index * 40, 400),
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
         duration: 300,
-        delay: Math.min(index * 50, 400),
+        delay: Math.min(index * 40, 400),
         useNativeDriver: true,
       }),
     ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const statusColor = getStatusColor(item.status);
   const statusLabel = getStatusLabel(item.status);
-  const initials = getInitials(item.first_name, item.last_name);
-  const fullName = [item.first_name, item.last_name].filter(Boolean).join(' ') || '—';
-  const dateStr = formatDate(item.membership_date);
-  const emailStr = item.email || '—';
+  const initials = getInitials(item.fullName || `${item.firstName} ${item.lastName}`);
+  const displayName = item.fullName || [item.firstName, item.lastName].filter(Boolean).join(' ') || '—';
+  const phoneStr = item.phone || '—';
+  const communeStr = item.commune || '—';
 
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }] }}>
       <View style={styles.memberCard}>
         <View style={styles.memberCardRow}>
-          {/* Avatar */}
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
-
-          {/* Info */}
           <View style={styles.memberInfo}>
-            <Text style={styles.memberName} numberOfLines={1}>
-              {fullName}
-            </Text>
-            <Text style={styles.memberEmail} numberOfLines={1}>
-              {emailStr}
-            </Text>
-          </View>
-
-          {/* Right side: badge + date */}
-          <View style={styles.memberRight}>
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
-              <Text style={[styles.statusText, { color: statusColor }]}>
-                {statusLabel}
-              </Text>
+            <Text style={styles.memberName} numberOfLines={1}>{displayName}</Text>
+            <View style={styles.memberDetailRow}>
+              <Text style={styles.memberDetailIcon}>📞</Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>{phoneStr}</Text>
             </View>
-            <Text style={styles.memberDate}>{dateStr}</Text>
+            <View style={styles.memberDetailRow}>
+              <Text style={styles.memberDetailIcon}>📍</Text>
+              <Text style={styles.memberDetailText} numberOfLines={1}>{communeStr}</Text>
+            </View>
+            <Text style={styles.memberNumber}>{item.membershipNumber}</Text>
+          </View>
+          <View style={styles.memberRight}>
+            <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
+              <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -135,7 +114,6 @@ function AnimatedMemberRow({
   );
 }
 
-// Skeleton loader row
 function SkeletonRow() {
   const opacity = useRef(new Animated.Value(0.3)).current;
 
@@ -146,6 +124,7 @@ function SkeletonRow() {
         Animated.timing(opacity, { toValue: 0.3, duration: 700, useNativeDriver: true }),
       ])
     ).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -153,11 +132,11 @@ function SkeletonRow() {
       <View style={styles.skeletonAvatar} />
       <View style={styles.skeletonInfo}>
         <View style={styles.skeletonLine} />
-        <View style={[styles.skeletonLine, { width: '60%', marginTop: 6 }]} />
+        <View style={[styles.skeletonLine, { width: '70%', marginTop: 6 }]} />
+        <View style={[styles.skeletonLine, { width: '50%', marginTop: 6 }]} />
       </View>
       <View style={styles.skeletonRight}>
         <View style={styles.skeletonBadge} />
-        <View style={[styles.skeletonLine, { width: 48, marginTop: 6 }]} />
       </View>
     </Animated.View>
   );
@@ -172,82 +151,96 @@ export default function MembersListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
-  const loadMembers = useCallback(async (tab?: FilterTab) => {
-    const currentTab = tab ?? activeTab;
-    const endpoint =
-      currentTab === 'all'
-        ? '/api/members'
-        : `/api/members?status=${currentTab === 'active' ? 'active' : 'inactive'}`;
+  const buildUrl = (tab: FilterTab, search: string) => {
+    const params: string[] = [];
+    if (tab !== 'all') params.push(`status=${tab}`);
+    if (search.trim()) params.push(`search=${encodeURIComponent(search.trim())}`);
+    return `${BACKEND_URL}/api/members${params.length ? '?' + params.join('&') : ''}`;
+  };
 
-    console.log('[MembersList] GET', endpoint);
+  const loadMembers = useCallback(async (tab?: FilterTab, search?: string) => {
+    const currentTab = tab ?? activeTab;
+    const currentSearch = search ?? searchQuery;
+    const url = buildUrl(currentTab, currentSearch);
+
+    console.log('[MembersList] GET', url);
     setError(null);
 
     try {
-      const data = await authenticatedGet<MembersResponse>(endpoint);
+      const response = await fetch(url);
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('[MembersList] Erreur:', response.status, text);
+        throw new Error(`Erreur ${response.status}`);
+      }
+      const data = await response.json();
       const list: Member[] = data?.members ?? (Array.isArray(data) ? data : []);
       const count: number = data?.total ?? list.length;
-      console.log('[MembersList] Members loaded:', list.length, '/ total:', count);
+      console.log('[MembersList] Adhérents chargés:', list.length, '/ total:', count);
       setAllMembers(list);
       setTotal(count);
     } catch (err: any) {
-      console.error('[MembersList] Error loading members:', err);
+      console.error('[MembersList] Erreur chargement:', err.message);
       setError(err.message || 'Impossible de charger les adhérents.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, searchQuery]);
 
   useEffect(() => {
     setLoading(true);
-    loadMembers(activeTab);
+    loadMembers(activeTab, searchQuery);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const onRefresh = useCallback(() => {
-    console.log('[MembersList] Pull-to-refresh triggered');
+    console.log('[MembersList] Pull-to-refresh');
     setRefreshing(true);
-    loadMembers(activeTab);
-  }, [activeTab, loadMembers]);
+    loadMembers(activeTab, searchQuery);
+  }, [activeTab, searchQuery, loadMembers]);
 
   const handleTabPress = (tab: FilterTab) => {
-    console.log('[MembersList] User tapped filter tab:', tab);
+    console.log('[MembersList] Filtre sélectionné:', tab);
     setSearchQuery('');
     setActiveTab(tab);
   };
 
+  const handleSearchSubmit = () => {
+    console.log('[MembersList] Recherche soumise:', searchQuery);
+    setLoading(true);
+    loadMembers(activeTab, searchQuery);
+  };
+
   const handleSearchChange = (text: string) => {
-    console.log('[MembersList] Search query changed:', text);
     setSearchQuery(text);
+    if (!text.trim()) {
+      setLoading(true);
+      loadMembers(activeTab, '');
+    }
   };
 
   const handleRetry = () => {
-    console.log('[MembersList] User tapped retry');
+    console.log('[MembersList] Bouton Réessayer appuyé');
     setLoading(true);
-    loadMembers(activeTab);
+    loadMembers(activeTab, searchQuery);
   };
-
-  // Client-side search filter
-  const filteredMembers = allMembers.filter((m) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const fullName = `${m.first_name} ${m.last_name}`.toLowerCase();
-    return fullName.includes(q) || (m.email || '').toLowerCase().includes(q);
-  });
 
   const tabs: { value: FilterTab; label: string }[] = [
     { value: 'all', label: 'Tous' },
     { value: 'active', label: 'Actifs' },
-    { value: 'inactive', label: 'Inactifs' },
+    { value: 'pending', label: 'En attente' },
+    { value: 'suspended', label: 'Suspendus' },
   ];
 
-  const totalLabel = `${total} adhérent${total !== 1 ? 's' : ''}`;
-  const filteredCount = filteredMembers.length;
+  const totalLabel = `${total} adhérent${total !== 1 ? 's' : ''} inscrits`;
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Adhérents',
+          title: 'Adhérents ARM',
           headerShown: true,
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: '#FFFFFF',
@@ -268,21 +261,24 @@ export default function MembersListScreen() {
             />
             <TextInput
               style={styles.searchInput}
-              placeholder="Rechercher par nom ou email..."
-              placeholderTextColor={colors.textSecondary}
+              placeholder="Rechercher par nom, téléphone, commune..."
+              placeholderTextColor={colors.textTertiary}
               value={searchQuery}
               onChangeText={handleSearchChange}
+              onSubmitEditing={handleSearchSubmit}
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="search"
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity
+              <AnimatedPressable
                 onPress={() => {
-                  console.log('[MembersList] User cleared search');
+                  console.log('[MembersList] Recherche effacée');
                   setSearchQuery('');
+                  setLoading(true);
+                  loadMembers(activeTab, '');
                 }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={styles.clearBtn}
               >
                 <IconSymbol
                   ios_icon_name="xmark.circle.fill"
@@ -290,7 +286,7 @@ export default function MembersListScreen() {
                   size={18}
                   color={colors.textSecondary}
                 />
-              </TouchableOpacity>
+              </AnimatedPressable>
             )}
           </View>
         </View>
@@ -300,16 +296,15 @@ export default function MembersListScreen() {
           {tabs.map((tab) => {
             const isActive = activeTab === tab.value;
             return (
-              <TouchableOpacity
+              <AnimatedPressable
                 key={tab.value}
                 style={[styles.tab, isActive && styles.tabActive]}
                 onPress={() => handleTabPress(tab.value)}
-                activeOpacity={0.7}
               >
                 <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
                   {tab.label}
                 </Text>
-              </TouchableOpacity>
+              </AnimatedPressable>
             );
           })}
         </View>
@@ -317,43 +312,38 @@ export default function MembersListScreen() {
         {/* Count header */}
         {!loading && !error && (
           <View style={styles.countRow}>
-            <Text style={styles.countText}>
-              {searchQuery.trim() ? `${filteredCount} résultat${filteredCount !== 1 ? 's' : ''}` : totalLabel}
-            </Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{totalLabel}</Text>
+            </View>
           </View>
         )}
 
         {/* Content */}
         {loading ? (
           <View style={styles.skeletonContainer}>
-            {[0, 1, 2, 3, 4].map((i) => (
-              <SkeletonRow key={i} />
-            ))}
+            {[0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)}
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <IconSymbol
-              ios_icon_name="exclamationmark.triangle.fill"
-              android_material_icon_name="warning"
-              size={44}
-              color={colors.danger}
-            />
+            <View style={styles.errorIconCircle}>
+              <Text style={styles.errorIconText}>⚠️</Text>
+            </View>
             <Text style={styles.errorTitle}>Impossible de charger les adhérents</Text>
             <Text style={styles.errorSubtitle}>{error}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
+            <AnimatedPressable style={styles.retryBtn} onPress={handleRetry}>
               <Text style={styles.retryBtnText}>Réessayer</Text>
-            </TouchableOpacity>
+            </AnimatedPressable>
           </View>
         ) : (
           <FlatList
-            data={filteredMembers}
+            data={allMembers}
             keyExtractor={(item) => item.id}
             renderItem={({ item, index }) => (
               <AnimatedMemberRow item={item} index={index} />
             )}
             contentContainerStyle={[
               styles.listContent,
-              filteredMembers.length === 0 && styles.listContentEmpty,
+              allMembers.length === 0 && styles.listContentEmpty,
             ]}
             refreshControl={
               <RefreshControl
@@ -366,20 +356,13 @@ export default function MembersListScreen() {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <IconSymbol
-                    ios_icon_name="person.3"
-                    android_material_icon_name="group"
-                    size={32}
-                    color={colors.primary}
-                  />
+                  <Text style={styles.emptyIconText}>👥</Text>
                 </View>
-                <Text style={styles.emptyTitle}>
-                  {searchQuery.trim() ? 'Aucun résultat' : 'Aucun adhérent'}
-                </Text>
+                <Text style={styles.emptyTitle}>Aucun adhérent trouvé</Text>
                 <Text style={styles.emptySubtitle}>
                   {searchQuery.trim()
-                    ? 'Essayez un autre nom ou email.'
-                    : 'Les adhérents apparaîtront ici.'}
+                    ? 'Essayez un autre nom, téléphone ou commune.'
+                    : 'Les adhérents apparaîtront ici après inscription.'}
                 </Text>
               </View>
             }
@@ -394,9 +377,8 @@ export default function MembersListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: colors.background,
   },
-  // Search
   searchContainer: {
     backgroundColor: colors.card,
     paddingHorizontal: 16,
@@ -407,8 +389,8 @@ const styles = StyleSheet.create({
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 10,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: Platform.OS === 'ios' ? 9 : 6,
     gap: 8,
@@ -421,14 +403,16 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: 0,
   },
-  // Tabs
+  clearBtn: {
+    padding: 2,
+  },
   tabBar: {
     flexDirection: 'row',
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    paddingHorizontal: 16,
-    gap: 4,
+    paddingHorizontal: 8,
+    gap: 2,
   },
   tab: {
     flex: 1,
@@ -441,64 +425,71 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.primary,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary,
   },
   tabTextActive: {
     color: colors.primary,
   },
-  // Count row
   countRow: {
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  countText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+  countBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryMuted,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  // List
+  countText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
   listContent: {
     paddingHorizontal: 12,
     paddingBottom: 40,
+    paddingTop: 4,
   },
   listContentEmpty: {
     flex: 1,
   },
-  // Member card
   memberCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
     elevation: 2,
   },
   memberCardRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary + '22',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.primaryMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
     flexShrink: 0,
+    borderWidth: 1.5,
+    borderColor: colors.border,
   },
   avatarText: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: colors.primary,
   },
   memberInfo: {
@@ -509,39 +500,49 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.text,
+    marginBottom: 4,
   },
-  memberEmail: {
+  memberDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+    gap: 4,
+  },
+  memberDetailIcon: {
+    fontSize: 11,
+  },
+  memberDetailText: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 3,
+    flex: 1,
+  },
+  memberNumber: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 4,
   },
   memberRight: {
     alignItems: 'flex-end',
-    gap: 4,
     flexShrink: 0,
     marginLeft: 8,
   },
   statusBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   statusText: {
     fontSize: 11,
     fontWeight: '700',
   },
-  memberDate: {
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  // Skeleton
   skeletonContainer: {
     padding: 12,
     gap: 8,
   },
   skeletonCard: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
@@ -549,10 +550,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   skeletonAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.border,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.surfaceSecondary,
     marginRight: 12,
   },
   skeletonInfo: {
@@ -561,7 +562,7 @@ const styles = StyleSheet.create({
   skeletonLine: {
     height: 13,
     borderRadius: 6,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
     width: '80%',
   },
   skeletonRight: {
@@ -569,18 +570,29 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   skeletonBadge: {
-    width: 44,
-    height: 20,
+    width: 60,
+    height: 22,
     borderRadius: 8,
-    backgroundColor: colors.border,
+    backgroundColor: colors.surfaceSecondary,
   },
-  // Error
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
     gap: 12,
+  },
+  errorIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: '#FEF2F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  errorIconText: {
+    fontSize: 32,
   },
   errorTitle: {
     fontSize: 16,
@@ -597,7 +609,7 @@ const styles = StyleSheet.create({
   retryBtn: {
     marginTop: 8,
     backgroundColor: colors.primary,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 28,
     paddingVertical: 12,
   },
@@ -606,7 +618,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 15,
   },
-  // Empty
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -615,13 +626,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: colors.primary + '18',
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: colors.primaryMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 4,
+  },
+  emptyIconText: {
+    fontSize: 36,
   },
   emptyTitle: {
     fontSize: 17,

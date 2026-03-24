@@ -20,6 +20,10 @@ import * as Haptics from 'expo-haptics';
 
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
+interface MemberStats {
+  totalMembers: number;
+}
+
 function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
   if (!source) return { uri: '' };
   if (typeof source === 'string') return { uri: source };
@@ -72,6 +76,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
+  const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +87,7 @@ export default function HomeScreen() {
     setError(null);
 
     try {
-      const [notifResult, leaderResult] = await Promise.allSettled([
+      const [notifResult, leaderResult, statsResult] = await Promise.allSettled([
         fetch(`${BACKEND_URL}/api/notifications`).then(async (res) => {
           if (!res.ok) {
             const text = await res.text();
@@ -91,6 +96,10 @@ export default function HomeScreen() {
           return res.json();
         }),
         apiGet<LeadershipMember[]>('/api/leadership'),
+        fetch(`${BACKEND_URL}/api/members/stats`).then(async (res) => {
+          if (!res.ok) throw new Error(`Stats: ${res.status}`);
+          return res.json();
+        }),
       ]);
 
       if (notifResult.status === 'fulfilled' && Array.isArray(notifResult.value)) {
@@ -105,6 +114,11 @@ export default function HomeScreen() {
         setLeadership(leaderResult.value);
       } else {
         console.warn('[HomeScreen iOS] Échec du chargement de la direction:', leaderResult);
+      }
+
+      if (statsResult.status === 'fulfilled') {
+        console.log('[HomeScreen iOS] Stats membres chargées:', statsResult.value);
+        setMemberStats(statsResult.value);
       }
 
       const allFailed = notifResult.status === 'rejected' && leaderResult.status === 'rejected';
@@ -205,6 +219,12 @@ export default function HomeScreen() {
     router.push('/program');
   };
 
+  const handleMembersList = () => {
+    console.log('[HomeScreen iOS] Bouton Liste des adhérents appuyé');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/members-list');
+  };
+
   const handleVoirToutNotifications = () => {
     console.log('[HomeScreen iOS] Bouton Voir tout (notifications) appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -275,6 +295,12 @@ export default function HomeScreen() {
                 <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
                 <View style={styles.mottoLine} />
               </View>
+              {memberStats != null && (
+                <View style={styles.statsBanner}>
+                  <Text style={styles.statsBannerNumber}>{String(memberStats.totalMembers)}</Text>
+                  <Text style={styles.statsBannerLabel}>membres inscrits</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.section}>
@@ -496,6 +522,21 @@ export default function HomeScreen() {
                   />
                   <Text style={styles.actionTitle}>Notre Programme</Text>
                   <Text style={[styles.actionSubtitle, { color: '#1B5E20' }]}>Programme politique</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionCard, styles.actionCardMembers]}
+                  onPress={handleMembersList}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol
+                    ios_icon_name="person.3.fill"
+                    android_material_icon_name="group"
+                    size={32}
+                    color="#0369A1"
+                  />
+                  <Text style={styles.actionTitle}>Adhérents</Text>
+                  <Text style={[styles.actionSubtitle, { color: '#0369A1' }]}>Liste complète</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -885,6 +926,11 @@ const styles = StyleSheet.create({
     borderColor: '#1B5E2020',
     backgroundColor: '#F1F8F1',
   },
+  actionCardMembers: {
+    borderWidth: 1.5,
+    borderColor: '#0369A120',
+    backgroundColor: '#F0F9FF',
+  },
   actionTitle: {
     fontSize: 14,
     fontWeight: 'bold',
@@ -937,6 +983,28 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
     marginVertical: 2,
+  },
+  statsBanner: {
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  statsBannerNumber: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: colors.accent,
+    letterSpacing: -0.5,
+  },
+  statsBannerLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+    marginTop: 2,
   },
   bottomSpacer: {
     height: 20,
