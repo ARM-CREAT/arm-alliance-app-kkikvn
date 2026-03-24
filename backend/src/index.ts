@@ -35,6 +35,9 @@ import * as membershipsRoutes from './routes/memberships.js';
 import * as notificationsRoutes from './routes/notifications.js';
 import * as membersApiRoutes from './routes/membersApi.js';
 import * as directionRoutes from './routes/direction.js';
+import * as cmsNewsRoutes from './routes/cms-news.js';
+import * as announcementsRoutes from './routes/announcements.js';
+import * as politicalMessagesRoutes from './routes/political-messages.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -86,6 +89,9 @@ membershipsRoutes.register(app, app.fastify);
 notificationsRoutes.register(app, app.fastify);
 membersApiRoutes.register(app, app.fastify);
 directionRoutes.register(app, app.fastify);
+cmsNewsRoutes.register(app, app.fastify);
+announcementsRoutes.register(app, app.fastify);
+politicalMessagesRoutes.register(app, app.fastify);
 
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);
@@ -98,6 +104,9 @@ await programRoutes.seedProgramSections(app);
 await membersApiRoutes.seedMembers(app);
 await directionRoutes.seedDirection(app);
 await mediaRoutes.seedMedia(app);
+await cmsNewsRoutes.seedCmsNews(app);
+await announcementsRoutes.seedAnnouncements(app);
+await politicalMessagesRoutes.seedPoliticalMessages(app);
 
 // Setup WebSocket signaling for conferences
 import {

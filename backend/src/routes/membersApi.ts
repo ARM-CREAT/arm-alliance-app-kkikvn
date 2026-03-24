@@ -286,6 +286,143 @@ export function register(app: App, fastify: FastifyInstance) {
       }
     }
   );
+
+  // DELETE /api/members/:id - Delete member (PROTECTED - admin password)
+  fastify.delete<{ Params: { id: string } }>(
+    '/api/members/:id',
+    {
+      schema: {
+        description: 'Delete a member (requires x-admin-password header)',
+        tags: ['members'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+            },
+          },
+          401: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          404: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const adminPassword = request.headers['x-admin-password'] as string;
+      const expectedPassword = process.env.ADMIN_PASSWORD || 'admin123';
+      const { id } = request.params as { id: string };
+
+      app.logger.info({ memberId: id }, 'Admin attempting to delete member');
+
+      if (!adminPassword || adminPassword !== expectedPassword) {
+        app.logger.warn({ memberId: id }, 'Unauthorized delete attempt');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      try {
+        const result = await app.db
+          .delete(schema.members)
+          .where(eq(schema.members.id, id))
+          .returning();
+
+        if (result.length === 0) {
+          app.logger.info({ memberId: id }, 'Member not found for deletion');
+          reply.status(404);
+          return { error: 'Member not found' };
+        }
+
+        app.logger.info({ memberId: id }, 'Member deleted successfully');
+        return { success: true };
+      } catch (error) {
+        app.logger.error({ err: error, memberId: id }, 'Failed to delete member');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/members/export - Export members as CSV (PROTECTED - admin password)
+  fastify.get(
+    '/api/members/export',
+    {
+      schema: {
+        description: 'Export all members as CSV (requires x-admin-password header)',
+        tags: ['members'],
+        response: {
+          200: {
+            type: 'string',
+            description: 'CSV file content',
+          },
+          401: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const adminPassword = request.headers['x-admin-password'] as string;
+      const expectedPassword = process.env.ADMIN_PASSWORD || 'admin123';
+
+      app.logger.info('Admin attempting to export members');
+
+      if (!adminPassword || adminPassword !== expectedPassword) {
+        app.logger.warn('Unauthorized export attempt');
+        reply.status(401);
+        return { error: 'Unauthorized' };
+      }
+
+      try {
+        const members = await app.db.select().from(schema.members).orderBy(sql`created_at DESC`);
+
+        // Create CSV content
+        const headers = ['ID', 'Member Number', 'First Name', 'Last Name', 'Phone', 'Location', 'Created At'];
+        const csvRows = [headers.join(',')];
+
+        for (const member of members) {
+          const row = [
+            member.id,
+            member.memberNumber,
+            `"${member.firstName || ''}"`,
+            `"${member.lastName || ''}"`,
+            `"${member.phone || ''}"`,
+            `"${member.location || ''}"`,
+            member.createdAt?.toISOString() || new Date().toISOString(),
+          ];
+          csvRows.push(row.join(','));
+        }
+
+        const csvContent = csvRows.join('\n');
+
+        app.logger.info({ count: members.length }, 'Members exported as CSV');
+
+        reply.header('Content-Type', 'text/csv');
+        reply.header('Content-Disposition', 'attachment; filename="members-export.csv"');
+        return csvContent;
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to export members');
+        throw error;
+      }
+    }
+  );
 }
 
 export async function seedMembers(app: App) {
