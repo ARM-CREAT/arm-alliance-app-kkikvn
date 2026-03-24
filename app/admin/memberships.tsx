@@ -7,15 +7,20 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
   Platform,
 } from 'react-native';
 import { Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { BACKEND_URL } from '@/utils/api-helpers';
+import * as Haptics from 'expo-haptics';
 
 const C = Colors.light;
-const ADMIN_PASSWORD = 'admin123';
+const ADMIN_HEADERS = {
+  'Content-Type': 'application/json',
+  'x-admin-password': 'admin123',
+};
 
 interface Member {
   id: string;
@@ -43,7 +48,7 @@ function formatDate(dateString?: string): string {
 function getInitials(firstName: string, lastName: string): string {
   const f = (firstName || '').charAt(0).toUpperCase();
   const l = (lastName || '').charAt(0).toUpperCase();
-  return f + l || '?';
+  return (f + l) || '?';
 }
 
 export default function AdminMembershipsScreen() {
@@ -59,30 +64,24 @@ export default function AdminMembershipsScreen() {
     setError(null);
 
     try {
-      const [membersRes, countRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/members`, {
-          headers: { 'x-admin-password': ADMIN_PASSWORD },
-        }),
-        fetch(`${BACKEND_URL}/api/members/count`),
-      ]);
+      const res = await fetch(`${BACKEND_URL}/api/members`, { headers: ADMIN_HEADERS });
 
-      if (!membersRes.ok) {
-        const text = await membersRes.text();
-        console.log('[AdminMemberships] Erreur HTTP', membersRes.status, text);
-        throw new Error(`Erreur ${membersRes.status}: impossible de charger les membres`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[AdminMemberships] Erreur HTTP', res.status, text.slice(0, 120));
+        throw new Error(`Erreur ${res.status}: impossible de charger les membres`);
       }
 
-      const membersData: Member[] = await membersRes.json();
-      console.log('[AdminMemberships] Membres chargés:', membersData.length);
-      setMembers(Array.isArray(membersData) ? membersData : []);
+      const data = await res.json();
+      const list: Member[] = Array.isArray(data) ? data : (data.members ?? []);
+      const count: number = typeof data.count === 'number' ? data.count : list.length;
 
-      if (countRes.ok) {
-        const countData = await countRes.json();
-        setTotalCount(typeof countData.count === 'number' ? countData.count : null);
-      }
+      console.log('[AdminMemberships] Membres chargés:', list.length, 'total:', count);
+      setMembers(list);
+      setTotalCount(count);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.log('[AdminMemberships] Erreur:', message);
+      console.error('[AdminMemberships] Erreur:', message);
       setError(message);
     } finally {
       setLoading(false);
@@ -101,6 +100,42 @@ export default function AdminMembershipsScreen() {
     setRefreshing(true);
     loadMembers(true);
   }, [loadMembers]);
+
+  const handleDelete = (member: Member) => {
+    const fullName = `${member.first_name} ${member.last_name}`.trim();
+    console.log('[AdminMemberships] Demande suppression membre:', member.id, fullName);
+    Alert.alert(
+      'Supprimer ce membre',
+      `Voulez-vous vraiment supprimer "${fullName}" (${member.member_number}) ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            console.log('[AdminMemberships] DELETE /api/members/' + member.id);
+            try {
+              const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
+                method: 'DELETE',
+                headers: ADMIN_HEADERS,
+              });
+              if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+              }
+              console.log('[AdminMemberships] Membre supprimé:', member.id);
+              if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              loadMembers(true);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.error('[AdminMemberships] Erreur suppression:', msg);
+              Alert.alert('Erreur', msg);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const displayCount = totalCount !== null ? String(totalCount) : String(members.length);
 
@@ -129,6 +164,13 @@ export default function AdminMembershipsScreen() {
           </View>
           <View style={styles.memberRight}>
             <Text style={styles.memberDate}>{dateStr}</Text>
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => handleDelete(item)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="trash-outline" size={16} color={C.danger} />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -344,10 +386,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     flexShrink: 0,
     marginLeft: 8,
+    gap: 8,
   },
   memberDate: {
     fontSize: 11,
     color: C.textTertiary,
     fontWeight: '500',
+  },
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: C.danger + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
