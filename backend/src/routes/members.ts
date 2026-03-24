@@ -5,39 +5,25 @@ import type { App } from '../index.js';
 
 const SAMPLE_MEMBERS = [
   {
-    memberNumber: 'ARM-2025-00001',
-    fullName: 'Amadou Coulibaly',
+    memberNumber: 'ARM-00001',
+    firstName: 'Amadou',
+    lastName: 'Coulibaly',
     phone: '+22376543210',
-    commune: 'Bamako',
-    status: 'active',
+    location: 'Bamako',
   },
   {
-    memberNumber: 'ARM-2025-00002',
-    fullName: 'Fatoumata Diarra',
+    memberNumber: 'ARM-00002',
+    firstName: 'Fatoumata',
+    lastName: 'Diallo',
     phone: '+22365432109',
-    commune: 'Sikasso',
-    status: 'active',
+    location: 'Sikasso',
   },
   {
-    memberNumber: 'ARM-2025-00003',
-    fullName: 'Moussa Traoré',
+    memberNumber: 'ARM-00003',
+    firstName: 'Ibrahim',
+    lastName: 'Traoré',
     phone: '+22354321098',
-    commune: 'Mopti',
-    status: 'pending',
-  },
-  {
-    memberNumber: 'ARM-2025-00004',
-    fullName: 'Mariam Koné',
-    phone: '+22343210987',
-    commune: 'Kayes',
-    status: 'active',
-  },
-  {
-    memberNumber: 'ARM-2025-00005',
-    fullName: 'Ibrahim Sanogo',
-    phone: '+22332109876',
-    commune: 'Ségou',
-    status: 'suspended',
+    location: 'Mopti',
   },
 ];
 

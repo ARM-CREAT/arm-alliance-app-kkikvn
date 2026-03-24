@@ -1,5 +1,5 @@
 {
-  "id": "349dd9da-48ce-4059-b585-ed20af0dad8d",
+  "id": "db99b503-b0cd-4e7d-ae05-ee528e99a521",
   "prevId": "92f378e8-7bd8-4edf-9e08-a89a90e3adc9",
   "version": "7",
   "dialect": "postgresql",
@@ -1481,8 +1481,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "full_name": {
-          "name": "full_name",
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1493,24 +1499,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "commune": {
-          "name": "commune",
+        "location": {
+          "name": "location",
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
         },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": "now()"
         }
       },
@@ -1523,13 +1522,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "member_number"
-          ]
-        },
-        "members_phone_unique": {
-          "name": "members_phone_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "phone"
           ]
         }
       },

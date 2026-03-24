@@ -9,15 +9,15 @@ import {
   boolean,
 } from 'drizzle-orm/pg-core';
 
-// Members table - Clean member registry with auto-generated member numbers
+// Members table - Member registry with sequential member numbers
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
-  memberNumber: text('member_number').notNull().unique(), // ARM-YYYY-NNNNN format
-  fullName: text('full_name').notNull(),
-  phone: text('phone').notNull().unique(),
-  commune: text('commune').notNull(),
-  status: text('status').notNull().default('active'), // active, pending, suspended
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  memberNumber: text('member_number').notNull().unique(), // ARM-NNNNN format (sequential)
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  phone: text('phone').notNull(),
+  location: text('location').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 
 // Leadership table - Party leadership positions
