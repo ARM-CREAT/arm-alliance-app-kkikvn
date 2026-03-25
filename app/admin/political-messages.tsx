@@ -21,11 +21,11 @@ const ADMIN_HEADERS = {
   'x-admin-password': 'admin123',
 };
 
-interface NewsItem {
+interface PoliticalMessage {
   id: string;
   title: string;
   content: string;
-  image_url?: string;
+  author: string;
   published: boolean;
   created_at: string;
   updated_at: string;
@@ -44,31 +44,31 @@ function formatDate(dateString?: string): string {
   }
 }
 
-export default function AdminNewsScreen() {
+export default function AdminPoliticalMessagesScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [news, setNews] = useState<NewsItem[]>([]);
+  const [messages, setMessages] = useState<PoliticalMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const loadNews = useCallback(async (isRefresh = false) => {
-    console.log('[AdminNews] GET /api/news');
+  const loadMessages = useCallback(async (isRefresh = false) => {
+    console.log('[AdminPoliticalMessages] GET /api/political-messages');
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/news`, { headers: ADMIN_HEADERS });
+      const res = await fetch(`${BACKEND_URL}/api/political-messages`, { headers: ADMIN_HEADERS });
       if (!res.ok) {
         const text = await res.text();
-        console.error('[AdminNews] Erreur HTTP', res.status, text.slice(0, 120));
+        console.error('[AdminPoliticalMessages] Erreur HTTP', res.status, text.slice(0, 120));
         throw new Error(`Erreur ${res.status}`);
       }
       const data = await res.json();
-      const list: NewsItem[] = Array.isArray(data) ? data : (data.news ?? []);
-      console.log('[AdminNews] Articles chargés:', list.length);
-      setNews(list);
+      const list: PoliticalMessage[] = Array.isArray(data) ? data : (data.messages ?? []);
+      console.log('[AdminPoliticalMessages] Messages chargés:', list.length);
+      setMessages(list);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[AdminNews] Erreur chargement:', msg);
+      console.error('[AdminPoliticalMessages] Erreur:', msg);
       setError(msg);
     } finally {
       setLoading(false);
@@ -78,32 +78,32 @@ export default function AdminNewsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadNews(false);
-    }, [loadNews])
+      loadMessages(false);
+    }, [loadMessages])
   );
 
   const onRefresh = useCallback(() => {
-    console.log('[AdminNews] Pull-to-refresh');
+    console.log('[AdminPoliticalMessages] Pull-to-refresh');
     setRefreshing(true);
-    loadNews(true);
-  }, [loadNews]);
+    loadMessages(true);
+  }, [loadMessages]);
 
   const handleAdd = () => {
-    console.log('[AdminNews] Bouton Ajouter appuyé');
+    console.log('[AdminPoliticalMessages] Bouton Ajouter appuyé');
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/admin/news/new' as any);
+    router.push('/admin/political-messages/new' as any);
   };
 
-  const handleEdit = (item: NewsItem) => {
-    console.log('[AdminNews] Modifier article:', item.id);
+  const handleEdit = (item: PoliticalMessage) => {
+    console.log('[AdminPoliticalMessages] Modifier message:', item.id);
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push(`/admin/news/${item.id}` as any);
+    router.push(`/admin/political-messages/${item.id}` as any);
   };
 
-  const handleDelete = (item: NewsItem) => {
-    console.log('[AdminNews] Demande suppression article:', item.id);
+  const handleDelete = (item: PoliticalMessage) => {
+    console.log('[AdminPoliticalMessages] Demande suppression message:', item.id);
     Alert.alert(
-      'Supprimer cet article',
+      'Supprimer ce message',
       `Voulez-vous vraiment supprimer "${item.title}" ?`,
       [
         { text: 'Annuler', style: 'cancel' },
@@ -111,9 +111,9 @@ export default function AdminNewsScreen() {
           text: 'Supprimer',
           style: 'destructive',
           onPress: async () => {
-            console.log('[AdminNews] DELETE /api/news/' + item.id);
+            console.log('[AdminPoliticalMessages] DELETE /api/political-messages/' + item.id);
             try {
-              const res = await fetch(`${BACKEND_URL}/api/news/${item.id}`, {
+              const res = await fetch(`${BACKEND_URL}/api/political-messages/${item.id}`, {
                 method: 'DELETE',
                 headers: ADMIN_HEADERS,
               });
@@ -121,12 +121,12 @@ export default function AdminNewsScreen() {
                 const text = await res.text();
                 throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
               }
-              console.log('[AdminNews] Article supprimé:', item.id);
+              console.log('[AdminPoliticalMessages] Message supprimé:', item.id);
               if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              loadNews(true);
+              loadMessages(true);
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err);
-              console.error('[AdminNews] Erreur suppression:', msg);
+              console.error('[AdminPoliticalMessages] Erreur suppression:', msg);
               Alert.alert('Erreur', msg);
             }
           },
@@ -135,10 +135,11 @@ export default function AdminNewsScreen() {
     );
   };
 
-  const renderItem = ({ item }: { item: NewsItem }) => {
+  const renderItem = ({ item }: { item: PoliticalMessage }) => {
     const dateStr = formatDate(item.created_at);
     const publishedLabel = item.published ? 'Publié' : 'Brouillon';
     const publishedColor = item.published ? colors.success : colors.textTertiary;
+    const authorText = item.author || '—';
 
     return (
       <TouchableOpacity
@@ -153,6 +154,10 @@ export default function AdminNewsScreen() {
           <Text style={styles.cardDate}>{dateStr}</Text>
         </View>
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <View style={styles.authorRow}>
+          <Ionicons name="person-outline" size={12} color={colors.textTertiary} />
+          <Text style={styles.authorText}>{authorText}</Text>
+        </View>
         <Text style={styles.cardContent} numberOfLines={2}>{item.content}</Text>
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)}>
@@ -172,7 +177,7 @@ export default function AdminNewsScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Actualités',
+          title: 'Messages politiques',
           headerShown: true,
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: '#FFFFFF',
@@ -189,13 +194,13 @@ export default function AdminNewsScreen() {
           <View style={styles.errorContainer}>
             <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={() => loadNews(false)}>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => loadMessages(false)}>
               <Text style={styles.retryBtnText}>Réessayer</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <FlatList
-            data={news}
+            data={messages}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             contentContainerStyle={styles.listContent}
@@ -204,9 +209,9 @@ export default function AdminNewsScreen() {
             }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
-                <Ionicons name="newspaper-outline" size={56} color={colors.textTertiary} />
-                <Text style={styles.emptyText}>Aucun article</Text>
-                <Text style={styles.emptySubtext}>Appuyez sur + pour créer le premier article</Text>
+                <Ionicons name="chatbubble-ellipses-outline" size={56} color={colors.textTertiary} />
+                <Text style={styles.emptyText}>Aucun message</Text>
+                <Text style={styles.emptySubtext}>Appuyez sur + pour créer un message</Text>
               </View>
             }
             showsVerticalScrollIndicator={false}
@@ -222,48 +227,14 @@ export default function AdminNewsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    gap: 16,
-  },
-  errorText: {
-    fontSize: 15,
-    color: colors.danger,
-    textAlign: 'center',
-  },
-  retryBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  retryBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
-    flexGrow: 1,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  loadingText: { fontSize: 15, color: colors.textSecondary },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 16 },
+  errorText: { fontSize: 15, color: colors.danger, textAlign: 'center' },
+  retryBtn: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 24, paddingVertical: 12 },
+  retryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  listContent: { padding: 16, paddingBottom: 100, flexGrow: 1 },
   card: {
     backgroundColor: colors.card,
     borderRadius: 14,
@@ -277,94 +248,23 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  cardUnpublished: {
-    opacity: 0.65,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  cardDate: {
-    fontSize: 11,
-    color: colors.textTertiary,
-    fontWeight: '500',
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 6,
-    lineHeight: 22,
-  },
-  cardContent: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
-    paddingTop: 10,
-  },
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.primary + '15',
-    borderRadius: 8,
-  },
-  editBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.danger + '15',
-    borderRadius: 8,
-  },
-  deleteBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.danger,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 80,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: colors.textTertiary,
-    textAlign: 'center',
-  },
+  cardUnpublished: { opacity: 0.65 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  cardDate: { fontSize: 11, color: colors.textTertiary, fontWeight: '500' },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 6, lineHeight: 22 },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
+  authorText: { fontSize: 12, color: colors.textTertiary, fontWeight: '500' },
+  cardContent: { fontSize: 13, color: colors.textSecondary, lineHeight: 19, marginBottom: 12 },
+  cardActions: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: 10 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.primary + '15', borderRadius: 8 },
+  editBtnText: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.danger + '15', borderRadius: 8 },
+  deleteBtnText: { fontSize: 13, fontWeight: '600', color: colors.danger },
+  emptyContainer: { alignItems: 'center', paddingVertical: 80, gap: 12 },
+  emptyText: { fontSize: 18, fontWeight: '700', color: colors.textSecondary },
+  emptySubtext: { fontSize: 13, color: colors.textTertiary, textAlign: 'center' },
   fab: {
     position: 'absolute',
     bottom: 28,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,34 +9,47 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  TextInput as TextInputType,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BACKEND_URL } from '@/utils/api-helpers';
+import { Colors } from '@/constants/Colors';
 
-const PRIMARY = '#2E7D32';
-const ACCENT = '#FFC107';
+const C = Colors.light;
 
 export default function RegisterScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [errorBanner, setErrorBanner] = useState('');
 
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
-  const [commune, setCommune] = useState('');
+  const [location, setLocation] = useState('');
 
-  const [fullNameError, setFullNameError] = useState('');
+  const [firstNameError, setFirstNameError] = useState('');
+  const [lastNameError, setLastNameError] = useState('');
   const [phoneError, setPhoneError] = useState('');
-  const [communeError, setCommuneError] = useState('');
+  const [locationError, setLocationError] = useState('');
+
+  const lastNameRef = useRef<TextInputType>(null);
+  const phoneRef = useRef<TextInputType>(null);
+  const locationRef = useRef<TextInputType>(null);
 
   const validate = (): boolean => {
     let valid = true;
-    if (!fullName.trim()) {
-      setFullNameError('Le nom complet est requis');
+    if (!firstName.trim()) {
+      setFirstNameError('Le prénom est requis');
       valid = false;
     } else {
-      setFullNameError('');
+      setFirstNameError('');
+    }
+    if (!lastName.trim()) {
+      setLastNameError('Le nom est requis');
+      valid = false;
+    } else {
+      setLastNameError('');
     }
     if (!phone.trim()) {
       setPhoneError('Le numéro de téléphone est requis');
@@ -44,17 +57,18 @@ export default function RegisterScreen() {
     } else {
       setPhoneError('');
     }
-    if (!commune.trim()) {
-      setCommuneError('La commune ou ville est requise');
+    if (!location.trim()) {
+      setLocationError('La localisation est requise');
       valid = false;
     } else {
-      setCommuneError('');
+      setLocationError('');
     }
     return valid;
   };
 
   const handleSubmit = async () => {
-    console.log('[Register] Bouton S\'inscrire appuyé');
+    console.log('[Register] Bouton "Adhérer maintenant" appuyé');
+    setErrorBanner('');
     if (!validate()) {
       console.log('[Register] Validation échouée');
       return;
@@ -62,9 +76,10 @@ export default function RegisterScreen() {
 
     setLoading(true);
     const payload = {
-      full_name: fullName.trim(),
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
       phone: phone.trim(),
-      commune: commune.trim(),
+      location: location.trim(),
     };
     console.log('[Register] POST /api/members', JSON.stringify(payload));
 
@@ -75,46 +90,35 @@ export default function RegisterScreen() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok && response.status !== 409) {
+      if (!response.ok) {
         const text = await response.text();
         console.log('[Register] Erreur HTTP', response.status, text);
-        throw new Error(`Erreur ${response.status}: ${text}`);
-      }
-
-      const data = await response.json();
-      console.log('[Register] Réponse reçue:', JSON.stringify(data));
-
-      if (response.status === 409) {
-        console.log('[Register] Doublon détecté, numéro existant:', data.member_number);
-        Alert.alert(
-          'Vous êtes déjà inscrit !',
-          `Votre numéro de membre est : ${data.member_number}`,
-          [
-            { text: 'Annuler', style: 'cancel' },
-            {
-              text: 'Voir ma carte',
-              onPress: () => {
-                console.log('[Register] Navigation vers carte (doublon):', data.member_number);
-                router.push({
-                  pathname: '/member/card',
-                  params: { member: JSON.stringify(data) },
-                });
-              },
-            },
-          ]
-        );
+        let message = `Erreur ${response.status}`;
+        try {
+          const json = JSON.parse(text);
+          message = json.message || json.error || message;
+        } catch {
+          message = text || message;
+        }
+        setErrorBanner(message);
         return;
       }
 
-      console.log('[Register] Inscription réussie, numéro:', data.member_number);
+      const data = await response.json();
+      console.log('[Register] Inscription réussie:', JSON.stringify(data));
+
       router.push({
-        pathname: '/member/card',
-        params: { member: JSON.stringify(data) },
+        pathname: '/member/success',
+        params: {
+          member_number: data.member_number,
+          first_name: data.first_name,
+          last_name: data.last_name,
+        },
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.log('[Register] Erreur:', message);
-      Alert.alert('Erreur', message || 'Erreur de connexion. Vérifiez votre connexion internet.');
+      console.log('[Register] Erreur réseau:', message);
+      setErrorBanner('Erreur de connexion. Vérifiez votre connexion internet.');
     } finally {
       setLoading(false);
     }
@@ -135,7 +139,7 @@ export default function RegisterScreen() {
           title: 'Adhésion ARM',
           headerShown: true,
           headerBackTitle: 'Retour',
-          headerStyle: { backgroundColor: PRIMARY },
+          headerStyle: { backgroundColor: C.primary },
           headerTintColor: '#fff',
           headerTitleStyle: { fontWeight: '700' },
         }}
@@ -154,52 +158,81 @@ export default function RegisterScreen() {
           <Text style={styles.subtitle}>Rejoignez le mouvement</Text>
         </View>
 
+        {/* Error Banner */}
+        {errorBanner ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.errorBannerText}>{errorBanner}</Text>
+          </View>
+        ) : null}
+
         {/* Form Card */}
         <View style={styles.formCard}>
-          {/* Full Name */}
+          {/* Prénom */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Nom complet</Text>
+            <Text style={styles.label}>Prénom</Text>
             <TextInput
-              style={[styles.input, fullNameError ? styles.inputError : null]}
-              value={fullName}
-              onChangeText={(v) => { setFullName(v); if (v.trim()) setFullNameError(''); }}
-              placeholder="Votre nom et prénom"
-              placeholderTextColor="#9E9E9E"
+              style={[styles.input, firstNameError ? styles.inputError : null]}
+              value={firstName}
+              onChangeText={(v) => { setFirstName(v); if (v.trim()) setFirstNameError(''); }}
+              placeholder="Votre prénom"
+              placeholderTextColor={C.textTertiary}
               autoCapitalize="words"
               returnKeyType="next"
+              onSubmitEditing={() => lastNameRef.current?.focus()}
             />
-            {fullNameError ? <Text style={styles.fieldError}>{fullNameError}</Text> : null}
+            {firstNameError ? <Text style={styles.fieldError}>{firstNameError}</Text> : null}
           </View>
 
-          {/* Phone */}
+          {/* Nom */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Nom</Text>
+            <TextInput
+              ref={lastNameRef}
+              style={[styles.input, lastNameError ? styles.inputError : null]}
+              value={lastName}
+              onChangeText={(v) => { setLastName(v); if (v.trim()) setLastNameError(''); }}
+              placeholder="Votre nom de famille"
+              placeholderTextColor={C.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => phoneRef.current?.focus()}
+            />
+            {lastNameError ? <Text style={styles.fieldError}>{lastNameError}</Text> : null}
+          </View>
+
+          {/* Téléphone */}
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Téléphone</Text>
             <TextInput
+              ref={phoneRef}
               style={[styles.input, phoneError ? styles.inputError : null]}
               value={phone}
               onChangeText={(v) => { setPhone(v); if (v.trim()) setPhoneError(''); }}
               placeholder="+223 XX XX XX XX"
-              placeholderTextColor="#9E9E9E"
+              placeholderTextColor={C.textTertiary}
               keyboardType="phone-pad"
               returnKeyType="next"
+              onSubmitEditing={() => locationRef.current?.focus()}
             />
             {phoneError ? <Text style={styles.fieldError}>{phoneError}</Text> : null}
           </View>
 
-          {/* Commune */}
+          {/* Localisation */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Commune / Ville</Text>
+            <Text style={styles.label}>Localisation</Text>
             <TextInput
-              style={[styles.input, communeError ? styles.inputError : null]}
-              value={commune}
-              onChangeText={(v) => { setCommune(v); if (v.trim()) setCommuneError(''); }}
+              ref={locationRef}
+              style={[styles.input, locationError ? styles.inputError : null]}
+              value={location}
+              onChangeText={(v) => { setLocation(v); if (v.trim()) setLocationError(''); }}
               placeholder="Votre commune ou ville"
-              placeholderTextColor="#9E9E9E"
+              placeholderTextColor={C.textTertiary}
               autoCapitalize="words"
               returnKeyType="done"
               onSubmitEditing={handleSubmit}
             />
-            {communeError ? <Text style={styles.fieldError}>{communeError}</Text> : null}
+            {locationError ? <Text style={styles.fieldError}>{locationError}</Text> : null}
           </View>
 
           {/* Submit Button */}
@@ -214,7 +247,7 @@ export default function RegisterScreen() {
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.btnIcon} />
-                <Text style={styles.submitButtonText}>S'inscrire</Text>
+                <Text style={styles.submitButtonText}>Adhérer maintenant</Text>
               </>
             )}
           </TouchableOpacity>
@@ -234,14 +267,14 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: C.background,
   },
   scrollContent: {
     flexGrow: 1,
     paddingBottom: 32,
   },
   header: {
-    backgroundColor: PRIMARY,
+    backgroundColor: C.primary,
     alignItems: 'center',
     paddingTop: 40,
     paddingBottom: 48,
@@ -256,7 +289,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 2,
-    borderColor: ACCENT,
+    borderColor: C.accent,
   },
   title: {
     fontSize: 28,
@@ -270,8 +303,25 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontStyle: 'italic',
   },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.danger,
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
   formCard: {
-    backgroundColor: '#fff',
+    backgroundColor: C.surface,
     borderRadius: 20,
     marginHorizontal: 20,
     marginTop: -24,
@@ -288,40 +338,40 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#333',
+    color: C.text,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
     borderWidth: 1.5,
-    borderColor: '#E0E0E0',
+    borderColor: C.border,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    height: 52,
     fontSize: 16,
-    color: '#1A1A1A',
-    backgroundColor: '#FAFAFA',
+    color: C.text,
+    backgroundColor: C.surfaceSecondary,
   },
   inputError: {
-    borderColor: '#C62828',
+    borderColor: C.danger,
     backgroundColor: '#FFF5F5',
   },
   fieldError: {
     fontSize: 12,
-    color: '#C62828',
+    color: C.danger,
     marginTop: 6,
     marginLeft: 4,
   },
   submitButton: {
-    backgroundColor: PRIMARY,
+    backgroundColor: C.primary,
     borderRadius: 14,
-    paddingVertical: 16,
+    height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
-    shadowColor: PRIMARY,
+    shadowColor: C.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -346,7 +396,7 @@ const styles = StyleSheet.create({
   },
   recoverLinkText: {
     fontSize: 15,
-    color: PRIMARY,
+    color: C.primary,
     fontWeight: '600',
     textDecorationLine: 'underline',
   },
