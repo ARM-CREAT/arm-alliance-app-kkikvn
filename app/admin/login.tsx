@@ -24,7 +24,7 @@ const OFFLINE_ACCESS_ENABLED_KEY = 'admin_offline_access_enabled';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('admin@alliance-arm.fr');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -60,10 +60,10 @@ export default function AdminLoginScreen() {
   const handleLogin = async () => {
     console.log('[AdminLogin] Bouton Se connecter appuyé');
 
-    if (!password.trim()) {
-      console.log('[AdminLogin] Mot de passe vide');
+    if (!email.trim() || !password.trim()) {
+      console.log('[AdminLogin] Email ou mot de passe vide');
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showModal('Erreur', 'Veuillez entrer le mot de passe administrateur.', 'error');
+      showModal('Erreur', 'Veuillez entrer votre email et mot de passe.', 'error');
       return;
     }
 
@@ -79,10 +79,12 @@ export default function AdminLoginScreen() {
     console.log('[AdminLogin] POST /api/admin/login');
 
     try {
+      const trimmedEmail = email.trim();
+      console.log('[AdminLogin] POST /api/admin/login ->', BACKEND_URL, '| email:', trimmedEmail);
       const response = await fetch(`${BACKEND_URL}/api/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: trimmedPassword }),
+        body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword }),
       });
 
       if (!response.ok) {
@@ -92,15 +94,22 @@ export default function AdminLoginScreen() {
         try { msg = JSON.parse(errText).error || JSON.parse(errText).message || msg; } catch {}
         if (response.status === 401) {
           if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          showModal('Mot de passe incorrect', 'Le mot de passe administrateur est incorrect.', 'error');
+          showModal('Identifiants invalides', 'Email ou mot de passe incorrect.', 'error');
+        } else if (response.status === 403) {
+          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          showModal('Accès refusé', 'Vous n\'avez pas les droits administrateur.', 'error');
         } else {
           showModal('Erreur de connexion', msg, 'error');
         }
         return;
       }
 
+      const data = await response.json();
+      console.log('[AdminLogin] Connexion réussie, token reçu:', !!data.token);
+      if (data.token) {
+        await AsyncStorage.setItem('admin_token', data.token);
+      }
       await AsyncStorage.setItem('admin_password', trimmedPassword);
-      console.log('[AdminLogin] Connexion réussie, navigation vers dashboard');
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showModal('Succès', 'Connexion administrateur réussie !', 'success');
       setTimeout(() => router.replace('/admin/dashboard'), 1000);
@@ -116,7 +125,7 @@ export default function AdminLoginScreen() {
         setTimeout(() => router.replace('/admin/dashboard'), 1000);
         return;
       }
-      showModal('Serveur non disponible', 'Le serveur n\'est pas accessible. Vérifiez votre connexion.', 'warning');
+      showModal('Erreur de connexion', 'Impossible de joindre le serveur. Vérifiez votre connexion internet.', 'warning');
     } finally {
       setLoading(false);
     }
@@ -190,11 +199,28 @@ export default function AdminLoginScreen() {
             )}
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Mot de passe administrateur</Text>
+              <Text style={styles.label}>Email administrateur</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Entrez le mot de passe secret"
+                  placeholder="admin@alliance-arm.fr"
+                  placeholderTextColor={colors.textTertiary}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Mot de passe</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Entrez le mot de passe"
                   placeholderTextColor={colors.textTertiary}
                   value={password}
                   onChangeText={setPassword}
