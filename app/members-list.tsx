@@ -284,10 +284,10 @@ export default function MembersListScreen() {
   };
 
   const handleChangeStatus = async (member: Member, newStatus: string) => {
-    console.log('[MembersList] PATCH /api/members/:id/status', member.id, '->', newStatus);
+    console.log('[MembersList] PUT /api/members/' + member.id, '->', newStatus);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
-        method: 'PATCH',
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
+        method: 'PUT',
         headers: ADMIN_HEADERS,
         body: JSON.stringify({ status: newStatus }),
       });

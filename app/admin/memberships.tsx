@@ -25,7 +25,7 @@ const ADMIN_HEADERS = {
   'x-admin-password': 'admin123',
 };
 
-type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected';
+type FilterStatus = 'all' | 'pending' | 'active' | 'suspended';
 
 interface Member {
   id: string;
@@ -68,17 +68,17 @@ function getInitials(fullName: string): string {
 
 function getStatusColor(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'approved' || s === 'active' || s === 'actif') return '#16a34a';
-  if (s === 'pending' || s === 'en_attente') return '#D97706';
-  if (s === 'rejected' || s === 'suspended' || s === 'suspendu') return '#DC2626';
+  if (s === 'active') return '#16a34a';
+  if (s === 'pending') return '#D97706';
+  if (s === 'suspended') return '#DC2626';
   return C.textSecondary;
 }
 
 function getStatusLabel(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'approved' || s === 'active' || s === 'actif') return 'Approuvé';
-  if (s === 'pending' || s === 'en_attente') return 'En attente';
-  if (s === 'rejected' || s === 'suspended' || s === 'suspendu') return 'Rejeté';
+  if (s === 'active') return 'Actif';
+  if (s === 'pending') return 'En attente';
+  if (s === 'suspended') return 'Suspendu';
   return String(status || 'Inconnu');
 }
 
@@ -108,8 +108,8 @@ function DetailModal({ member, visible, onClose, onApprove, onReject, onDelete, 
   const statusColor = getStatusColor(member.status);
   const statusLabel = getStatusLabel(member.status);
   const initials = getInitials(member.full_name);
-  const isApproved = ['approved', 'active', 'actif'].includes((member.status || '').toLowerCase());
-  const isRejected = ['rejected', 'suspended', 'suspendu'].includes((member.status || '').toLowerCase());
+  const isApproved = (member.status || '').toLowerCase() === 'active';
+  const isRejected = (member.status || '').toLowerCase() === 'suspended';
   const genderLabel = getGenderLabel(member.gender);
   const dateStr = formatDate(member.created_at);
 
@@ -271,8 +271,8 @@ function MemberCard({ item, onPress }: { item: Member; onPress: (m: Member) => v
 const FILTER_TABS: { value: FilterStatus; label: string }[] = [
   { value: 'all', label: 'Tous' },
   { value: 'pending', label: 'En attente' },
-  { value: 'approved', label: 'Approuvés' },
-  { value: 'rejected', label: 'Rejetés' },
+  { value: 'active', label: 'Actifs' },
+  { value: 'suspended', label: 'Suspendus' },
 ];
 
 export default function AdminMembershipsScreen() {
@@ -348,13 +348,7 @@ export default function AdminMembershipsScreen() {
 
     // Status filter
     if (activeFilter !== 'all') {
-      list = list.filter((m) => {
-        const s = (m.status || '').toLowerCase();
-        if (activeFilter === 'approved') return s === 'approved' || s === 'active' || s === 'actif';
-        if (activeFilter === 'pending') return s === 'pending' || s === 'en_attente';
-        if (activeFilter === 'rejected') return s === 'rejected' || s === 'suspended' || s === 'suspendu';
-        return true;
-      });
+      list = list.filter((m) => (m.status || '').toLowerCase() === activeFilter);
     }
 
     // Search filter
@@ -374,18 +368,9 @@ export default function AdminMembershipsScreen() {
 
   // Stats derived from full list
   const totalAll = members.length;
-  const totalPending = members.filter((m) => {
-    const s = (m.status || '').toLowerCase();
-    return s === 'pending' || s === 'en_attente';
-  }).length;
-  const totalApproved = members.filter((m) => {
-    const s = (m.status || '').toLowerCase();
-    return s === 'approved' || s === 'active' || s === 'actif';
-  }).length;
-  const totalRejected = members.filter((m) => {
-    const s = (m.status || '').toLowerCase();
-    return s === 'rejected' || s === 'suspended' || s === 'suspendu';
-  }).length;
+  const totalPending = members.filter((m) => (m.status || '').toLowerCase() === 'pending').length;
+  const totalApproved = members.filter((m) => (m.status || '').toLowerCase() === 'active').length;
+  const totalRejected = members.filter((m) => (m.status || '').toLowerCase() === 'suspended').length;
 
   const handleOpenDetail = (member: Member) => {
     setSelectedMember(member);
@@ -399,22 +384,22 @@ export default function AdminMembershipsScreen() {
   };
 
   const handleApprove = async (member: Member) => {
-    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> approved');
+    console.log('[AdminMemberships] PUT /api/members/' + member.id + ' -> status: active');
     setActionLoading('approve');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
-        method: 'PATCH',
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
+        method: 'PUT',
         headers: ADMIN_HEADERS,
-        body: JSON.stringify({ status: 'approved' }),
+        body: JSON.stringify({ status: 'active' }),
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
       }
-      console.log('[AdminMemberships] Statut approuvé:', member.id);
+      console.log('[AdminMemberships] Statut mis à jour -> active:', member.id);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, status: 'approved' } : m));
-      setSelectedMember((prev) => prev ? { ...prev, status: 'approved' } : prev);
+      setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, status: 'active' } : m));
+      setSelectedMember((prev) => prev ? { ...prev, status: 'active' } : prev);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[AdminMemberships] Erreur approbation:', msg);
@@ -425,22 +410,22 @@ export default function AdminMembershipsScreen() {
   };
 
   const handleReject = async (member: Member) => {
-    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> rejected');
+    console.log('[AdminMemberships] PUT /api/members/' + member.id + ' -> status: suspended');
     setActionLoading('reject');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
-        method: 'PATCH',
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
+        method: 'PUT',
         headers: ADMIN_HEADERS,
-        body: JSON.stringify({ status: 'rejected' }),
+        body: JSON.stringify({ status: 'suspended' }),
       });
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
       }
-      console.log('[AdminMemberships] Statut rejeté:', member.id);
+      console.log('[AdminMemberships] Statut mis à jour -> suspended:', member.id);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, status: 'rejected' } : m));
-      setSelectedMember((prev) => prev ? { ...prev, status: 'rejected' } : prev);
+      setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, status: 'suspended' } : m));
+      setSelectedMember((prev) => prev ? { ...prev, status: 'suspended' } : prev);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[AdminMemberships] Erreur rejet:', msg);
@@ -527,12 +512,12 @@ export default function AdminMembershipsScreen() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: '#86EFAC' }]}>{totalApproved}</Text>
-            <Text style={styles.statLabel}>Approuvés</Text>
+            <Text style={styles.statLabel}>Actifs</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: '#FCA5A5' }]}>{totalRejected}</Text>
-            <Text style={styles.statLabel}>Rejetés</Text>
+            <Text style={styles.statLabel}>Suspendus</Text>
           </View>
         </View>
 
