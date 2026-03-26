@@ -36,6 +36,7 @@ interface ProgramBody {
 }
 
 interface AdminLoginBody {
+  email: string;
   password: string;
   secret?: string;
 }
@@ -100,15 +101,16 @@ export function register(app: App, fastify: FastifyInstance) {
     '/api/admin/login',
     {
       schema: {
-        description: 'Admin login - authenticate with admin credentials',
+        description: 'Admin login - authenticate with admin credentials and check role',
         tags: ['admin', 'auth'],
         body: {
           type: 'object',
           properties: {
+            email: { type: 'string', format: 'email' },
             password: { type: 'string' },
             secret: { type: 'string' },
           },
-          required: ['password'],
+          required: ['email', 'password'],
         },
         response: {
           200: {
@@ -117,6 +119,7 @@ export function register(app: App, fastify: FastifyInstance) {
               success: { type: 'boolean' },
               userId: { type: 'string' },
               username: { type: 'string' },
+              role: { type: 'string' },
               message: { type: 'string' },
             },
           },
@@ -127,24 +130,47 @@ export function register(app: App, fastify: FastifyInstance) {
               details: { type: 'string' },
             },
           },
+          403: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
         },
       },
     },
     async (request: FastifyRequest<{ Body: AdminLoginBody }>, reply: FastifyReply) => {
-      const { password, secret } = request.body;
+      const { email, password, secret } = request.body;
       const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
       app.logger.info(
-        { hasPassword: !!password, hasSecret: !!secret },
+        { email, hasPassword: !!password, hasSecret: !!secret },
         'Admin login attempt started'
       );
 
       try {
-        // Step 1: Validate password presence
-        if (!password) {
+        // Step 1: Validate email presence
+        if (!email) {
           app.logger.warn(
             {},
-            'Login step 1 failed: Password field is missing'
+            'Login step 1 failed: Email field is missing'
+          );
+          return reply.status(401).send({
+            error: 'Authentication failed',
+            details: 'Email field is required',
+          });
+        }
+
+        app.logger.debug(
+          { email },
+          'Login step 1 passed: Email field present'
+        );
+
+        // Step 2: Validate password presence
+        if (!password) {
+          app.logger.warn(
+            { email },
+            'Login step 2 failed: Password field is missing'
           );
           return reply.status(401).send({
             error: 'Authentication failed',
@@ -153,20 +179,21 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.debug(
-          { receivedLength: password.length },
-          'Login step 1 passed: Password field present'
+          { email, receivedLength: password.length },
+          'Login step 2 passed: Password field present'
         );
 
-        // Step 2: Validate password length matches
+        // Step 3: Validate password length matches
         if (password.length !== ADMIN_PASSWORD.length) {
           const hint = getMaskedPasswordHint(ADMIN_PASSWORD);
           app.logger.warn(
             {
+              email,
               receivedLength: password.length,
               expectedLength: ADMIN_PASSWORD.length,
               expectedHint: hint,
             },
-            'Login step 2 failed: Password length mismatch'
+            'Login step 3 failed: Password length mismatch'
           );
           return reply.status(401).send({
             error: 'Authentication failed',
@@ -175,19 +202,20 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.debug(
-          { passwordLength: password.length },
-          'Login step 2 passed: Password length correct'
+          { email, passwordLength: password.length },
+          'Login step 3 passed: Password length correct'
         );
 
-        // Step 3: Validate password value
+        // Step 4: Validate password value
         if (password !== ADMIN_PASSWORD) {
           const hint = getMaskedPasswordHint(ADMIN_PASSWORD);
           app.logger.warn(
             {
+              email,
               receivedHint: getMaskedPasswordHint(password),
               expectedHint: hint,
             },
-            'Login step 3 failed: Password value mismatch'
+            'Login step 4 failed: Password value mismatch'
           );
           return reply.status(401).send({
             error: 'Authentication failed',
@@ -195,17 +223,18 @@ export function register(app: App, fastify: FastifyInstance) {
           });
         }
 
-        app.logger.debug({}, 'Login step 3 passed: Password value correct');
+        app.logger.debug({ email }, 'Login step 4 passed: Password value correct');
 
-        // Step 4: Validate optional secret if provided
+        // Step 5: Validate optional secret if provided
         if (secret !== undefined) {
           if (secret.length !== ADMIN_PASSWORD.length) {
             app.logger.warn(
               {
+                email,
                 secretReceivedLength: secret.length,
                 secretExpectedLength: ADMIN_PASSWORD.length,
               },
-              'Login step 4 failed: Secret length mismatch'
+              'Login step 5 failed: Secret length mismatch'
             );
             return reply.status(401).send({
               error: 'Authentication failed',
@@ -217,10 +246,11 @@ export function register(app: App, fastify: FastifyInstance) {
             const hint = getMaskedPasswordHint(ADMIN_PASSWORD);
             app.logger.warn(
               {
+                email,
                 secretHint: getMaskedPasswordHint(secret),
                 expectedHint: hint,
               },
-              'Login step 4 failed: Secret value mismatch'
+              'Login step 5 failed: Secret value mismatch'
             );
             return reply.status(401).send({
               error: 'Authentication failed',
@@ -228,22 +258,55 @@ export function register(app: App, fastify: FastifyInstance) {
             });
           }
 
-          app.logger.debug({}, 'Login step 4 passed: Secret value correct');
+          app.logger.debug({ email }, 'Login step 5 passed: Secret value correct');
         } else {
-          app.logger.debug({}, 'Login step 4 skipped: No secret provided');
+          app.logger.debug({ email }, 'Login step 5 skipped: No secret provided');
         }
 
-        app.logger.info({}, 'Admin login successful - all authentication steps passed');
+        // Step 6: Check user's role in member_profiles
+        app.logger.debug({ email }, 'Login step 6: Checking user role in member_profiles');
+
+        const profile = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.email, email));
+
+        if (profile.length === 0) {
+          app.logger.warn(
+            { email },
+            'Login step 6 failed: User not found in member_profiles'
+          );
+          return reply.status(401).send({
+            error: 'Authentication failed',
+            details: 'User not found in member database',
+          });
+        }
+
+        const userRole = profile[0].role;
+        app.logger.debug({ email, userRole }, 'User role retrieved from member_profiles');
+
+        if (userRole !== 'admin' && userRole !== 'administrateur') {
+          app.logger.warn(
+            { email, userRole },
+            'Login step 6 failed: User role is not admin'
+          );
+          return reply.status(403).send({
+            error: 'Access denied. Admin credentials required.',
+          });
+        }
+
+        app.logger.info({ email, userRole }, 'Admin login successful - all authentication steps passed');
 
         return reply.status(200).send({
           success: true,
-          userId: 'admin',
-          username: 'administrator',
+          userId: profile[0].userId || email,
+          username: profile[0].fullName || email,
+          role: userRole,
           message: 'Admin authentication successful',
         });
       } catch (error) {
         app.logger.error(
-          { err: error },
+          { err: error, email },
           'Error during admin login'
         );
         return reply.status(500).send({

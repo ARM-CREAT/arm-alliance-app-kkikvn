@@ -41,6 +41,7 @@ import * as announcementsRoutes from './routes/announcements.js';
 import * as politicalMessagesRoutes from './routes/political-messages.js';
 import * as newsArticlesRoutes from './routes/newsArticles.js';
 import * as adminAuthRoutes from './routes/adminAuth.js';
+import * as memberLoginRoutes from './routes/memberLogin.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -55,12 +56,69 @@ app.withAuth();
 // Enable storage for file uploads
 app.withStorage();
 
+// Add a hook to enforce role-based access control on Better Auth sign-in
+app.fastify.addHook('onSend', async (request, reply, payload) => {
+  // Only check /api/auth/sign-in/email responses
+  if (request.method === 'POST' && request.url === '/api/auth/sign-in/email' && reply.statusCode === 200) {
+    try {
+      // Parse the response payload
+      let data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+
+      // Check if user was authenticated
+      if (data && data.user && data.user.email) {
+        const email = data.user.email;
+        app.logger.debug({ email }, 'Checking role for Better Auth sign-in');
+
+        // Look up user's role in member_profiles
+        const profile = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.email, email));
+
+        if (profile.length > 0) {
+          const userRole = profile[0].role;
+
+          // If user is admin, return 403 and revoke session
+          if (userRole === 'admin' || userRole === 'administrateur') {
+            app.logger.warn({ email, userRole }, 'Better Auth sign-in blocked: User is admin');
+
+            // Revoke the session that was just created
+            if (data.session && (app as any).auth) {
+              try {
+                await (app as any).auth.api.revokeSession({
+                  body: { sessionId: data.session.id },
+                });
+              } catch (revokeError) {
+                app.logger.warn({ err: revokeError }, 'Failed to revoke admin session');
+              }
+            }
+
+            // Return 403 response
+            reply.statusCode = 403;
+            return JSON.stringify({ error: 'Please use the admin login portal.' });
+          }
+
+          // Add role to response if user is non-admin
+          data.user.role = userRole;
+          return JSON.stringify(data);
+        }
+      }
+    } catch (error) {
+      app.logger.warn({ err: error }, 'Error checking role in sign-in hook');
+      // Continue without blocking if there's an error
+    }
+  }
+
+  return payload;
+});
+
 // Initialize default data
 await initializeData(app);
 
 // Register all route modules
 // IMPORTANT: Always use registration functions to avoid circular dependency issues
 adminAuthRoutes.register(app, app.fastify);
+memberLoginRoutes.register(app, app.fastify);
 healthRoutes.register(app, app.fastify);
 membershipRoutes.register(app, app.fastify);
 leadershipRoutes.register(app, app.fastify);
