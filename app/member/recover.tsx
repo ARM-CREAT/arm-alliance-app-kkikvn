@@ -33,12 +33,12 @@ export default function RecoverScreen() {
     setLoading(true);
 
     const encodedPhone = encodeURIComponent(phone.trim());
-    console.log('[Recover] GET /api/members/by-phone/' + encodedPhone);
+    console.log('[Recover] GET /api/members/lookup?phone=' + encodedPhone);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/members/by-phone/${encodedPhone}`, {
+      const response = await fetch(`${BACKEND_URL}/api/members/lookup?phone=${encodedPhone}`, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Accept': 'application/json' },
       });
 
       if (response.status === 404) {

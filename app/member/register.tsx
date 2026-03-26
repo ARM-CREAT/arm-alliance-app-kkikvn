@@ -57,6 +57,11 @@ export default function RegisterScreen() {
   const [fullNameError, setFullNameError] = useState('');
   const [phoneError, setPhoneError] = useState('');
 
+  // Duplicate member modal
+  const [duplicateModal, setDuplicateModal] = useState(false);
+  const [duplicateMemberNumber, setDuplicateMemberNumber] = useState('');
+  const [duplicateFullName, setDuplicateFullName] = useState('');
+
   // Refs for keyboard navigation
   const phoneRef = useRef<TextInputType>(null);
   const emailRef = useRef<TextInputType>(null);
@@ -129,7 +134,19 @@ export default function RegisterScreen() {
         console.log('[Register] Erreur HTTP', response.status, text);
 
         if (response.status === 409) {
-          setErrorBanner('Un membre avec ce numéro de téléphone existe déjà.');
+          let dupMemberNumber = '';
+          let dupFullName = '';
+          try {
+            const json = JSON.parse(text);
+            dupMemberNumber = json.member_number ?? '';
+            dupFullName = json.full_name ?? '';
+            console.log('[Register] 409 PHONE_EXISTS — membre existant:', dupMemberNumber, dupFullName);
+          } catch {
+            console.log('[Register] 409 — impossible de parser la réponse');
+          }
+          setDuplicateMemberNumber(dupMemberNumber);
+          setDuplicateFullName(dupFullName);
+          setDuplicateModal(true);
           return;
         }
 
@@ -191,6 +208,65 @@ export default function RegisterScreen() {
           headerTitleStyle: { fontWeight: '700' },
         }}
       />
+
+      {/* Duplicate member modal (409) */}
+      <Modal
+        visible={duplicateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDuplicateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.duplicateSheet}>
+            <View style={styles.duplicateIconRow}>
+              <Ionicons name="person-circle" size={48} color={C.primary} />
+            </View>
+            <Text style={styles.duplicateTitle}>Numéro déjà inscrit</Text>
+            <Text style={styles.duplicateBody}>Ce numéro de téléphone est déjà inscrit.</Text>
+            {duplicateFullName ? (
+              <View style={styles.duplicateInfoBox}>
+                <Text style={styles.duplicateInfoLabel}>NOM</Text>
+                <Text style={styles.duplicateInfoValue}>{duplicateFullName}</Text>
+                {duplicateMemberNumber ? (
+                  <>
+                    <View style={styles.duplicateInfoDivider} />
+                    <Text style={styles.duplicateInfoLabel}>NUMÉRO DE MEMBRE</Text>
+                    <Text style={styles.duplicateMemberNumber}>{duplicateMemberNumber}</Text>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
+            <TouchableOpacity
+              style={styles.duplicatePrimaryBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                console.log('[Register] Modal 409 — "Voir ma carte" appuyé, member_number:', duplicateMemberNumber);
+                setDuplicateModal(false);
+                router.push({
+                  pathname: '/member/card',
+                  params: {
+                    member_number: duplicateMemberNumber,
+                    full_name: duplicateFullName,
+                  },
+                });
+              }}
+            >
+              <Ionicons name="card" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.duplicatePrimaryBtnText}>Voir ma carte</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.duplicateSecondaryBtn}
+              activeOpacity={0.7}
+              onPress={() => {
+                console.log('[Register] Modal 409 — "Fermer" appuyé');
+                setDuplicateModal(false);
+              }}
+            >
+              <Text style={styles.duplicateSecondaryBtnText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Gender picker modal */}
       <Modal
@@ -620,11 +696,108 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textDecorationLine: 'underline',
   },
+  // Duplicate modal
+  duplicateSheet: {
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    marginHorizontal: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  duplicateIconRow: {
+    marginBottom: 12,
+  },
+  duplicateTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: C.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  duplicateBody: {
+    fontSize: 15,
+    color: C.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  duplicateInfoBox: {
+    backgroundColor: C.primaryMuted,
+    borderRadius: 14,
+    padding: 16,
+    width: '100%',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: C.primary + '30',
+  },
+  duplicateInfoLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: C.primary,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  duplicateInfoValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.text,
+  },
+  duplicateInfoDivider: {
+    height: 1,
+    backgroundColor: C.divider,
+    marginVertical: 12,
+  },
+  duplicateMemberNumber: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: C.primary,
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  duplicatePrimaryBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 14,
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    marginBottom: 10,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  duplicatePrimaryBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  duplicateSecondaryBtn: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    borderRadius: 14,
+    backgroundColor: C.surfaceSecondary,
+  },
+  duplicateSecondaryBtnText: {
+    fontSize: 15,
+    color: C.textSecondary,
+    fontWeight: '600',
+  },
   // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
   pickerSheet: {
     backgroundColor: C.surface,
