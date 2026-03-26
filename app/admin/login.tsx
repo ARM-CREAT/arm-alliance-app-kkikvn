@@ -36,7 +36,7 @@ export default function AdminLoginScreen() {
         console.log('[AdminLogin] admin_authenticated flag:', flag);
         if (flag === 'true') {
           console.log('[AdminLogin] Session valide, redirection vers dashboard');
-          router.replace('/admin/dashboard');
+          router.replace('/admin');
           return;
         }
       } catch (err) {
@@ -72,7 +72,7 @@ export default function AdminLoginScreen() {
       await AsyncStorage.setItem(ADMIN_AUTH_KEY, 'true');
       console.log('[AdminLogin] Session enregistrée, redirection vers dashboard');
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.replace('/admin/dashboard');
+      router.replace('/admin');
     } catch (err) {
       console.error('[AdminLogin] Erreur enregistrement session:', err);
       setError('Erreur interne. Veuillez réessayer.');
