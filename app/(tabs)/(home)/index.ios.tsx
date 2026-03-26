@@ -20,6 +20,29 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from "@expo/vector-icons";
 import { PROGRAM_POINTS } from "@/constants/programData";
 
+interface ArticleSummary {
+  id: string;
+  title: string;
+  summary: string;
+  category: string;
+  image_url: string;
+  published_at: string;
+  published: boolean;
+}
+
+const NEWS_CATEGORY_COLORS: Record<string, string> = {
+  Politique: '#1565C0',
+  politique: '#1565C0',
+  'Sécurité': '#B71C1C',
+  securite: '#B71C1C',
+  'Économie': '#2E7D32',
+  economie: '#2E7D32',
+  Social: '#6A1B9A',
+  social: '#6A1B9A',
+  Diaspora: '#C8A84B',
+  diaspora: '#C8A84B',
+};
+
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 interface MemberStats {
@@ -79,6 +102,7 @@ export default function HomeScreen() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
   const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
+  const [latestNews, setLatestNews] = useState<ArticleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +113,7 @@ export default function HomeScreen() {
     setError(null);
 
     try {
-      const [notifResult, leaderResult, statsResult] = await Promise.allSettled([
+      const [notifResult, leaderResult, statsResult, newsResult] = await Promise.allSettled([
         fetch(`${BACKEND_URL}/api/notifications`).then(async (res) => {
           if (!res.ok) {
             const text = await res.text();
@@ -102,6 +126,7 @@ export default function HomeScreen() {
           if (!res.ok) throw new Error(`Stats: ${res.status}`);
           return res.json();
         }),
+        apiGet<{ articles: ArticleSummary[]; total: number }>('/api/news?limit=3&offset=0'),
       ]);
 
       if (notifResult.status === 'fulfilled' && Array.isArray(notifResult.value)) {
@@ -121,6 +146,13 @@ export default function HomeScreen() {
       if (statsResult.status === 'fulfilled') {
         console.log('[HomeScreen iOS] Stats membres chargées:', statsResult.value);
         setMemberStats(statsResult.value);
+      }
+
+      if (newsResult.status === 'fulfilled' && Array.isArray(newsResult.value?.articles)) {
+        console.log('[HomeScreen iOS] Dernières actualités chargées:', newsResult.value.articles.length, 'articles');
+        setLatestNews(newsResult.value.articles);
+      } else {
+        console.warn('[HomeScreen iOS] Échec du chargement des actualités:', newsResult);
       }
 
       const allFailed = notifResult.status === 'rejected' && leaderResult.status === 'rejected';
@@ -233,10 +265,28 @@ export default function HomeScreen() {
     router.push('/members-list');
   };
 
+  const handleIdeologyGuide = () => {
+    console.log('[HomeScreen iOS] Bouton Guide des Partis appuyé');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/ideology');
+  };
+
   const handleVoirToutNotifications = () => {
     console.log('[HomeScreen iOS] Bouton Voir tout (notifications) appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push('/notifications');
+  };
+
+  const handleVoirToutNews = () => {
+    console.log('[HomeScreen iOS] Bouton Voir tout (actualités) appuyé');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/news');
+  };
+
+  const handleNewsArticlePress = (article: ArticleSummary) => {
+    console.log('[HomeScreen iOS] Mini-card actualité appuyée:', article.id, article.title);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({ pathname: '/news/[id]', params: { id: article.id } });
   };
 
   if (loading) {
@@ -257,6 +307,7 @@ export default function HomeScreen() {
   }
 
   const displayedNotifications = notifications.slice(0, 5);
+  const displayedNews = latestNews.slice(0, 3);
 
   return (
     <>
@@ -435,6 +486,70 @@ export default function HomeScreen() {
               </View>
             </View>
 
+            {/* Dernières Actualités section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionHeader}>
+                  <IconSymbol
+                    ios_icon_name="newspaper.fill"
+                    android_material_icon_name="article"
+                    size={24}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.sectionTitle}>Dernières Actualités</Text>
+                </View>
+                <TouchableOpacity onPress={handleVoirToutNews} activeOpacity={0.7}>
+                  <Text style={styles.voirToutText}>Voir tout</Text>
+                </TouchableOpacity>
+              </View>
+              {displayedNews.length === 0 ? (
+                <View style={styles.emptyNotifications}>
+                  <IconSymbol
+                    ios_icon_name="newspaper"
+                    android_material_icon_name="article"
+                    size={32}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.emptyNotificationsText}>Aucune actualité disponible</Text>
+                </View>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.newsHorizontalList}
+                >
+                  {displayedNews.map((article) => {
+                    const catColor = NEWS_CATEGORY_COLORS[article.category] || '#607D8B';
+                    const newsDateStr = article.published_at
+                      ? new Date(article.published_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+                      : '';
+                    const newsImageSource = article.image_url ? { uri: article.image_url } : { uri: '' };
+                    return (
+                      <TouchableOpacity
+                        key={article.id}
+                        style={styles.newsMiniCard}
+                        onPress={() => handleNewsArticlePress(article)}
+                        activeOpacity={0.85}
+                      >
+                        <Image
+                          source={newsImageSource}
+                          style={styles.newsMiniImage}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.newsMiniBody}>
+                          <View style={[styles.newsMiniCategoryBadge, { backgroundColor: catColor }]}>
+                            <Text style={styles.newsMiniCategoryText}>{article.category}</Text>
+                          </View>
+                          <Text style={styles.newsMiniTitle} numberOfLines={2}>{article.title}</Text>
+                          <Text style={styles.newsMiniDate}>{newsDateStr}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+
             {/* Notifications section */}
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
@@ -588,6 +703,21 @@ export default function HomeScreen() {
                   />
                   <Text style={styles.actionTitle}>Adhérents</Text>
                   <Text style={[styles.actionSubtitle, { color: '#0369A1' }]}>Liste complète</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionCard, styles.actionCardGuide]}
+                  onPress={handleIdeologyGuide}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol
+                    ios_icon_name="books.vertical.fill"
+                    android_material_icon_name="menu-book"
+                    size={32}
+                    color="#2E7D32"
+                  />
+                  <Text style={styles.actionTitle}>Guide des Partis</Text>
+                  <Text style={[styles.actionSubtitle, { color: '#2E7D32' }]}>Outil pédagogique</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -982,6 +1112,11 @@ const styles = StyleSheet.create({
     borderColor: '#0369A120',
     backgroundColor: '#F0F9FF',
   },
+  actionCardGuide: {
+    borderWidth: 1.5,
+    borderColor: '#2E7D3220',
+    backgroundColor: '#F1F8F1',
+  },
   actionTitle: {
     fontSize: 14,
     fontWeight: 'bold',
@@ -1106,5 +1241,53 @@ const styles = StyleSheet.create({
   },
   programCardArrow: {
     alignSelf: 'flex-end',
+  },
+  newsHorizontalList: {
+    paddingRight: 4,
+  },
+  newsMiniCard: {
+    width: 200,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    marginRight: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  newsMiniImage: {
+    width: '100%',
+    height: 110,
+    backgroundColor: '#E0E0E0',
+  },
+  newsMiniBody: {
+    padding: 10,
+  },
+  newsMiniCategoryBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  newsMiniCategoryText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  newsMiniTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  newsMiniDate: {
+    fontSize: 11,
+    color: colors.textSecondary,
   },
 });
