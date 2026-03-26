@@ -230,10 +230,23 @@ export default function MembersListScreen() {
         throw new Error(`Erreur ${res.status}`);
       }
       const data = await res.json();
-      const list: Member[] = data?.members ?? [];
-      const count: number = data?.total ?? list.length;
-      console.log('[MembersList] Adhérents chargés:', list.length, '/ total:', count);
-      setMembers(list);
+      console.log('[MembersList] Réponse brute:', JSON.stringify(data).slice(0, 300));
+      // Handle both array response and wrapped { members: [] } response
+      const list: Member[] = Array.isArray(data)
+        ? data
+        : (data?.members ?? data?.memberships ?? data?.data ?? []);
+      // Normalise field names: some API versions return `name` instead of `full_name`
+      const normalised: Member[] = list.map((m: any) => ({
+        ...m,
+        full_name: m.full_name || m.name || m.fullName || '',
+        member_number: m.member_number || m.memberNumber || m.membership_number || '',
+        phone: m.phone || m.telephone || '',
+        commune: m.commune || m.city || '',
+        status: m.status || 'pending',
+      }));
+      const count: number = data?.total ?? data?.count ?? normalised.length;
+      console.log('[MembersList] Adhérents chargés:', normalised.length, '/ total:', count);
+      setMembers(normalised);
       setTotal(count);
     } catch (err: any) {
       console.error('[MembersList] Erreur chargement:', err.message);

@@ -308,9 +308,19 @@ export default function AdminMembershipsScreen() {
       }
 
       const data = await res.json();
-      const list: Member[] = Array.isArray(data)
+      console.log('[AdminMemberships] Réponse brute:', JSON.stringify(data).slice(0, 300));
+      const rawList: any[] = Array.isArray(data)
         ? data
         : (data.members ?? data.memberships ?? data.data ?? []);
+      // Normalise field names: some API versions return `name` instead of `full_name`
+      const list: Member[] = rawList.map((m: any) => ({
+        ...m,
+        full_name: m.full_name || m.name || m.fullName || '',
+        member_number: m.member_number || m.memberNumber || m.membership_number || '',
+        phone: m.phone || m.telephone || '',
+        commune: m.commune || m.city || '',
+        status: m.status || 'pending',
+      }));
 
       console.log('[AdminMemberships] Adhérents chargés:', list.length);
       setMembers(list);
