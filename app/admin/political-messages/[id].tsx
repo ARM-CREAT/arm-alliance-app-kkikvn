@@ -23,6 +23,8 @@ const ADMIN_HEADERS = {
   'x-admin-password': 'admin123',
 };
 
+const LEGACY_AUTHORS = ['Moussa Coulibaly', 'Aminata Diallo', 'Ibrehima Traore'];
+
 interface PoliticalMessage {
   id: string;
   title: string;
@@ -45,7 +47,7 @@ export default function PoliticalMessageFormScreen() {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [author, setAuthor] = useState('');
+  const [author, setAuthor] = useState(isNew ? 'ARM ALLIANCE' : '');
   const [published, setPublished] = useState(false);
 
   const loadMessage = useCallback(async () => {
@@ -63,7 +65,9 @@ export default function PoliticalMessageFormScreen() {
       console.log('[PoliticalMessageForm] Message chargé:', data.id);
       setTitle(data.title || '');
       setContent(data.content || '');
-      setAuthor(data.author || '');
+      const rawAuthor = data.author || '';
+      const resolvedAuthor = LEGACY_AUTHORS.includes(rawAuthor) ? 'ARM ALLIANCE' : rawAuthor;
+      setAuthor(resolvedAuthor);
       setPublished(Boolean(data.published));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

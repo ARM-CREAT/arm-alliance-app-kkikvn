@@ -19,16 +19,18 @@ import * as Haptics from 'expo-haptics';
 const C = Colors.light;
 const ADMIN_HEADERS = {
   'Content-Type': 'application/json',
-  'Authorization': 'Bearer admin123',
+  'x-admin-password': 'admin123',
 };
 
 interface Membership {
   id: string;
   member_number: string;
-  first_name: string;
-  last_name: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
   phone: string;
-  location: string;
+  commune?: string;
+  location?: string;
   status: string;
   created_at: string;
 }
@@ -46,10 +48,12 @@ function formatDate(dateString?: string): string {
   }
 }
 
-function getInitials(firstName: string, lastName: string): string {
-  const f = (firstName || '').charAt(0).toUpperCase();
-  const l = (lastName || '').charAt(0).toUpperCase();
-  return (f + l) || '?';
+function getInitials(fullName: string): string {
+  const parts = (fullName || '').trim().split(' ');
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+  return (fullName || '?').charAt(0).toUpperCase();
 }
 
 function getStatusColor(status: string): string {
@@ -76,7 +80,7 @@ export default function AdminMembershipsScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadMemberships = useCallback(async (isRefresh = false) => {
-    console.log('[AdminMemberships] GET /api/memberships');
+    console.log('[AdminMemberships] GET /api/members');
     if (!isRefresh) setLoading(true);
     setError(null);
 
@@ -84,7 +88,7 @@ export default function AdminMembershipsScreen() {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/memberships`, {
+      const res = await fetch(`${BACKEND_URL}/api/members?limit=100`, {
         headers: ADMIN_HEADERS,
         signal: controller.signal,
       });
@@ -94,20 +98,20 @@ export default function AdminMembershipsScreen() {
       if (!res.ok) {
         const text = await res.text();
         console.error('[AdminMemberships] Erreur HTTP', res.status, text.slice(0, 200));
-        throw new Error(`Erreur ${res.status}: impossible de charger les adhésions`);
+        throw new Error(`Erreur ${res.status}: impossible de charger les adhérents`);
       }
 
       const data = await res.json();
       const list: Membership[] = Array.isArray(data)
         ? data
-        : (data.memberships ?? data.members ?? data.data ?? []);
+        : (data.members ?? data.memberships ?? data.data ?? []);
       const count: number = typeof data.total === 'number'
         ? data.total
         : typeof data.count === 'number'
           ? data.count
           : list.length;
 
-      console.log('[AdminMemberships] Adhésions chargées:', list.length, 'total:', count);
+      console.log('[AdminMemberships] Adhérents chargés:', list.length, 'total:', count);
       setMemberships(list);
       setTotalCount(count);
     } catch (err: unknown) {
@@ -139,7 +143,7 @@ export default function AdminMembershipsScreen() {
   }, [loadMemberships]);
 
   const handleStatusChange = (membership: Membership) => {
-    const fullName = `${membership.first_name} ${membership.last_name}`.trim();
+    const fullName = membership.full_name || `${membership.first_name || ''} ${membership.last_name || ''}`.trim() || '—';
     console.log('[AdminMemberships] Changement statut pour:', membership.id, fullName);
     const currentStatus = (membership.status || '').toLowerCase();
     const newStatus = currentStatus === 'active' || currentStatus === 'actif' ? 'suspended' : 'active';
@@ -153,9 +157,9 @@ export default function AdminMembershipsScreen() {
         {
           text: 'Confirmer',
           onPress: async () => {
-            console.log('[AdminMemberships] PATCH /api/memberships/' + membership.id, 'status:', newStatus);
+            console.log('[AdminMemberships] PATCH /api/members/' + membership.id + '/status', 'status:', newStatus);
             try {
-              const res = await fetch(`${BACKEND_URL}/api/memberships/${membership.id}`, {
+              const res = await fetch(`${BACKEND_URL}/api/members/${membership.id}/status`, {
                 method: 'PATCH',
                 headers: ADMIN_HEADERS,
                 body: JSON.stringify({ status: newStatus }),
@@ -181,11 +185,12 @@ export default function AdminMembershipsScreen() {
   const displayCount = totalCount !== null ? String(totalCount) : String(memberships.length);
 
   const renderItem = ({ item }: { item: Membership }) => {
-    const initials = getInitials(item.first_name, item.last_name);
-    const fullName = `${item.first_name} ${item.last_name}`.trim();
+    const displayName = item.full_name || `${item.first_name || ''} ${item.last_name || ''}`.trim() || '—';
+    const initials = getInitials(displayName);
     const dateStr = formatDate(item.created_at);
     const statusColor = getStatusColor(item.status);
     const statusLabel = getStatusLabel(item.status);
+    const locationText = item.commune || item.location || '—';
 
     return (
       <View style={styles.memberCard}>
@@ -194,7 +199,7 @@ export default function AdminMembershipsScreen() {
             <Text style={[styles.memberAvatarText, { color: statusColor }]}>{initials}</Text>
           </View>
           <View style={styles.memberInfo}>
-            <Text style={styles.memberName} numberOfLines={1}>{fullName}</Text>
+            <Text style={styles.memberName} numberOfLines={1}>{displayName}</Text>
             <Text style={styles.memberNumber}>{item.member_number}</Text>
             <View style={styles.memberMetaRow}>
               <Ionicons name="call-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
@@ -202,7 +207,7 @@ export default function AdminMembershipsScreen() {
             </View>
             <View style={styles.memberMetaRow}>
               <Ionicons name="location-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
-              <Text style={styles.memberMeta} numberOfLines={1}>{item.location || '—'}</Text>
+              <Text style={styles.memberMeta} numberOfLines={1}>{locationText}</Text>
             </View>
           </View>
           <View style={styles.memberRight}>

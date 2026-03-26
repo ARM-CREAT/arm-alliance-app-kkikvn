@@ -135,11 +135,14 @@ export default function AdminPoliticalMessagesScreen() {
     );
   };
 
+  const LEGACY_AUTHORS = ['Moussa Coulibaly', 'Aminata Diallo', 'Ibrehima Traore'];
+
   const renderItem = ({ item }: { item: PoliticalMessage }) => {
     const dateStr = formatDate(item.created_at);
     const publishedLabel = item.published ? 'Publié' : 'Brouillon';
     const publishedColor = item.published ? colors.success : colors.textTertiary;
-    const authorText = item.author || '—';
+    const rawAuthor = item.author || '—';
+    const authorText = LEGACY_AUTHORS.includes(rawAuthor) ? 'ARM ALLIANCE' : rawAuthor;
 
     return (
       <TouchableOpacity
