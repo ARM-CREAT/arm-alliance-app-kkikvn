@@ -21,43 +21,14 @@ import {
   Animated
 } from "react-native";
 
-interface ArticleSummary {
-  id: string;
-  title: string;
-  summary: string;
-  category: string;
-  image_url: string;
-  published_at: string;
-  published: boolean;
+function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  if (typeof source === 'string') return { uri: source };
+  return source as ImageSourcePropType;
 }
-
-const NEWS_CATEGORY_COLORS: Record<string, string> = {
-  Politique: '#1565C0',
-  politique: '#1565C0',
-  'Sécurité': '#B71C1C',
-  securite: '#B71C1C',
-  'Économie': '#2E7D32',
-  economie: '#2E7D32',
-  Social: '#6A1B9A',
-  social: '#6A1B9A',
-  Diaspora: '#C8A84B',
-  diaspora: '#C8A84B',
-};
-
-const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 interface MemberStats {
   totalMembers: number;
-}
-
-interface NotificationItem {
-  id: string;
-  title: string;
-  content: string;
-  type: string;
-  category: string;
-  imageUrl?: string;
-  createdAt: string;
 }
 
 interface LeadershipMember {
@@ -68,42 +39,12 @@ interface LeadershipMember {
   location?: string;
 }
 
-function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
-  if (!source) return { uri: '' };
-  if (typeof source === 'string') return { uri: source };
-  return source as ImageSourcePropType;
-}
-
-const CATEGORY_COLORS: Record<string, string> = {
-  actualite: '#1565C0',
-  evenement: '#2E7D32',
-  annonce: '#E65100',
-  urgent: '#C62828',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  actualite: 'Actualité',
-  evenement: 'Événement',
-  annonce: 'Annonce',
-  urgent: 'Urgent',
-};
-
-function formatDateFr(dateString: string): string {
-  if (!dateString) return '';
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-  } catch {
-    return dateString;
-  }
-}
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
   const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
-  const [latestNews, setLatestNews] = useState<ArticleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,28 +55,13 @@ export default function HomeScreen() {
     setError(null);
 
     try {
-      const [notifResult, leaderResult, statsResult, newsResult] = await Promise.allSettled([
-        fetch(`${BACKEND_URL}/api/notifications`).then(async (res) => {
-          if (!res.ok) {
-            const text = await res.text();
-            throw new Error(`Notifications: ${res.status} ${text}`);
-          }
-          return res.json();
-        }),
+      const [leaderResult, statsResult] = await Promise.allSettled([
         apiGet<LeadershipMember[]>('/api/leadership'),
         fetch(`${BACKEND_URL}/api/members/stats`).then(async (res) => {
           if (!res.ok) throw new Error(`Stats: ${res.status}`);
           return res.json();
         }),
-        apiGet<{ articles: ArticleSummary[]; total: number }>('/api/news?limit=3&offset=0'),
       ]);
-
-      if (notifResult.status === 'fulfilled' && Array.isArray(notifResult.value)) {
-        console.log('[HomeScreen] Notifications chargées:', notifResult.value.length, 'éléments');
-        setNotifications(notifResult.value);
-      } else {
-        console.warn('[HomeScreen] Échec du chargement des notifications:', notifResult);
-      }
 
       if (leaderResult.status === 'fulfilled' && Array.isArray(leaderResult.value)) {
         console.log('[HomeScreen] Direction chargée:', leaderResult.value.length, 'éléments');
@@ -149,15 +75,7 @@ export default function HomeScreen() {
         setMemberStats(statsResult.value);
       }
 
-      if (newsResult.status === 'fulfilled' && Array.isArray(newsResult.value?.articles)) {
-        console.log('[HomeScreen] Dernières actualités chargées:', newsResult.value.articles.length, 'articles');
-        setLatestNews(newsResult.value.articles);
-      } else {
-        console.warn('[HomeScreen] Échec du chargement des actualités:', newsResult);
-      }
-
-      const allFailed = notifResult.status === 'rejected' && leaderResult.status === 'rejected';
-      if (allFailed) {
+      if (leaderResult.status === 'rejected') {
         setError('Impossible de charger les données. Affichage du contenu par défaut.');
       }
     } catch (err: any) {
@@ -226,12 +144,6 @@ export default function HomeScreen() {
     router.push('/member/card');
   };
 
-  const handleChat = () => {
-    console.log('[HomeScreen] Bouton Chat Public appuyé');
-    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/chat/public');
-  };
-
   const handleIdeology = () => {
     console.log('[HomeScreen] Bouton Idéologie appuyé');
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -242,12 +154,6 @@ export default function HomeScreen() {
     console.log('[HomeScreen] Bouton Accès Admin appuyé');
     if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/admin/login');
-  };
-
-  const handleAIAssistant = () => {
-    console.log('[HomeScreen] Bouton Assistant IA appuyé');
-    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/ai-assistant');
   };
 
   const handleProgram = () => {
@@ -274,24 +180,6 @@ export default function HomeScreen() {
     router.push('/ideology');
   };
 
-  const handleVoirToutNotifications = () => {
-    console.log('[HomeScreen] Bouton Voir tout (notifications) appuyé');
-    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/notifications');
-  };
-
-  const handleVoirToutNews = () => {
-    console.log('[HomeScreen] Bouton Voir tout (actualités) appuyé');
-    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/news');
-  };
-
-  const handleNewsArticlePress = (article: ArticleSummary) => {
-    console.log('[HomeScreen] Mini-card actualité appuyée:', article.id, article.title);
-    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({ pathname: '/news/[id]', params: { id: article.id } });
-  };
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -305,9 +193,6 @@ export default function HomeScreen() {
       </View>
     );
   }
-
-  const displayedNotifications = notifications.slice(0, 5);
-  const displayedNews = latestNews.slice(0, 3);
 
   return (
     <View style={styles.container}>
@@ -484,119 +369,17 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Dernières Actualités section */}
+          {/* Actions rapides */}
           <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol
-                  ios_icon_name="newspaper.fill"
-                  android_material_icon_name="article"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.sectionTitle}>Dernières Actualités</Text>
-              </View>
-              <TouchableOpacity onPress={handleVoirToutNews} activeOpacity={0.7}>
-                <Text style={styles.voirToutText}>Voir tout</Text>
-              </TouchableOpacity>
+            <View style={styles.sectionHeader}>
+              <IconSymbol
+                ios_icon_name="square.grid.2x2.fill"
+                android_material_icon_name="apps"
+                size={24}
+                color={colors.primary}
+              />
+              <Text style={styles.sectionTitle}>Actions rapides</Text>
             </View>
-            {displayedNews.length === 0 ? (
-              <View style={styles.emptyNotifications}>
-                <IconSymbol
-                  ios_icon_name="newspaper"
-                  android_material_icon_name="article"
-                  size={32}
-                  color={colors.textSecondary}
-                />
-                <Text style={styles.emptyNotificationsText}>Aucune actualité disponible</Text>
-              </View>
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.newsHorizontalList}
-              >
-                {displayedNews.map((article) => {
-                  const catColor = NEWS_CATEGORY_COLORS[article.category] || '#607D8B';
-                  const newsDateStr = article.published_at
-                    ? new Date(article.published_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
-                    : '';
-                  const newsImageSource = article.image_url ? { uri: article.image_url } : { uri: '' };
-                  return (
-                    <TouchableOpacity
-                      key={article.id}
-                      style={styles.newsMiniCard}
-                      onPress={() => handleNewsArticlePress(article)}
-                      activeOpacity={0.85}
-                    >
-                      <Image
-                        source={newsImageSource}
-                        style={styles.newsMiniImage}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.newsMiniBody}>
-                        <View style={[styles.newsMiniCategoryBadge, { backgroundColor: catColor }]}>
-                          <Text style={styles.newsMiniCategoryText}>{article.category}</Text>
-                        </View>
-                        <Text style={styles.newsMiniTitle} numberOfLines={2}>{article.title}</Text>
-                        <Text style={styles.newsMiniDate}>{newsDateStr}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-          </View>
-
-          {/* Notifications section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol
-                  ios_icon_name="bell.fill"
-                  android_material_icon_name="notifications"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.sectionTitle}>Actualités & Annonces</Text>
-              </View>
-              <TouchableOpacity onPress={handleVoirToutNotifications} activeOpacity={0.7}>
-                <Text style={styles.voirToutText}>Voir tout</Text>
-              </TouchableOpacity>
-            </View>
-
-            {displayedNotifications.length === 0 ? (
-              <View style={styles.emptyNotifications}>
-                <IconSymbol
-                  ios_icon_name="bell.slash"
-                  android_material_icon_name="notifications-off"
-                  size={32}
-                  color={colors.textSecondary}
-                />
-                <Text style={styles.emptyNotificationsText}>Aucune actualité pour le moment</Text>
-              </View>
-            ) : (
-              displayedNotifications.map((item) => {
-                const catColor = CATEGORY_COLORS[item.category] || '#607D8B';
-                const catLabel = CATEGORY_LABELS[item.category] || item.category;
-                const dateStr = formatDateFr(item.createdAt);
-                return (
-                  <View key={item.id} style={styles.notifCard}>
-                    <View style={styles.notifHeader}>
-                      <View style={[styles.categoryBadge, { backgroundColor: catColor }]}>
-                        <Text style={styles.categoryBadgeText}>{catLabel}</Text>
-                      </View>
-                      <Text style={styles.notifDate}>{dateStr}</Text>
-                    </View>
-                    <Text style={styles.notifTitle}>{item.title}</Text>
-                    <Text style={styles.notifContent} numberOfLines={2}>{item.content}</Text>
-                  </View>
-                );
-              })
-            )}
-          </View>
-
-          <View style={styles.section}>
             <View style={styles.quickActions}>
               <TouchableOpacity
                 style={styles.actionCard}
@@ -610,7 +393,7 @@ export default function HomeScreen() {
                   color={colors.primary}
                 />
                 <Text style={styles.actionTitle}>Adhérer</Text>
-                <Text style={styles.actionSubtitle}>Sans mot de passe</Text>
+                <Text style={styles.actionSubtitle}>Rejoindre l'ARM</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -630,21 +413,6 @@ export default function HomeScreen() {
 
               <TouchableOpacity
                 style={styles.actionCard}
-                onPress={handleChat}
-                activeOpacity={0.8}
-              >
-                <IconSymbol
-                  ios_icon_name="bubble.left.and.bubble.right.fill"
-                  android_material_icon_name="chat"
-                  size={32}
-                  color={colors.primary}
-                />
-                <Text style={styles.actionTitle}>Chat Public</Text>
-                <Text style={styles.actionSubtitle}>Discutez</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionCard}
                 onPress={handleAdminAccess}
                 activeOpacity={0.8}
               >
@@ -656,21 +424,6 @@ export default function HomeScreen() {
                 />
                 <Text style={styles.actionTitle}>Admin</Text>
                 <Text style={styles.actionSubtitle}>Accès sécurisé</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.actionCard, styles.actionCardAI]}
-                onPress={handleAIAssistant}
-                activeOpacity={0.8}
-              >
-                <IconSymbol
-                  ios_icon_name="brain"
-                  android_material_icon_name="smart-toy"
-                  size={32}
-                  color="#1565C0"
-                />
-                <Text style={styles.actionTitle}>Assistant IA</Text>
-                <Text style={[styles.actionSubtitle, { color: '#1565C0' }]}>Posez vos questions</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1022,61 +775,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.background,
   },
-  notifCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  notifHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  categoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  categoryBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  notifDate: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  notifTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  notifContent: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 19,
-  },
-  emptyNotifications: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 12,
-  },
-  emptyNotificationsText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 10,
-  },
   quickActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1094,11 +792,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 4,
-  },
-  actionCardAI: {
-    borderWidth: 1.5,
-    borderColor: '#1565C020',
-    backgroundColor: '#EEF4FF',
   },
   actionCardProgram: {
     borderWidth: 1.5,
@@ -1239,53 +932,5 @@ const styles = StyleSheet.create({
   },
   programCardArrow: {
     alignSelf: 'flex-end',
-  },
-  newsHorizontalList: {
-    paddingRight: 4,
-  },
-  newsMiniCard: {
-    width: 200,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    marginRight: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  newsMiniImage: {
-    width: '100%',
-    height: 110,
-    backgroundColor: '#E0E0E0',
-  },
-  newsMiniBody: {
-    padding: 10,
-  },
-  newsMiniCategoryBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    marginBottom: 6,
-  },
-  newsMiniCategoryText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  newsMiniTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text,
-    lineHeight: 18,
-    marginBottom: 6,
-  },
-  newsMiniDate: {
-    fontSize: 11,
-    color: colors.textSecondary,
   },
 });

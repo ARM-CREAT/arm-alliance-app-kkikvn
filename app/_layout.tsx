@@ -87,13 +87,13 @@ export default function RootLayout() {
                     }}
                   />
                   <Stack.Screen
-                    name="chat/public"
+                    name="member/register"
                     options={{
                       headerShown: false,
                     }}
                   />
                   <Stack.Screen
-                    name="member/register"
+                    name="member/success"
                     options={{
                       headerShown: false,
                     }}
@@ -147,12 +147,6 @@ export default function RootLayout() {
                     }}
                   />
                   <Stack.Screen
-                    name="notifications"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
                     name="admin/login"
                     options={{
                       headerShown: false,
@@ -165,31 +159,7 @@ export default function RootLayout() {
                     }}
                   />
                   <Stack.Screen
-                    name="admin/news"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="admin/events"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
                     name="admin/leadership"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="admin/media"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="admin/notifications"
                     options={{
                       headerShown: false,
                     }}
@@ -214,12 +184,6 @@ export default function RootLayout() {
                   />
                   <Stack.Screen
                     name="admin/memberships"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="ai-assistant"
                     options={{
                       headerShown: false,
                     }}
@@ -268,12 +232,6 @@ export default function RootLayout() {
                   />
                   <Stack.Screen
                     name="admin/announcements/[id]"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="admin/news/[id]"
                     options={{
                       headerShown: false,
                     }}
