@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
   TextInput as TextInputType,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
@@ -18,50 +19,68 @@ import { Colors } from '@/constants/Colors';
 
 const C = Colors.light;
 
+const GENDER_OPTIONS = [
+  { label: 'Homme', value: 'male' },
+  { label: 'Femme', value: 'female' },
+];
+
+function FieldLabel({ text, required }: { text: string; required?: boolean }) {
+  const requiredMark = required ? ' *' : '';
+  const labelText = text + requiredMark;
+  return <Text style={styles.label}>{labelText}</Text>;
+}
+
+function FieldError({ message }: { message: string }) {
+  if (!message) return null;
+  return <Text style={styles.fieldError}>{message}</Text>;
+}
+
 export default function RegisterScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState('');
 
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
+  // Required fields
+  const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [location, setLocation] = useState('');
 
-  const [firstNameError, setFirstNameError] = useState('');
-  const [lastNameError, setLastNameError] = useState('');
+  // Optional fields
+  const [email, setEmail] = useState('');
+  const [commune, setCommune] = useState('');
+  const [region, setRegion] = useState('');
+  const [profession, setProfession] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
+  const [genderPickerVisible, setGenderPickerVisible] = useState(false);
+
+  // Validation errors
+  const [fullNameError, setFullNameError] = useState('');
   const [phoneError, setPhoneError] = useState('');
-  const [locationError, setLocationError] = useState('');
 
-  const lastNameRef = useRef<TextInputType>(null);
+  // Refs for keyboard navigation
   const phoneRef = useRef<TextInputType>(null);
-  const locationRef = useRef<TextInputType>(null);
+  const emailRef = useRef<TextInputType>(null);
+  const communeRef = useRef<TextInputType>(null);
+  const regionRef = useRef<TextInputType>(null);
+  const professionRef = useRef<TextInputType>(null);
+  const dateOfBirthRef = useRef<TextInputType>(null);
 
   const validate = (): boolean => {
     let valid = true;
-    if (!firstName.trim()) {
-      setFirstNameError('Le prénom est requis');
+    if (!fullName.trim()) {
+      setFullNameError('Le nom complet est requis');
       valid = false;
     } else {
-      setFirstNameError('');
-    }
-    if (!lastName.trim()) {
-      setLastNameError('Le nom est requis');
-      valid = false;
-    } else {
-      setLastNameError('');
+      setFullNameError('');
     }
     if (!phone.trim()) {
       setPhoneError('Le numéro de téléphone est requis');
       valid = false;
-    } else {
-      setPhoneError('');
-    }
-    if (!location.trim()) {
-      setLocationError('La localisation est requise');
+    } else if (phone.trim().length < 8) {
+      setPhoneError('Le numéro doit contenir au moins 8 caractères');
       valid = false;
     } else {
-      setLocationError('');
+      setPhoneError('');
     }
     return valid;
   };
@@ -75,13 +94,19 @@ export default function RegisterScreen() {
     }
 
     setLoading(true);
-    const payload = {
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
+
+    const payload: Record<string, string> = {
+      full_name: fullName.trim(),
       phone: phone.trim(),
-      location: location.trim(),
     };
-    console.log('[Register] POST /api/memberships', JSON.stringify(payload));
+    if (email.trim()) payload.email = email.trim();
+    if (commune.trim()) payload.commune = commune.trim();
+    if (region.trim()) payload.region = region.trim();
+    if (profession.trim()) payload.profession = profession.trim();
+    if (dateOfBirth.trim()) payload.date_of_birth = dateOfBirth.trim();
+    if (gender) payload.gender = gender;
+
+    console.log('[Register] POST /api/members', JSON.stringify(payload));
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -90,7 +115,7 @@ export default function RegisterScreen() {
     }, 30000);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/memberships`, {
+      const response = await fetch(`${BACKEND_URL}/api/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -102,6 +127,12 @@ export default function RegisterScreen() {
       if (!response.ok) {
         const text = await response.text();
         console.log('[Register] Erreur HTTP', response.status, text);
+
+        if (response.status === 409) {
+          setErrorBanner('Ce numéro de téléphone est déjà enregistré.');
+          return;
+        }
+
         let message = `Erreur ${response.status}`;
         try {
           const json = JSON.parse(text);
@@ -119,9 +150,8 @@ export default function RegisterScreen() {
       router.push({
         pathname: '/member/success',
         params: {
-          member_number: data.member_number ?? data.membership_number ?? '',
-          first_name: data.first_name ?? firstName.trim(),
-          last_name: data.last_name ?? lastName.trim(),
+          member_number: data.member_number ?? '',
+          full_name: data.full_name ?? fullName.trim(),
         },
       });
     } catch (err: unknown) {
@@ -144,11 +174,7 @@ export default function RegisterScreen() {
     router.push('/member/recover');
   };
 
-  const handleRetry = () => {
-    console.log('[Register] Bouton Réessayer appuyé');
-    setErrorBanner('');
-    handleSubmit();
-  };
+  const genderLabel = gender === 'male' ? 'Homme' : gender === 'female' ? 'Femme' : '';
 
   return (
     <KeyboardAvoidingView
@@ -165,6 +191,55 @@ export default function RegisterScreen() {
           headerTitleStyle: { fontWeight: '700' },
         }}
       />
+
+      {/* Gender picker modal */}
+      <Modal
+        visible={genderPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGenderPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setGenderPickerVisible(false)}
+        >
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Sélectionner le sexe</Text>
+            {GENDER_OPTIONS.map((opt) => {
+              const isSelected = gender === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.pickerOption, isSelected && styles.pickerOptionSelected]}
+                  onPress={() => {
+                    console.log('[Register] Sexe sélectionné:', opt.label);
+                    setGender(opt.value);
+                    setGenderPickerVisible(false);
+                  }}
+                >
+                  <Text style={[styles.pickerOptionText, isSelected && styles.pickerOptionTextSelected]}>
+                    {opt.label}
+                  </Text>
+                  {isSelected && (
+                    <Ionicons name="checkmark" size={18} color={C.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={styles.pickerCancel}
+              onPress={() => {
+                console.log('[Register] Picker sexe annulé');
+                setGenderPickerVisible(false);
+              }}
+            >
+              <Text style={styles.pickerCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -184,50 +259,32 @@ export default function RegisterScreen() {
           <View style={styles.errorBanner}>
             <Ionicons name="alert-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
             <Text style={styles.errorBannerText}>{errorBanner}</Text>
-            <TouchableOpacity onPress={handleRetry} style={styles.retryBtn} activeOpacity={0.8}>
-              <Text style={styles.retryBtnText}>Réessayer</Text>
-            </TouchableOpacity>
           </View>
         ) : null}
 
         {/* Form Card */}
         <View style={styles.formCard}>
-          {/* Prénom */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Prénom</Text>
-            <TextInput
-              style={[styles.input, firstNameError ? styles.inputError : null]}
-              value={firstName}
-              onChangeText={(v) => { setFirstName(v); if (v.trim()) setFirstNameError(''); }}
-              placeholder="Votre prénom"
-              placeholderTextColor={C.textTertiary}
-              autoCapitalize="words"
-              returnKeyType="next"
-              onSubmitEditing={() => lastNameRef.current?.focus()}
-            />
-            {firstNameError ? <Text style={styles.fieldError}>{firstNameError}</Text> : null}
-          </View>
+          <Text style={styles.sectionTitle}>Informations requises</Text>
 
-          {/* Nom */}
+          {/* Nom complet */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Nom</Text>
+            <FieldLabel text="Nom complet" required />
             <TextInput
-              ref={lastNameRef}
-              style={[styles.input, lastNameError ? styles.inputError : null]}
-              value={lastName}
-              onChangeText={(v) => { setLastName(v); if (v.trim()) setLastNameError(''); }}
-              placeholder="Votre nom de famille"
+              style={[styles.input, fullNameError ? styles.inputError : null]}
+              value={fullName}
+              onChangeText={(v) => { setFullName(v); if (v.trim()) setFullNameError(''); }}
+              placeholder="Prénom et nom de famille"
               placeholderTextColor={C.textTertiary}
               autoCapitalize="words"
               returnKeyType="next"
               onSubmitEditing={() => phoneRef.current?.focus()}
             />
-            {lastNameError ? <Text style={styles.fieldError}>{lastNameError}</Text> : null}
+            <FieldError message={fullNameError} />
           </View>
 
           {/* Téléphone */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Téléphone</Text>
+            <FieldLabel text="Téléphone" required />
             <TextInput
               ref={phoneRef}
               style={[styles.input, phoneError ? styles.inputError : null]}
@@ -237,26 +294,110 @@ export default function RegisterScreen() {
               placeholderTextColor={C.textTertiary}
               keyboardType="phone-pad"
               returnKeyType="next"
-              onSubmitEditing={() => locationRef.current?.focus()}
+              onSubmitEditing={() => emailRef.current?.focus()}
             />
-            {phoneError ? <Text style={styles.fieldError}>{phoneError}</Text> : null}
+            <FieldError message={phoneError} />
           </View>
 
-          {/* Localisation */}
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>Informations optionnelles</Text>
+
+          {/* Email */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Localisation</Text>
+            <FieldLabel text="Email" />
             <TextInput
-              ref={locationRef}
-              style={[styles.input, locationError ? styles.inputError : null]}
-              value={location}
-              onChangeText={(v) => { setLocation(v); if (v.trim()) setLocationError(''); }}
-              placeholder="Votre commune ou ville"
+              ref={emailRef}
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="votre@email.com"
+              placeholderTextColor={C.textTertiary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              returnKeyType="next"
+              onSubmitEditing={() => communeRef.current?.focus()}
+            />
+          </View>
+
+          {/* Commune */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Commune" />
+            <TextInput
+              ref={communeRef}
+              style={styles.input}
+              value={commune}
+              onChangeText={setCommune}
+              placeholder="Votre commune"
               placeholderTextColor={C.textTertiary}
               autoCapitalize="words"
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
+              returnKeyType="next"
+              onSubmitEditing={() => regionRef.current?.focus()}
             />
-            {locationError ? <Text style={styles.fieldError}>{locationError}</Text> : null}
+          </View>
+
+          {/* Région */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Région" />
+            <TextInput
+              ref={regionRef}
+              style={styles.input}
+              value={region}
+              onChangeText={setRegion}
+              placeholder="Votre région"
+              placeholderTextColor={C.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => professionRef.current?.focus()}
+            />
+          </View>
+
+          {/* Profession */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Profession" />
+            <TextInput
+              ref={professionRef}
+              style={styles.input}
+              value={profession}
+              onChangeText={setProfession}
+              placeholder="Votre profession"
+              placeholderTextColor={C.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => dateOfBirthRef.current?.focus()}
+            />
+          </View>
+
+          {/* Date de naissance */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Date de naissance" />
+            <TextInput
+              ref={dateOfBirthRef}
+              style={styles.input}
+              value={dateOfBirth}
+              onChangeText={setDateOfBirth}
+              placeholder="JJ/MM/AAAA"
+              placeholderTextColor={C.textTertiary}
+              keyboardType="numbers-and-punctuation"
+              returnKeyType="done"
+            />
+          </View>
+
+          {/* Sexe */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Sexe" />
+            <TouchableOpacity
+              style={styles.pickerTrigger}
+              onPress={() => {
+                console.log('[Register] Ouverture picker sexe');
+                setGenderPickerVisible(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.pickerTriggerText, !gender && styles.pickerTriggerPlaceholder]}>
+                {genderLabel || 'Sélectionner'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={C.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           {/* Info numéro auto */}
@@ -345,7 +486,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 4,
   },
   errorBannerText: {
     flex: 1,
@@ -353,17 +493,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     lineHeight: 18,
-  },
-  retryBtn: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  retryBtnText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
   },
   formCard: {
     backgroundColor: C.surface,
@@ -377,8 +506,21 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: C.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: C.divider,
+    marginVertical: 20,
+  },
   fieldGroup: {
-    marginBottom: 20,
+    marginBottom: 18,
   },
   label: {
     fontSize: 13,
@@ -407,6 +549,24 @@ const styles = StyleSheet.create({
     color: C.danger,
     marginTop: 6,
     marginLeft: 4,
+  },
+  pickerTrigger: {
+    borderWidth: 1.5,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: C.surfaceSecondary,
+  },
+  pickerTriggerText: {
+    fontSize: 16,
+    color: C.text,
+  },
+  pickerTriggerPlaceholder: {
+    color: C.textTertiary,
   },
   infoRow: {
     flexDirection: 'row',
@@ -459,5 +619,61 @@ const styles = StyleSheet.create({
     color: C.primary,
     fontWeight: '600',
     textDecorationLine: 'underline',
+  },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  pickerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  pickerOptionSelected: {
+    backgroundColor: C.primaryMuted,
+  },
+  pickerOptionText: {
+    fontSize: 17,
+    color: C.text,
+    fontWeight: '500',
+  },
+  pickerOptionTextSelected: {
+    color: C.primary,
+    fontWeight: '700',
+  },
+  pickerCancel: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: C.surfaceSecondary,
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: C.textSecondary,
+    fontWeight: '600',
   },
 });

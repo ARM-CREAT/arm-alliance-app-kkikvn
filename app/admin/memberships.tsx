@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  TextInput,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,18 +25,25 @@ const ADMIN_HEADERS = {
   'x-admin-password': 'admin123',
 };
 
-interface Membership {
+type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected';
+
+interface Member {
   id: string;
   member_number: string;
   full_name: string;
-  first_name?: string;
-  last_name?: string;
   phone: string;
+  email?: string;
   commune?: string;
-  location?: string;
+  region?: string;
+  profession?: string;
+  date_of_birth?: string;
+  gender?: string;
   status: string;
   created_at: string;
+  updated_at?: string;
 }
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatDate(dateString?: string): string {
   if (!dateString) return '—';
@@ -58,29 +68,226 @@ function getInitials(fullName: string): string {
 
 function getStatusColor(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'active' || s === 'actif') return C.success;
-  if (s === 'pending' || s === 'en_attente') return C.warning;
-  if (s === 'suspended' || s === 'suspendu') return C.danger;
+  if (s === 'approved' || s === 'active' || s === 'actif') return '#16a34a';
+  if (s === 'pending' || s === 'en_attente') return '#D97706';
+  if (s === 'rejected' || s === 'suspended' || s === 'suspendu') return '#DC2626';
   return C.textSecondary;
 }
 
 function getStatusLabel(status: string): string {
   const s = (status || '').toLowerCase();
-  if (s === 'active' || s === 'actif') return 'Actif';
+  if (s === 'approved' || s === 'active' || s === 'actif') return 'Approuvé';
   if (s === 'pending' || s === 'en_attente') return 'En attente';
-  if (s === 'suspended' || s === 'suspendu') return 'Suspendu';
-  return status || 'Inconnu';
+  if (s === 'rejected' || s === 'suspended' || s === 'suspendu') return 'Rejeté';
+  return String(status || 'Inconnu');
 }
+
+function getGenderLabel(gender?: string): string {
+  if (!gender) return '—';
+  const g = gender.toLowerCase();
+  if (g === 'male' || g === 'homme') return 'Homme';
+  if (g === 'female' || g === 'femme') return 'Femme';
+  return gender;
+}
+
+// ─── Member Detail Modal ─────────────────────────────────────────────────────
+
+interface DetailModalProps {
+  member: Member | null;
+  visible: boolean;
+  onClose: () => void;
+  onApprove: (member: Member) => void;
+  onReject: (member: Member) => void;
+  onDelete: (member: Member) => void;
+  actionLoading: string | null;
+}
+
+function DetailModal({ member, visible, onClose, onApprove, onReject, onDelete, actionLoading }: DetailModalProps) {
+  if (!member) return null;
+
+  const statusColor = getStatusColor(member.status);
+  const statusLabel = getStatusLabel(member.status);
+  const initials = getInitials(member.full_name);
+  const isApproved = ['approved', 'active', 'actif'].includes((member.status || '').toLowerCase());
+  const isRejected = ['rejected', 'suspended', 'suspendu'].includes((member.status || '').toLowerCase());
+  const genderLabel = getGenderLabel(member.gender);
+  const dateStr = formatDate(member.created_at);
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={detailStyles.overlay}>
+        <View style={detailStyles.sheet}>
+          {/* Handle */}
+          <View style={detailStyles.handle} />
+
+          {/* Header */}
+          <View style={detailStyles.header}>
+            <View style={[detailStyles.avatar, { backgroundColor: statusColor + '22' }]}>
+              <Text style={[detailStyles.avatarText, { color: statusColor }]}>{initials}</Text>
+            </View>
+            <View style={detailStyles.headerInfo}>
+              <Text style={detailStyles.name} numberOfLines={2}>{member.full_name}</Text>
+              <Text style={detailStyles.memberNumber}>{member.member_number}</Text>
+              <View style={[detailStyles.statusBadge, { backgroundColor: statusColor + '22' }]}>
+                <Text style={[detailStyles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={detailStyles.closeBtn} onPress={onClose}>
+              <Ionicons name="close" size={22} color={C.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={detailStyles.body} showsVerticalScrollIndicator={false}>
+            {/* Info rows */}
+            <View style={detailStyles.infoCard}>
+              <DetailRow icon="call-outline" label="Téléphone" value={member.phone || '—'} />
+              <DetailRow icon="mail-outline" label="Email" value={member.email || '—'} />
+              <DetailRow icon="location-outline" label="Commune" value={member.commune || '—'} />
+              <DetailRow icon="map-outline" label="Région" value={member.region || '—'} />
+              <DetailRow icon="briefcase-outline" label="Profession" value={member.profession || '—'} />
+              <DetailRow icon="calendar-outline" label="Date de naissance" value={member.date_of_birth || '—'} />
+              <DetailRow icon="person-outline" label="Sexe" value={genderLabel} />
+              <DetailRow icon="time-outline" label="Inscrit le" value={dateStr} last />
+            </View>
+
+            {/* Action buttons */}
+            <View style={detailStyles.actions}>
+              {!isApproved && (
+                <TouchableOpacity
+                  style={[detailStyles.actionBtn, detailStyles.approveBtn]}
+                  onPress={() => onApprove(member)}
+                  disabled={actionLoading !== null}
+                >
+                  {actionLoading === 'approve' ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={detailStyles.actionBtnText}>Approuver</Text>
+                </TouchableOpacity>
+              )}
+              {!isRejected && (
+                <TouchableOpacity
+                  style={[detailStyles.actionBtn, detailStyles.rejectBtn]}
+                  onPress={() => onReject(member)}
+                  disabled={actionLoading !== null}
+                >
+                  {actionLoading === 'reject' ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="close-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={detailStyles.actionBtnText}>Rejeter</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[detailStyles.actionBtn, detailStyles.deleteBtn]}
+                onPress={() => onDelete(member)}
+                disabled={actionLoading !== null}
+              >
+                {actionLoading === 'delete' ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="trash-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                )}
+                <Text style={detailStyles.actionBtnText}>Supprimer</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 24 }} />
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function DetailRow({ icon, label, value, last }: { icon: string; label: string; value: string; last?: boolean }) {
+  return (
+    <View style={[detailStyles.detailRow, last && { borderBottomWidth: 0 }]}>
+      <Ionicons name={icon as any} size={15} color={C.textTertiary} style={{ marginRight: 10, marginTop: 1 }} />
+      <Text style={detailStyles.detailLabel}>{label}</Text>
+      <Text style={detailStyles.detailValue} numberOfLines={2}>{value}</Text>
+    </View>
+  );
+}
+
+// ─── Member Card ─────────────────────────────────────────────────────────────
+
+function MemberCard({ item, onPress }: { item: Member; onPress: (m: Member) => void }) {
+  const statusColor = getStatusColor(item.status);
+  const statusLabel = getStatusLabel(item.status);
+  const initials = getInitials(item.full_name);
+  const dateStr = formatDate(item.created_at);
+  const locationParts = [item.commune, item.region].filter(Boolean);
+  const locationText = locationParts.length > 0 ? locationParts.join(', ') : '—';
+
+  return (
+    <TouchableOpacity
+      style={styles.memberCard}
+      onPress={() => {
+        console.log('[AdminMemberships] Carte membre appuyée:', item.full_name, item.id);
+        onPress(item);
+      }}
+      activeOpacity={0.75}
+    >
+      <View style={styles.memberCardRow}>
+        <View style={[styles.memberAvatar, { backgroundColor: statusColor + '22' }]}>
+          <Text style={[styles.memberAvatarText, { color: statusColor }]}>{initials}</Text>
+        </View>
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName} numberOfLines={1}>{item.full_name}</Text>
+          <Text style={styles.memberNumber}>{item.member_number}</Text>
+          <View style={styles.memberMetaRow}>
+            <Ionicons name="call-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
+            <Text style={styles.memberMeta} numberOfLines={1}>{item.phone || '—'}</Text>
+          </View>
+          {locationParts.length > 0 && (
+            <View style={styles.memberMetaRow}>
+              <Ionicons name="location-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
+              <Text style={styles.memberMeta} numberOfLines={1}>{locationText}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.memberRight}>
+          <Text style={styles.memberDate}>{dateStr}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
+            <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color={C.textTertiary} style={{ marginTop: 4 }} />
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
+
+const FILTER_TABS: { value: FilterStatus; label: string }[] = [
+  { value: 'all', label: 'Tous' },
+  { value: 'pending', label: 'En attente' },
+  { value: 'approved', label: 'Approuvés' },
+  { value: 'rejected', label: 'Rejetés' },
+];
 
 export default function AdminMembershipsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [memberships, setMemberships] = useState<Membership[]>([]);
-  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterStatus>('all');
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const loadMemberships = useCallback(async (isRefresh = false) => {
-    console.log('[AdminMemberships] GET /api/members');
+  const loadMembers = useCallback(async (isRefresh = false) => {
+    console.log('[AdminMemberships] GET /api/members?limit=200');
     if (!isRefresh) setLoading(true);
     setError(null);
 
@@ -88,11 +295,10 @@ export default function AdminMembershipsScreen() {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members?limit=100`, {
+      const res = await fetch(`${BACKEND_URL}/api/members?limit=200`, {
         headers: ADMIN_HEADERS,
         signal: controller.signal,
       });
-
       clearTimeout(timeoutId);
 
       if (!res.ok) {
@@ -102,18 +308,12 @@ export default function AdminMembershipsScreen() {
       }
 
       const data = await res.json();
-      const list: Membership[] = Array.isArray(data)
+      const list: Member[] = Array.isArray(data)
         ? data
         : (data.members ?? data.memberships ?? data.data ?? []);
-      const count: number = typeof data.total === 'number'
-        ? data.total
-        : typeof data.count === 'number'
-          ? data.count
-          : list.length;
 
-      console.log('[AdminMemberships] Adhérents chargés:', list.length, 'total:', count);
-      setMemberships(list);
-      setTotalCount(count);
+      console.log('[AdminMemberships] Adhérents chargés:', list.length);
+      setMembers(list);
     } catch (err: unknown) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === 'AbortError') {
@@ -132,49 +332,155 @@ export default function AdminMembershipsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadMemberships(false);
-    }, [loadMemberships])
+      loadMembers(false);
+    }, [loadMembers])
   );
 
   const onRefresh = useCallback(() => {
     console.log('[AdminMemberships] Pull-to-refresh déclenché');
     setRefreshing(true);
-    loadMemberships(true);
-  }, [loadMemberships]);
+    loadMembers(true);
+  }, [loadMembers]);
 
-  const handleStatusChange = (membership: Membership) => {
-    const fullName = membership.full_name || `${membership.first_name || ''} ${membership.last_name || ''}`.trim() || '—';
-    console.log('[AdminMemberships] Changement statut pour:', membership.id, fullName);
-    const currentStatus = (membership.status || '').toLowerCase();
-    const newStatus = currentStatus === 'active' || currentStatus === 'actif' ? 'suspended' : 'active';
-    const newLabel = newStatus === 'active' ? 'Actif' : 'Suspendu';
+  // Client-side filtering
+  const filteredMembers = useMemo(() => {
+    let list = members;
 
+    // Status filter
+    if (activeFilter !== 'all') {
+      list = list.filter((m) => {
+        const s = (m.status || '').toLowerCase();
+        if (activeFilter === 'approved') return s === 'approved' || s === 'active' || s === 'actif';
+        if (activeFilter === 'pending') return s === 'pending' || s === 'en_attente';
+        if (activeFilter === 'rejected') return s === 'rejected' || s === 'suspended' || s === 'suspendu';
+        return true;
+      });
+    }
+
+    // Search filter
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((m) => {
+        const name = (m.full_name || '').toLowerCase();
+        const phone = (m.phone || '').toLowerCase();
+        const num = (m.member_number || '').toLowerCase();
+        const commune = (m.commune || '').toLowerCase();
+        return name.includes(q) || phone.includes(q) || num.includes(q) || commune.includes(q);
+      });
+    }
+
+    return list;
+  }, [members, activeFilter, searchQuery]);
+
+  // Stats derived from full list
+  const totalAll = members.length;
+  const totalPending = members.filter((m) => {
+    const s = (m.status || '').toLowerCase();
+    return s === 'pending' || s === 'en_attente';
+  }).length;
+  const totalApproved = members.filter((m) => {
+    const s = (m.status || '').toLowerCase();
+    return s === 'approved' || s === 'active' || s === 'actif';
+  }).length;
+  const totalRejected = members.filter((m) => {
+    const s = (m.status || '').toLowerCase();
+    return s === 'rejected' || s === 'suspended' || s === 'suspendu';
+  }).length;
+
+  const handleOpenDetail = (member: Member) => {
+    setSelectedMember(member);
+    setDetailVisible(true);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailVisible(false);
+    setSelectedMember(null);
+    setActionLoading(null);
+  };
+
+  const handleApprove = async (member: Member) => {
+    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> approved');
+    setActionLoading('approve');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
+        method: 'PATCH',
+        headers: ADMIN_HEADERS,
+        body: JSON.stringify({ status: 'approved' }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+      }
+      console.log('[AdminMemberships] Statut approuvé:', member.id);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, status: 'approved' } : m));
+      setSelectedMember((prev) => prev ? { ...prev, status: 'approved' } : prev);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[AdminMemberships] Erreur approbation:', msg);
+      Alert.alert('Erreur', msg);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async (member: Member) => {
+    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> rejected');
+    setActionLoading('reject');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
+        method: 'PATCH',
+        headers: ADMIN_HEADERS,
+        body: JSON.stringify({ status: 'rejected' }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+      }
+      console.log('[AdminMemberships] Statut rejeté:', member.id);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, status: 'rejected' } : m));
+      setSelectedMember((prev) => prev ? { ...prev, status: 'rejected' } : prev);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[AdminMemberships] Erreur rejet:', msg);
+      Alert.alert('Erreur', msg);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = (member: Member) => {
+    console.log('[AdminMemberships] Demande suppression:', member.id, member.full_name);
     Alert.alert(
-      'Modifier le statut',
-      `Changer le statut de "${fullName}" en "${newLabel}" ?`,
+      'Supprimer l\'adhérent',
+      `Êtes-vous sûr de vouloir supprimer "${member.full_name}" ? Cette action est irréversible.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
-          text: 'Confirmer',
+          text: 'Supprimer',
+          style: 'destructive',
           onPress: async () => {
-            console.log('[AdminMemberships] PATCH /api/members/' + membership.id + '/status', 'status:', newStatus);
+            console.log('[AdminMemberships] DELETE /api/members/' + member.id);
+            setActionLoading('delete');
             try {
-              const res = await fetch(`${BACKEND_URL}/api/members/${membership.id}/status`, {
-                method: 'PATCH',
+              const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
+                method: 'DELETE',
                 headers: ADMIN_HEADERS,
-                body: JSON.stringify({ status: newStatus }),
               });
               if (!res.ok) {
                 const text = await res.text();
                 throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
               }
-              console.log('[AdminMemberships] Statut mis à jour:', membership.id, '->', newStatus);
+              console.log('[AdminMemberships] Adhérent supprimé:', member.id);
               if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              loadMemberships(true);
+              setMembers((prev) => prev.filter((m) => m.id !== member.id));
+              handleCloseDetail();
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err);
-              console.error('[AdminMemberships] Erreur mise à jour statut:', msg);
+              console.error('[AdminMemberships] Erreur suppression:', msg);
               Alert.alert('Erreur', msg);
+              setActionLoading(null);
             }
           },
         },
@@ -182,64 +488,7 @@ export default function AdminMembershipsScreen() {
     );
   };
 
-  const displayCount = totalCount !== null ? String(totalCount) : String(memberships.length);
-
-  const renderItem = ({ item }: { item: Membership }) => {
-    const displayName = item.full_name || `${item.first_name || ''} ${item.last_name || ''}`.trim() || '—';
-    const initials = getInitials(displayName);
-    const dateStr = formatDate(item.created_at);
-    const statusColor = getStatusColor(item.status);
-    const statusLabel = getStatusLabel(item.status);
-    const locationText = item.commune || item.location || '—';
-
-    return (
-      <View style={styles.memberCard}>
-        <View style={styles.memberCardRow}>
-          <View style={[styles.memberAvatar, { backgroundColor: statusColor + '22' }]}>
-            <Text style={[styles.memberAvatarText, { color: statusColor }]}>{initials}</Text>
-          </View>
-          <View style={styles.memberInfo}>
-            <Text style={styles.memberName} numberOfLines={1}>{displayName}</Text>
-            <Text style={styles.memberNumber}>{item.member_number}</Text>
-            <View style={styles.memberMetaRow}>
-              <Ionicons name="call-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
-              <Text style={styles.memberMeta} numberOfLines={1}>{item.phone || '—'}</Text>
-            </View>
-            <View style={styles.memberMetaRow}>
-              <Ionicons name="location-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
-              <Text style={styles.memberMeta} numberOfLines={1}>{locationText}</Text>
-            </View>
-          </View>
-          <View style={styles.memberRight}>
-            <Text style={styles.memberDate}>{dateStr}</Text>
-            <TouchableOpacity
-              style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}
-              onPress={() => handleStatusChange(item)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const ListHeader = () => (
-    <View style={styles.statsBar}>
-      <View style={styles.statItem}>
-        <Text style={styles.statNumber}>{displayCount}</Text>
-        <Text style={styles.statLabel}>Total adhésions</Text>
-      </View>
-    </View>
-  );
-
-  const ListEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="people-outline" size={56} color={C.textTertiary} />
-      <Text style={styles.emptyText}>Aucune adhésion enregistrée</Text>
-    </View>
-  );
+  const countLabel = `${filteredMembers.length} adhérent${filteredMembers.length !== 1 ? 's' : ''}`;
 
   return (
     <>
@@ -252,7 +501,94 @@ export default function AdminMembershipsScreen() {
           headerTitleStyle: { fontWeight: 'bold' },
         }}
       />
+
+      <DetailModal
+        member={selectedMember}
+        visible={detailVisible}
+        onClose={handleCloseDetail}
+        onApprove={handleApprove}
+        onReject={handleReject}
+        onDelete={handleDelete}
+        actionLoading={actionLoading}
+      />
+
       <View style={styles.container}>
+        {/* Stats bar */}
+        <View style={styles.statsBar}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{totalAll}</Text>
+            <Text style={styles.statLabel}>Total</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#FCD34D' }]}>{totalPending}</Text>
+            <Text style={styles.statLabel}>En attente</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#86EFAC' }]}>{totalApproved}</Text>
+            <Text style={styles.statLabel}>Approuvés</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={[styles.statNumber, { color: '#FCA5A5' }]}>{totalRejected}</Text>
+            <Text style={styles.statLabel}>Rejetés</Text>
+          </View>
+        </View>
+
+        {/* Search bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Ionicons name="search-outline" size={17} color={C.textSecondary} style={{ marginRight: 6 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Nom, téléphone, numéro, commune..."
+              placeholderTextColor={C.textTertiary}
+              value={searchQuery}
+              onChangeText={(t) => {
+                console.log('[AdminMemberships] Recherche:', t);
+                setSearchQuery(t);
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  console.log('[AdminMemberships] Recherche effacée');
+                  setSearchQuery('');
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={17} color={C.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Filter tabs */}
+        <View style={styles.tabBar}>
+          {FILTER_TABS.map((tab) => {
+            const isActive = activeFilter === tab.value;
+            return (
+              <TouchableOpacity
+                key={tab.value}
+                style={[styles.tab, isActive && styles.tabActive]}
+                onPress={() => {
+                  console.log('[AdminMemberships] Filtre sélectionné:', tab.value);
+                  setActiveFilter(tab.value);
+                }}
+              >
+                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Content */}
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={C.primary} />
@@ -260,13 +596,14 @@ export default function AdminMembershipsScreen() {
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
-            <Ionicons name="alert-circle-outline" size={48} color={C.danger} />
+            <Ionicons name="alert-circle-outline" size={52} color={C.danger} />
+            <Text style={styles.errorTitle}>Impossible de charger les adhérents</Text>
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity
               style={styles.retryBtn}
               onPress={() => {
                 console.log('[AdminMemberships] Bouton Réessayer appuyé');
-                loadMemberships(false);
+                loadMembers(false);
               }}
             >
               <Text style={styles.retryBtnText}>Réessayer</Text>
@@ -274,12 +611,34 @@ export default function AdminMembershipsScreen() {
           </View>
         ) : (
           <FlatList
-            data={memberships}
+            data={filteredMembers}
             keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            ListHeaderComponent={ListHeader}
-            ListEmptyComponent={ListEmpty}
-            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <MemberCard item={item} onPress={handleOpenDetail} />
+            )}
+            ListHeaderComponent={
+              <View style={styles.countRow}>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countText}>{countLabel}</Text>
+                </View>
+                <Text style={styles.tapHint}>Appuyez pour voir les détails</Text>
+              </View>
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={56} color={C.textTertiary} />
+                <Text style={styles.emptyTitle}>Aucun adhérent enregistré</Text>
+                <Text style={styles.emptySubtitle}>
+                  {searchQuery.trim()
+                    ? 'Aucun résultat pour cette recherche.'
+                    : 'Les adhérents apparaîtront ici après inscription.'}
+                </Text>
+              </View>
+            }
+            contentContainerStyle={[
+              styles.listContent,
+              filteredMembers.length === 0 && styles.listContentEmpty,
+            ]}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -296,36 +655,121 @@ export default function AdminMembershipsScreen() {
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
   },
   statsBar: {
+    flexDirection: 'row',
     backgroundColor: C.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
   },
   statItem: {
+    flex: 1,
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 32,
+    fontSize: 22,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: -0.5,
   },
   statLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 2,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.75)',
     fontWeight: '600',
+    marginTop: 2,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    marginVertical: 4,
+  },
+  searchContainer: {
+    backgroundColor: C.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.surfaceSecondary,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 9 : 6,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: C.text,
+    padding: 0,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: C.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    paddingHorizontal: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: C.primary,
+  },
+  tabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.textSecondary,
+  },
+  tabTextActive: {
+    color: C.primary,
+    fontWeight: '700',
+  },
+  countRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  countBadge: {
+    backgroundColor: C.primaryMuted,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.primary,
+  },
+  tapHint: {
+    fontSize: 11,
+    color: C.textTertiary,
+    fontStyle: 'italic',
   },
   listContent: {
-    paddingBottom: 32,
+    paddingHorizontal: 12,
+    paddingBottom: 40,
+  },
+  listContentEmpty: {
     flexGrow: 1,
   },
   loadingContainer: {
@@ -343,18 +787,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    gap: 16,
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.text,
+    textAlign: 'center',
   },
   errorText: {
-    fontSize: 15,
-    color: C.danger,
+    fontSize: 14,
+    color: C.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   retryBtn: {
+    marginTop: 8,
     backgroundColor: C.primary,
-    borderRadius: 10,
-    paddingHorizontal: 24,
+    borderRadius: 12,
+    paddingHorizontal: 28,
     paddingVertical: 12,
   },
   retryBtnText: {
@@ -363,26 +814,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
     paddingVertical: 60,
-    gap: 16,
+    gap: 12,
   },
-  emptyText: {
-    fontSize: 16,
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: C.text,
+  },
+  emptySubtitle: {
+    fontSize: 14,
     color: C.textSecondary,
     textAlign: 'center',
+    maxWidth: 260,
+    lineHeight: 20,
   },
   memberCard: {
     backgroundColor: C.surface,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
-    marginHorizontal: 12,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: C.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
@@ -406,6 +864,7 @@ const styles = StyleSheet.create({
   memberInfo: {
     flex: 1,
     gap: 2,
+    minWidth: 0,
   },
   memberName: {
     fontSize: 15,
@@ -432,7 +891,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     flexShrink: 0,
     marginLeft: 8,
-    gap: 8,
+    gap: 6,
   },
   memberDate: {
     fontSize: 11,
@@ -440,12 +899,145 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   statusText: {
     fontSize: 11,
+    fontWeight: '700',
+  },
+});
+
+const detailStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.border,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    gap: 12,
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  headerInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  name: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: C.text,
+    lineHeight: 22,
+  },
+  memberNumber: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.primary,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    letterSpacing: 0.5,
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  closeBtn: {
+    padding: 4,
+    flexShrink: 0,
+  },
+  body: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  infoCard: {
+    backgroundColor: C.surfaceSecondary,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 20,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.divider,
+  },
+  detailLabel: {
+    fontSize: 13,
+    color: C.textSecondary,
+    fontWeight: '600',
+    width: 120,
+    flexShrink: 0,
+  },
+  detailValue: {
+    flex: 1,
+    fontSize: 13,
+    color: C.text,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  actions: {
+    gap: 10,
+    marginBottom: 8,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  approveBtn: {
+    backgroundColor: '#16a34a',
+  },
+  rejectBtn: {
+    backgroundColor: '#D97706',
+  },
+  deleteBtn: {
+    backgroundColor: '#DC2626',
+  },
+  actionBtnText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '700',
   },
 });
