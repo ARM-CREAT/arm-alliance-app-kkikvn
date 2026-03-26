@@ -431,3 +431,21 @@ export const newsArticles = pgTable('news_articles', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Memberships table - Party memberships with status tracking
+export const memberships = pgTable('memberships', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  membershipNumber: text('membership_number').notNull().unique(),
+  userId: text('user_id'),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  email: text('email').notNull().unique(),
+  phone: text('phone'),
+  address: text('address'),
+  city: text('city'),
+  country: text('country').notNull().default('France'),
+  birthDate: text('birth_date'),
+  status: text('status').notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

@@ -6,15 +6,15 @@ import * as schema from './db/schema.js';
 import * as membershipRoutes from './routes/membership.js';
 import * as leadershipRoutes from './routes/leadership.js';
 import * as donationRoutes from './routes/donations.js';
-import * as eventRoutes from './routes/events.js';
+// Disabled: import * as eventRoutes from './routes/events.js';
 // News system replaced with newsArticlesRoutes - see newsArticles.ts for the new implementation
 // import * as newsRoutes from './routes/news.js';
-import * as messageRoutes from './routes/messages.js';
-import * as chatRoutes from './routes/chat.js';
+// Disabled: import * as messageRoutes from './routes/messages.js';
+// Disabled: import * as chatRoutes from './routes/chat.js';
 import * as programRoutes from './routes/program.js';
 import * as regionRoutes from './routes/regions.js';
-import * as mediaRoutes from './routes/media.js';
-import * as aiRoutes from './routes/ai.js';
+// Disabled: import * as mediaRoutes from './routes/media.js';
+// Disabled: import * as aiRoutes from './routes/ai.js';
 import * as analyticsRoutes from './routes/analytics.js';
 import * as adminRoutes from './routes/admin.js';
 import * as conferenceRoutes from './routes/conferences.js';
@@ -33,7 +33,7 @@ import * as settingsRoutes from './routes/settings.js';
 import * as conversationRoutes from './routes/conversations.js';
 import * as extendedProgramRoutes from './routes/programs.js';
 import * as membershipsRoutes from './routes/memberships.js';
-import * as notificationsRoutes from './routes/notifications.js';
+// Disabled: import * as notificationsRoutes from './routes/notifications.js';
 import * as membersApiRoutes from './routes/membersApi.js';
 import * as directionRoutes from './routes/direction.js';
 import * as cmsNewsRoutes from './routes/cms-news.js';
@@ -63,14 +63,14 @@ healthRoutes.register(app, app.fastify);
 membershipRoutes.register(app, app.fastify);
 leadershipRoutes.register(app, app.fastify);
 donationRoutes.register(app, app.fastify);
-eventRoutes.register(app, app.fastify);
+// eventRoutes.register(app, app.fastify); // Disabled
 // newsRoutes.register(app, app.fastify); // Replaced with newsArticlesRoutes
-messageRoutes.register(app, app.fastify);
-chatRoutes.register(app, app.fastify);
+// messageRoutes.register(app, app.fastify); // Disabled
+// chatRoutes.register(app, app.fastify); // Disabled
 programRoutes.register(app, app.fastify);
 regionRoutes.register(app, app.fastify);
-mediaRoutes.register(app, app.fastify);
-aiRoutes.register(app, app.fastify);
+// mediaRoutes.register(app, app.fastify); // Disabled
+// aiRoutes.register(app, app.fastify); // Disabled
 analyticsRoutes.register(app, app.fastify);
 adminRoutes.register(app, app.fastify);
 conferenceRoutes.register(app, app.fastify);
@@ -88,7 +88,7 @@ settingsRoutes.register(app, app.fastify);
 conversationRoutes.register(app, app.fastify);
 extendedProgramRoutes.register(app, app.fastify);
 membershipsRoutes.register(app, app.fastify);
-notificationsRoutes.register(app, app.fastify);
+// notificationsRoutes.register(app, app.fastify); // Disabled
 membersApiRoutes.register(app, app.fastify);
 directionRoutes.register(app, app.fastify);
 cmsNewsRoutes.register(app, app.fastify);
@@ -99,18 +99,19 @@ newsArticlesRoutes.register(app, app.fastify);
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);
 await settingsRoutes.seedSettings(app);
-await eventRoutes.seedEvents(app);
+// await eventRoutes.seedEvents(app); // Disabled
 await leadershipRoutes.seedLeadership(app);
 await extendedProgramRoutes.seedPrograms(app);
-await notificationsRoutes.seedNotifications(app);
+// await notificationsRoutes.seedNotifications(app); // Disabled
 await programRoutes.seedProgramSections(app);
 await membersApiRoutes.seedMembers(app);
 await directionRoutes.seedDirection(app);
-await mediaRoutes.seedMedia(app);
+// await mediaRoutes.seedMedia(app); // Disabled
 await cmsNewsRoutes.seedCmsNews(app);
 await announcementsRoutes.seedAnnouncements(app);
 await politicalMessagesRoutes.seedPoliticalMessages(app);
 await newsArticlesRoutes.seedNewsArticles(app);
+await membershipsRoutes.seedMemberships(app);
 
 // Setup WebSocket signaling for conferences
 import {
