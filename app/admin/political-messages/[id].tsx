@@ -23,8 +23,6 @@ const ADMIN_HEADERS = {
   'x-admin-password': 'admin123',
 };
 
-const LEGACY_AUTHORS = ['Moussa Coulibaly', 'Aminata Diallo', 'Ibrehima Traore'];
-
 interface PoliticalMessage {
   id: string;
   title: string;
@@ -47,7 +45,6 @@ export default function PoliticalMessageFormScreen() {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [author, setAuthor] = useState(isNew ? 'ARM ALLIANCE' : '');
   const [published, setPublished] = useState(false);
 
   const loadMessage = useCallback(async () => {
@@ -65,9 +62,6 @@ export default function PoliticalMessageFormScreen() {
       console.log('[PoliticalMessageForm] Message chargé:', data.id);
       setTitle(data.title || '');
       setContent(data.content || '');
-      const rawAuthor = data.author || '';
-      const resolvedAuthor = LEGACY_AUTHORS.includes(rawAuthor) ? 'ARM ALLIANCE' : rawAuthor;
-      setAuthor(resolvedAuthor);
       setPublished(Boolean(data.published));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -92,15 +86,11 @@ export default function PoliticalMessageFormScreen() {
       Alert.alert('Champ requis', 'Le contenu est obligatoire.');
       return;
     }
-    if (!author.trim()) {
-      Alert.alert('Champ requis', "L'auteur est obligatoire.");
-      return;
-    }
 
     setSaving(true);
     setError(null);
 
-    const payload = { title: title.trim(), content: content.trim(), author: author.trim(), published };
+    const payload = { title: title.trim(), content: content.trim(), published };
     console.log('[PoliticalMessageForm]', isNew ? 'POST /api/political-messages' : `PUT /api/political-messages/${id}`, JSON.stringify(payload));
 
     try {
@@ -204,18 +194,6 @@ export default function PoliticalMessageFormScreen() {
               placeholderTextColor={colors.textTertiary}
               value={title}
               onChangeText={setTitle}
-              returnKeyType="next"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Auteur *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nom de l'auteur"
-              placeholderTextColor={colors.textTertiary}
-              value={author}
-              onChangeText={setAuthor}
               returnKeyType="next"
             />
           </View>

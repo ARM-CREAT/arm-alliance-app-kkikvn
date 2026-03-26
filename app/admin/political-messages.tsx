@@ -135,14 +135,10 @@ export default function AdminPoliticalMessagesScreen() {
     );
   };
 
-  const LEGACY_AUTHORS = ['Moussa Coulibaly', 'Aminata Diallo', 'Ibrehima Traore'];
-
   const renderItem = ({ item }: { item: PoliticalMessage }) => {
     const dateStr = formatDate(item.created_at);
     const publishedLabel = item.published ? 'Publié' : 'Brouillon';
     const publishedColor = item.published ? colors.success : colors.textTertiary;
-    const rawAuthor = item.author || '—';
-    const authorText = LEGACY_AUTHORS.includes(rawAuthor) ? 'ARM ALLIANCE' : rawAuthor;
 
     return (
       <TouchableOpacity
@@ -157,10 +153,6 @@ export default function AdminPoliticalMessagesScreen() {
           <Text style={styles.cardDate}>{dateStr}</Text>
         </View>
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-        <View style={styles.authorRow}>
-          <Ionicons name="person-outline" size={12} color={colors.textTertiary} />
-          <Text style={styles.authorText}>{authorText}</Text>
-        </View>
         <Text style={styles.cardContent} numberOfLines={2}>{item.content}</Text>
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)}>
@@ -257,8 +249,6 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
   cardDate: { fontSize: 11, color: colors.textTertiary, fontWeight: '500' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: 6, lineHeight: 22 },
-  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
-  authorText: { fontSize: 12, color: colors.textTertiary, fontWeight: '500' },
   cardContent: { fontSize: 13, color: colors.textSecondary, lineHeight: 19, marginBottom: 12 },
   cardActions: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: 10 },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.primary + '15', borderRadius: 8 },
