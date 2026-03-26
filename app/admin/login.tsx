@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,55 +10,84 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
-import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
+
+const ADMIN_PASSWORD = 'admin123';
+const ADMIN_AUTH_KEY = 'admin_authenticated';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
-  const { signInWithEmail } = useAuth();
 
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // On mount, check if already authenticated
+  useEffect(() => {
+    const checkSession = async () => {
+      console.log('[AdminLogin] Vérification session existante...');
+      try {
+        const flag = await AsyncStorage.getItem(ADMIN_AUTH_KEY);
+        console.log('[AdminLogin] admin_authenticated flag:', flag);
+        if (flag === 'true') {
+          console.log('[AdminLogin] Session valide, redirection vers dashboard');
+          router.replace('/admin/dashboard');
+          return;
+        }
+      } catch (err) {
+        console.error('[AdminLogin] Erreur lecture AsyncStorage:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkSession();
+  }, []);
 
   const handleLogin = async () => {
     console.log('[AdminLogin] Bouton Se connecter appuyé');
 
-    if (!email.trim() || !password.trim()) {
-      console.log('[AdminLogin] Champs manquants');
-      setError('Veuillez entrer votre email et mot de passe.');
+    if (!password.trim()) {
+      console.log('[AdminLogin] Mot de passe vide');
+      setError('Veuillez entrer le mot de passe.');
       return;
     }
 
-    setLoading(true);
-    setError('');
+    console.log('[AdminLogin] Vérification mot de passe (local)');
 
+    if (password !== ADMIN_PASSWORD) {
+      console.log('[AdminLogin] Mot de passe incorrect');
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setError('Mot de passe incorrect.');
+      return;
+    }
+
+    // Password correct — store flag and navigate
+    console.log('[AdminLogin] Mot de passe correct, enregistrement session');
     try {
-      console.log('[AdminLogin] Tentative de connexion avec Better Auth:', email.trim());
-      await signInWithEmail(email.trim(), password);
-      console.log('[AdminLogin] Connexion réussie, redirection vers dashboard');
+      await AsyncStorage.setItem(ADMIN_AUTH_KEY, 'true');
+      console.log('[AdminLogin] Session enregistrée, redirection vers dashboard');
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/admin/dashboard');
-    } catch (err: any) {
-      console.error('[AdminLogin] Erreur connexion:', err?.message || err);
-      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.message || '';
-      if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials') || msg.toLowerCase().includes('password')) {
-        setError('Email ou mot de passe incorrect.');
-      } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
-        setError('Impossible de contacter le serveur. Vérifiez votre connexion.');
-      } else {
-        setError(msg || 'Échec de la connexion. Veuillez réessayer.');
-      }
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('[AdminLogin] Erreur enregistrement session:', err);
+      setError('Erreur interne. Veuillez réessayer.');
     }
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  const isDisabled = !password.trim();
 
   return (
     <>
@@ -85,24 +114,6 @@ export default function AdminLoginScreen() {
         </View>
 
         <View style={styles.form}>
-          {/* Email field */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <View style={[styles.inputWrapper, error ? styles.inputWrapperError : null]}>
-              <TextInput
-                style={styles.input}
-                placeholder="Entrez votre email"
-                placeholderTextColor={colors.textTertiary}
-                value={email}
-                onChangeText={(v) => { setEmail(v); setError(''); }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="next"
-              />
-            </View>
-          </View>
-
           {/* Password field */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mot de passe</Text>
@@ -138,15 +149,11 @@ export default function AdminLoginScreen() {
           </View>
 
           <AnimatedPressable
-            style={[styles.loginButton, (loading || !email.trim() || !password.trim()) && styles.buttonDisabled]}
+            style={[styles.loginButton, isDisabled && styles.buttonDisabled]}
             onPress={handleLogin}
-            disabled={loading || !email.trim() || !password.trim()}
+            disabled={isDisabled}
           >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.loginButtonText}>Se connecter</Text>
-            )}
+            <Text style={styles.loginButtonText}>Se connecter</Text>
           </AnimatedPressable>
         </View>
       </KeyboardAvoidingView>
@@ -155,6 +162,12 @@ export default function AdminLoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

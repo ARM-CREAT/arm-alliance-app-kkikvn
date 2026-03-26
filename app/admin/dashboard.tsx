@@ -129,7 +129,7 @@ export default function AdminDashboardScreen() {
     console.log('[AdminDashboard] Déconnexion admin');
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await AsyncStorage.removeItem('admin_password');
+      await AsyncStorage.removeItem('admin_authenticated');
       router.replace('/admin/login');
     } catch (err) {
       console.error('[AdminDashboard] Erreur déconnexion:', err);
