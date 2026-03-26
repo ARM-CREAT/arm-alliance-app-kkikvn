@@ -13,13 +13,14 @@ import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
-
-const ADMIN_PASSWORD = 'admin123';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
+  const { signInWithEmail } = useAuth();
+
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -28,28 +29,33 @@ export default function AdminLoginScreen() {
   const handleLogin = async () => {
     console.log('[AdminLogin] Bouton Se connecter appuyé');
 
-    if (!password.trim()) {
-      console.log('[AdminLogin] Mot de passe vide');
-      setError('Veuillez entrer le mot de passe.');
+    if (!email.trim() || !password.trim()) {
+      console.log('[AdminLogin] Champs manquants');
+      setError('Veuillez entrer votre email et mot de passe.');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const trimmedPassword = password.trim();
-    console.log('[AdminLogin] Vérification du mot de passe admin');
-
-    if (trimmedPassword === ADMIN_PASSWORD) {
-      console.log('[AdminLogin] Mot de passe correct, accès accordé');
-      await AsyncStorage.setItem('admin_password', trimmedPassword);
+    try {
+      console.log('[AdminLogin] Tentative de connexion avec Better Auth:', email.trim());
+      await signInWithEmail(email.trim(), password);
+      console.log('[AdminLogin] Connexion réussie, redirection vers dashboard');
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setLoading(false);
       router.replace('/admin/dashboard');
-    } else {
-      console.log('[AdminLogin] Mot de passe incorrect');
+    } catch (err: any) {
+      console.error('[AdminLogin] Erreur connexion:', err?.message || err);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setError('Mot de passe incorrect.');
+      const msg = err?.message || '';
+      if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('credentials') || msg.toLowerCase().includes('password')) {
+        setError('Email ou mot de passe incorrect.');
+      } else if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+        setError('Impossible de contacter le serveur. Vérifiez votre connexion.');
+      } else {
+        setError(msg || 'Échec de la connexion. Veuillez réessayer.');
+      }
+    } finally {
       setLoading(false);
     }
   };
@@ -79,6 +85,25 @@ export default function AdminLoginScreen() {
         </View>
 
         <View style={styles.form}>
+          {/* Email field */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Email</Text>
+            <View style={[styles.inputWrapper, error ? styles.inputWrapperError : null]}>
+              <TextInput
+                style={styles.input}
+                placeholder="Entrez votre email"
+                placeholderTextColor={colors.textTertiary}
+                value={email}
+                onChangeText={(v) => { setEmail(v); setError(''); }}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </View>
+          </View>
+
+          {/* Password field */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mot de passe</Text>
             <View style={[styles.inputWrapper, error ? styles.inputWrapperError : null]}>
@@ -113,9 +138,9 @@ export default function AdminLoginScreen() {
           </View>
 
           <AnimatedPressable
-            style={[styles.loginButton, (loading || !password.trim()) && styles.buttonDisabled]}
+            style={[styles.loginButton, (loading || !email.trim() || !password.trim()) && styles.buttonDisabled]}
             onPress={handleLogin}
-            disabled={loading || !password.trim()}
+            disabled={loading || !email.trim() || !password.trim()}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -172,7 +197,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   inputGroup: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
     fontSize: 14,
@@ -218,6 +243,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
+    marginTop: 4,
   },
   buttonDisabled: {
     opacity: 0.5,

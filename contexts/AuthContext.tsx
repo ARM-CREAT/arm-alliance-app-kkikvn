@@ -117,28 +117,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithEmail = async (email: string, password: string) => {
-    try {
-      await authClient.signIn.email({ email, password });
-      await fetchUser();
-    } catch (error) {
-      console.error("Email sign in failed:", error);
-      throw error;
+    console.log("[AuthContext] signInWithEmail called for:", email);
+    const result = await authClient.signIn.email({ email, password });
+    console.log("[AuthContext] signIn.email result:", JSON.stringify(result));
+    if (result?.error) {
+      const msg = result.error.message || result.error.code || "Échec de la connexion";
+      console.error("[AuthContext] signIn.email error:", msg);
+      throw new Error(msg);
     }
+    await fetchUser();
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    try {
-      await authClient.signUp.email({
-        email,
-        password,
-        name,
-        // Ensure name is passed in header or logic if required, usually passed in body
-      });
-      await fetchUser();
-    } catch (error) {
-      console.error("Email sign up failed:", error);
-      throw error;
+    console.log("[AuthContext] signUpWithEmail called for:", email);
+    const result = await authClient.signUp.email({ email, password, name });
+    console.log("[AuthContext] signUp.email result:", JSON.stringify(result));
+    if (result?.error) {
+      const msg = result.error.message || result.error.code || "Échec de la création du compte";
+      console.error("[AuthContext] signUp.email error:", msg);
+      throw new Error(msg);
     }
+    await fetchUser();
   };
 
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
