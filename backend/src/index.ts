@@ -40,6 +40,7 @@ import * as cmsNewsRoutes from './routes/cms-news.js';
 import * as announcementsRoutes from './routes/announcements.js';
 import * as politicalMessagesRoutes from './routes/political-messages.js';
 import * as newsArticlesRoutes from './routes/newsArticles.js';
+import * as adminAuthRoutes from './routes/adminAuth.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -59,6 +60,7 @@ await initializeData(app);
 
 // Register all route modules
 // IMPORTANT: Always use registration functions to avoid circular dependency issues
+adminAuthRoutes.register(app, app.fastify);
 healthRoutes.register(app, app.fastify);
 membershipRoutes.register(app, app.fastify);
 leadershipRoutes.register(app, app.fastify);
@@ -97,6 +99,7 @@ politicalMessagesRoutes.register(app, app.fastify);
 newsArticlesRoutes.register(app, app.fastify);
 
 // Seed data
+await adminAuthRoutes.seedAdminUser(app);
 await conferenceRoutes.seedDefaultConference(app);
 await settingsRoutes.seedSettings(app);
 // await eventRoutes.seedEvents(app); // Disabled
