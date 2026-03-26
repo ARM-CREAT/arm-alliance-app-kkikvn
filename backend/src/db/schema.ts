@@ -417,3 +417,17 @@ export const politicalMessages = pgTable('political_messages', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// News Articles table - Full-featured news articles with categories
+export const newsArticles = pgTable('news_articles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  summary: text('summary').notNull().default(''),
+  category: text('category').notNull(),
+  imageUrl: text('image_url').notNull().default(''),
+  published: boolean('published').notNull().default(true),
+  publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

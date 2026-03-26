@@ -7,7 +7,8 @@ import * as membershipRoutes from './routes/membership.js';
 import * as leadershipRoutes from './routes/leadership.js';
 import * as donationRoutes from './routes/donations.js';
 import * as eventRoutes from './routes/events.js';
-import * as newsRoutes from './routes/news.js';
+// News system replaced with newsArticlesRoutes - see newsArticles.ts for the new implementation
+// import * as newsRoutes from './routes/news.js';
 import * as messageRoutes from './routes/messages.js';
 import * as chatRoutes from './routes/chat.js';
 import * as programRoutes from './routes/program.js';
@@ -38,6 +39,7 @@ import * as directionRoutes from './routes/direction.js';
 import * as cmsNewsRoutes from './routes/cms-news.js';
 import * as announcementsRoutes from './routes/announcements.js';
 import * as politicalMessagesRoutes from './routes/political-messages.js';
+import * as newsArticlesRoutes from './routes/newsArticles.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -62,7 +64,7 @@ membershipRoutes.register(app, app.fastify);
 leadershipRoutes.register(app, app.fastify);
 donationRoutes.register(app, app.fastify);
 eventRoutes.register(app, app.fastify);
-newsRoutes.register(app, app.fastify);
+// newsRoutes.register(app, app.fastify); // Replaced with newsArticlesRoutes
 messageRoutes.register(app, app.fastify);
 chatRoutes.register(app, app.fastify);
 programRoutes.register(app, app.fastify);
@@ -92,6 +94,7 @@ directionRoutes.register(app, app.fastify);
 cmsNewsRoutes.register(app, app.fastify);
 announcementsRoutes.register(app, app.fastify);
 politicalMessagesRoutes.register(app, app.fastify);
+newsArticlesRoutes.register(app, app.fastify);
 
 // Seed data
 await conferenceRoutes.seedDefaultConference(app);
@@ -107,6 +110,7 @@ await mediaRoutes.seedMedia(app);
 await cmsNewsRoutes.seedCmsNews(app);
 await announcementsRoutes.seedAnnouncements(app);
 await politicalMessagesRoutes.seedPoliticalMessages(app);
+await newsArticlesRoutes.seedNewsArticles(app);
 
 // Setup WebSocket signaling for conferences
 import {
