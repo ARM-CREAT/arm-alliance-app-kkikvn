@@ -5,25 +5,31 @@ import type { App } from '../index.js';
 
 const SAMPLE_MEMBERS = [
   {
-    memberNumber: 'ARM-00001',
+    memberNumber: 'ARM-2025-00001',
+    fullName: 'Amadou Coulibaly',
     firstName: 'Amadou',
     lastName: 'Coulibaly',
     phone: '+22376543210',
-    location: 'Bamako',
+    commune: 'Bamako',
+    status: 'pending',
   },
   {
-    memberNumber: 'ARM-00002',
+    memberNumber: 'ARM-2025-00002',
+    fullName: 'Fatoumata Diallo',
     firstName: 'Fatoumata',
     lastName: 'Diallo',
     phone: '+22365432109',
-    location: 'Sikasso',
+    commune: 'Sikasso',
+    status: 'pending',
   },
   {
-    memberNumber: 'ARM-00003',
+    memberNumber: 'ARM-2025-00003',
+    fullName: 'Ibrahim Traoré',
     firstName: 'Ibrahim',
     lastName: 'Traoré',
     phone: '+22354321098',
-    location: 'Mopti',
+    commune: 'Mopti',
+    status: 'pending',
   },
 ];
 

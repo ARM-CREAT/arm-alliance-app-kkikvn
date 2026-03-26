@@ -108,7 +108,8 @@ export function register(app: App, fastify: FastifyInstance) {
         // Count by location
         const byLocation: Record<string, number> = {};
         members.forEach(m => {
-          byLocation[m.location] = (byLocation[m.location] || 0) + 1;
+          const location = m.commune || 'Unknown';
+          byLocation[location] = (byLocation[location] || 0) + 1;
         });
 
         const analytics = {

@@ -12,12 +12,20 @@ import {
 // Members table - Member registry with sequential member numbers
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
-  memberNumber: text('member_number').notNull().unique(), // ARM-NNNNN format (sequential)
-  firstName: text('first_name').notNull(),
-  lastName: text('last_name').notNull(),
-  phone: text('phone').notNull(),
-  location: text('location').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  memberNumber: text('member_number').notNull().unique(), // ARM-YYYY-NNNNN format (sequential)
+  fullName: text('full_name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  phone: text('phone').notNull().unique(),
+  email: text('email'),
+  commune: text('commune'),
+  region: text('region'),
+  profession: text('profession'),
+  dateOfBirth: text('date_of_birth'),
+  gender: text('gender'),
+  status: text('status').notNull().default('pending'), // pending, approved, rejected
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // Leadership table - Party leadership positions
