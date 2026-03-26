@@ -19,16 +19,17 @@ import * as Haptics from 'expo-haptics';
 const C = Colors.light;
 const ADMIN_HEADERS = {
   'Content-Type': 'application/json',
-  'x-admin-password': 'admin123',
+  'Authorization': 'Bearer admin123',
 };
 
-interface Member {
+interface Membership {
   id: string;
   member_number: string;
   first_name: string;
   last_name: string;
   phone: string;
   location: string;
+  status: string;
   created_at: string;
 }
 
@@ -51,38 +52,74 @@ function getInitials(firstName: string, lastName: string): string {
   return (f + l) || '?';
 }
 
+function getStatusColor(status: string): string {
+  const s = (status || '').toLowerCase();
+  if (s === 'active' || s === 'actif') return C.success;
+  if (s === 'pending' || s === 'en_attente') return C.warning;
+  if (s === 'suspended' || s === 'suspendu') return C.danger;
+  return C.textSecondary;
+}
+
+function getStatusLabel(status: string): string {
+  const s = (status || '').toLowerCase();
+  if (s === 'active' || s === 'actif') return 'Actif';
+  if (s === 'pending' || s === 'en_attente') return 'En attente';
+  if (s === 'suspended' || s === 'suspendu') return 'Suspendu';
+  return status || 'Inconnu';
+}
+
 export default function AdminMembershipsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [members, setMembers] = useState<Member[]>([]);
+  const [memberships, setMemberships] = useState<Membership[]>([]);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadMembers = useCallback(async (isRefresh = false) => {
-    console.log('[AdminMemberships] GET /api/members');
+  const loadMemberships = useCallback(async (isRefresh = false) => {
+    console.log('[AdminMemberships] GET /api/memberships');
     if (!isRefresh) setLoading(true);
     setError(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members`, { headers: ADMIN_HEADERS });
+      const res = await fetch(`${BACKEND_URL}/api/memberships`, {
+        headers: ADMIN_HEADERS,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const text = await res.text();
-        console.error('[AdminMemberships] Erreur HTTP', res.status, text.slice(0, 120));
-        throw new Error(`Erreur ${res.status}: impossible de charger les membres`);
+        console.error('[AdminMemberships] Erreur HTTP', res.status, text.slice(0, 200));
+        throw new Error(`Erreur ${res.status}: impossible de charger les adhésions`);
       }
 
       const data = await res.json();
-      const list: Member[] = Array.isArray(data) ? data : (data.members ?? []);
-      const count: number = typeof data.count === 'number' ? data.count : list.length;
+      const list: Membership[] = Array.isArray(data)
+        ? data
+        : (data.memberships ?? data.members ?? data.data ?? []);
+      const count: number = typeof data.total === 'number'
+        ? data.total
+        : typeof data.count === 'number'
+          ? data.count
+          : list.length;
 
-      console.log('[AdminMemberships] Membres chargés:', list.length, 'total:', count);
-      setMembers(list);
+      console.log('[AdminMemberships] Adhésions chargées:', list.length, 'total:', count);
+      setMemberships(list);
       setTotalCount(count);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[AdminMemberships] Erreur:', message);
-      setError(message);
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.error('[AdminMemberships] Timeout 30s');
+        setError('La requête a expiré. Vérifiez votre connexion et réessayez.');
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[AdminMemberships] Erreur:', message);
+        setError(message);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -91,44 +128,48 @@ export default function AdminMembershipsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadMembers(false);
-    }, [loadMembers])
+      loadMemberships(false);
+    }, [loadMemberships])
   );
 
   const onRefresh = useCallback(() => {
     console.log('[AdminMemberships] Pull-to-refresh déclenché');
     setRefreshing(true);
-    loadMembers(true);
-  }, [loadMembers]);
+    loadMemberships(true);
+  }, [loadMemberships]);
 
-  const handleDelete = (member: Member) => {
-    const fullName = `${member.first_name} ${member.last_name}`.trim();
-    console.log('[AdminMemberships] Demande suppression membre:', member.id, fullName);
+  const handleStatusChange = (membership: Membership) => {
+    const fullName = `${membership.first_name} ${membership.last_name}`.trim();
+    console.log('[AdminMemberships] Changement statut pour:', membership.id, fullName);
+    const currentStatus = (membership.status || '').toLowerCase();
+    const newStatus = currentStatus === 'active' || currentStatus === 'actif' ? 'suspended' : 'active';
+    const newLabel = newStatus === 'active' ? 'Actif' : 'Suspendu';
+
     Alert.alert(
-      'Supprimer ce membre',
-      `Voulez-vous vraiment supprimer "${fullName}" (${member.member_number}) ?`,
+      'Modifier le statut',
+      `Changer le statut de "${fullName}" en "${newLabel}" ?`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
-          text: 'Supprimer',
-          style: 'destructive',
+          text: 'Confirmer',
           onPress: async () => {
-            console.log('[AdminMemberships] DELETE /api/members/' + member.id);
+            console.log('[AdminMemberships] PATCH /api/memberships/' + membership.id, 'status:', newStatus);
             try {
-              const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
-                method: 'DELETE',
+              const res = await fetch(`${BACKEND_URL}/api/memberships/${membership.id}`, {
+                method: 'PATCH',
                 headers: ADMIN_HEADERS,
+                body: JSON.stringify({ status: newStatus }),
               });
               if (!res.ok) {
                 const text = await res.text();
                 throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
               }
-              console.log('[AdminMemberships] Membre supprimé:', member.id);
+              console.log('[AdminMemberships] Statut mis à jour:', membership.id, '->', newStatus);
               if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              loadMembers(true);
+              loadMemberships(true);
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err);
-              console.error('[AdminMemberships] Erreur suppression:', msg);
+              console.error('[AdminMemberships] Erreur mise à jour statut:', msg);
               Alert.alert('Erreur', msg);
             }
           },
@@ -137,18 +178,20 @@ export default function AdminMembershipsScreen() {
     );
   };
 
-  const displayCount = totalCount !== null ? String(totalCount) : String(members.length);
+  const displayCount = totalCount !== null ? String(totalCount) : String(memberships.length);
 
-  const renderItem = ({ item }: { item: Member }) => {
+  const renderItem = ({ item }: { item: Membership }) => {
     const initials = getInitials(item.first_name, item.last_name);
     const fullName = `${item.first_name} ${item.last_name}`.trim();
     const dateStr = formatDate(item.created_at);
+    const statusColor = getStatusColor(item.status);
+    const statusLabel = getStatusLabel(item.status);
 
     return (
       <View style={styles.memberCard}>
         <View style={styles.memberCardRow}>
-          <View style={styles.memberAvatar}>
-            <Text style={styles.memberAvatarText}>{initials}</Text>
+          <View style={[styles.memberAvatar, { backgroundColor: statusColor + '22' }]}>
+            <Text style={[styles.memberAvatarText, { color: statusColor }]}>{initials}</Text>
           </View>
           <View style={styles.memberInfo}>
             <Text style={styles.memberName} numberOfLines={1}>{fullName}</Text>
@@ -165,11 +208,11 @@ export default function AdminMembershipsScreen() {
           <View style={styles.memberRight}>
             <Text style={styles.memberDate}>{dateStr}</Text>
             <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={() => handleDelete(item)}
+              style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}
+              onPress={() => handleStatusChange(item)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="trash-outline" size={16} color={C.danger} />
+              <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -181,7 +224,7 @@ export default function AdminMembershipsScreen() {
     <View style={styles.statsBar}>
       <View style={styles.statItem}>
         <Text style={styles.statNumber}>{displayCount}</Text>
-        <Text style={styles.statLabel}>Total membres</Text>
+        <Text style={styles.statLabel}>Total adhésions</Text>
       </View>
     </View>
   );
@@ -189,7 +232,7 @@ export default function AdminMembershipsScreen() {
   const ListEmpty = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="people-outline" size={56} color={C.textTertiary} />
-      <Text style={styles.emptyText}>Aucun membre inscrit</Text>
+      <Text style={styles.emptyText}>Aucune adhésion enregistrée</Text>
     </View>
   );
 
@@ -208,7 +251,7 @@ export default function AdminMembershipsScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={C.primary} />
-            <Text style={styles.loadingText}>Chargement...</Text>
+            <Text style={styles.loadingText}>Chargement des adhésions...</Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
@@ -218,7 +261,7 @@ export default function AdminMembershipsScreen() {
               style={styles.retryBtn}
               onPress={() => {
                 console.log('[AdminMemberships] Bouton Réessayer appuyé');
-                loadMembers(false);
+                loadMemberships(false);
               }}
             >
               <Text style={styles.retryBtnText}>Réessayer</Text>
@@ -226,7 +269,7 @@ export default function AdminMembershipsScreen() {
           </View>
         ) : (
           <FlatList
-            data={members}
+            data={memberships}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             ListHeaderComponent={ListHeader}
@@ -346,7 +389,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: C.primaryMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -355,7 +397,6 @@ const styles = StyleSheet.create({
   memberAvatarText: {
     fontSize: 16,
     fontWeight: '800',
-    color: C.primary,
   },
   memberInfo: {
     flex: 1,
@@ -393,12 +434,13 @@ const styles = StyleSheet.create({
     color: C.textTertiary,
     fontWeight: '500',
   },
-  deleteBtn: {
-    width: 32,
-    height: 32,
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: C.danger + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

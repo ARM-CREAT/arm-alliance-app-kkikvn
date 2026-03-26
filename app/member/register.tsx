@@ -81,14 +81,23 @@ export default function RegisterScreen() {
       phone: phone.trim(),
       location: location.trim(),
     };
-    console.log('[Register] POST /api/members', JSON.stringify(payload));
+    console.log('[Register] POST /api/memberships', JSON.stringify(payload));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.warn('[Register] Timeout de 30 secondes atteint');
+    }, 30000);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/members`, {
+      const response = await fetch(`${BACKEND_URL}/api/memberships`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const text = await response.text();
@@ -110,15 +119,21 @@ export default function RegisterScreen() {
       router.push({
         pathname: '/member/success',
         params: {
-          member_number: data.member_number,
-          first_name: data.first_name,
-          last_name: data.last_name,
+          member_number: data.member_number ?? data.membership_number ?? '',
+          first_name: data.first_name ?? firstName.trim(),
+          last_name: data.last_name ?? lastName.trim(),
         },
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.log('[Register] Erreur réseau:', message);
-      setErrorBanner('Erreur de connexion. Vérifiez votre connexion internet.');
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('[Register] Requête annulée (timeout 30s)');
+        setErrorBanner('La requête a expiré. Vérifiez votre connexion et réessayez.');
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        console.log('[Register] Erreur réseau:', message);
+        setErrorBanner('Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+      }
     } finally {
       setLoading(false);
     }
@@ -127,6 +142,12 @@ export default function RegisterScreen() {
   const handleRecover = () => {
     console.log('[Register] Lien "Déjà inscrit" appuyé');
     router.push('/member/recover');
+  };
+
+  const handleRetry = () => {
+    console.log('[Register] Bouton Réessayer appuyé');
+    setErrorBanner('');
+    handleSubmit();
   };
 
   return (
@@ -163,6 +184,9 @@ export default function RegisterScreen() {
           <View style={styles.errorBanner}>
             <Ionicons name="alert-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
             <Text style={styles.errorBannerText}>{errorBanner}</Text>
+            <TouchableOpacity onPress={handleRetry} style={styles.retryBtn} activeOpacity={0.8}>
+              <Text style={styles.retryBtnText}>Réessayer</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -235,6 +259,12 @@ export default function RegisterScreen() {
             {locationError ? <Text style={styles.fieldError}>{locationError}</Text> : null}
           </View>
 
+          {/* Info numéro auto */}
+          <View style={styles.infoRow}>
+            <Ionicons name="information-circle-outline" size={16} color={C.textSecondary} style={{ marginRight: 6 }} />
+            <Text style={styles.infoText}>Votre numéro d'adhérent sera généré automatiquement</Text>
+          </View>
+
           {/* Submit Button */}
           <TouchableOpacity
             style={[styles.submitButton, loading && styles.submitButtonDisabled]}
@@ -243,7 +273,10 @@ export default function RegisterScreen() {
             activeOpacity={0.85}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <>
+                <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
+                <Text style={styles.submitButtonText}>Inscription en cours...</Text>
+              </>
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.btnIcon} />
@@ -312,13 +345,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    gap: 4,
   },
   errorBannerText: {
     flex: 1,
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    lineHeight: 20,
+    lineHeight: 18,
+  },
+  retryBtn: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  retryBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   formCard: {
     backgroundColor: C.surface,
@@ -363,6 +408,21 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 4,
   },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.primaryMuted,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 20,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: C.textSecondary,
+    lineHeight: 18,
+  },
   submitButton: {
     backgroundColor: C.primary,
     borderRadius: 14,
@@ -378,7 +438,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   submitButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.7,
   },
   btnIcon: {
     marginRight: 8,

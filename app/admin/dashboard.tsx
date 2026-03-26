@@ -211,7 +211,7 @@ export default function AdminDashboardScreen() {
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Derniers adhérents</Text>
-                    <AnimatedPressable onPress={() => handleNavigation('/members-list', 'Adhérents')}>
+                    <AnimatedPressable onPress={() => handleNavigation('/admin/memberships', 'Adhésions')}>
                       <Text style={styles.sectionLink}>Voir tous →</Text>
                     </AnimatedPressable>
                   </View>
@@ -248,26 +248,26 @@ export default function AdminDashboardScreen() {
             <View style={styles.actionsRow}>
               <AnimatedPressable
                 style={styles.actionBtn}
-                onPress={() => handleNavigation('/members-list', 'Adhérents')}
-              >
-                <Text style={styles.actionBtnIcon}>👥</Text>
-                <Text style={styles.actionBtnText}>Voir tous les adhérents</Text>
-                <Text style={styles.actionBtnChevron}>›</Text>
-              </AnimatedPressable>
-              <AnimatedPressable
-                style={styles.actionBtn}
-                onPress={() => handleNavigation('/admin/notifications', 'Notifications')}
-              >
-                <Text style={styles.actionBtnIcon}>📢</Text>
-                <Text style={styles.actionBtnText}>Envoyer une notification</Text>
-                <Text style={styles.actionBtnChevron}>›</Text>
-              </AnimatedPressable>
-              <AnimatedPressable
-                style={styles.actionBtn}
                 onPress={() => handleNavigation('/admin/memberships', 'Adhésions')}
               >
                 <Text style={styles.actionBtnIcon}>📋</Text>
                 <Text style={styles.actionBtnText}>Gérer les adhésions</Text>
+                <Text style={styles.actionBtnChevron}>›</Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                style={styles.actionBtn}
+                onPress={() => handleNavigation('/admin/leadership', 'Direction')}
+              >
+                <Text style={styles.actionBtnIcon}>👤</Text>
+                <Text style={styles.actionBtnText}>Gérer la direction</Text>
+                <Text style={styles.actionBtnChevron}>›</Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                style={styles.actionBtn}
+                onPress={() => handleNavigation('/admin/membership-stats', 'Statistiques')}
+              >
+                <Text style={styles.actionBtnIcon}>📊</Text>
+                <Text style={styles.actionBtnText}>Statistiques détaillées</Text>
                 <Text style={styles.actionBtnChevron}>›</Text>
               </AnimatedPressable>
             </View>
@@ -275,14 +275,14 @@ export default function AdminDashboardScreen() {
 
           {/* Content management */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Gestion du contenu</Text>
+            <Text style={styles.sectionTitle}>Gestion</Text>
             <View style={styles.grid}>
               {[
-                { path: '/admin/news', label: 'Actualités', icon: '📰' },
-                { path: '/admin/events', label: 'Événements', icon: '📅' },
                 { path: '/admin/leadership', label: 'Direction', icon: '👤' },
-                { path: '/admin/media', label: 'Médias', icon: '🖼️' },
+                { path: '/admin/conferences', label: 'Conférences', icon: '🎤' },
                 { path: '/admin/membership-stats', label: 'Stats', icon: '📊' },
+                { path: '/admin/contacts', label: 'Contacts', icon: '📞' },
+                { path: '/admin/program', label: 'Programme', icon: '📜' },
                 { path: '/admin/offline-access', label: 'Hors ligne', icon: '📴' },
               ].map((item) => (
                 <AnimatedPressable
@@ -432,6 +432,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
     letterSpacing: -0.2,
+    marginBottom: 12,
   },
   sectionLink: {
     fontSize: 13,
