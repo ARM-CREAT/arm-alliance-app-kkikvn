@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import {
   View,
   Text,
@@ -60,6 +61,7 @@ function formatDate(dateString?: string) {
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
+  const { logout } = useAdminAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentMembers, setRecentMembers] = useState<RecentMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,14 +128,10 @@ export default function AdminDashboardScreen() {
   };
 
   const handleLogout = async () => {
-    console.log('[AdminDashboard] Déconnexion admin');
+    console.log('[AdminDashboard] Bouton Déconnexion appuyé');
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      await AsyncStorage.removeItem('admin_authenticated');
-      router.replace('/admin/login');
-    } catch (err) {
-      console.error('[AdminDashboard] Erreur déconnexion:', err);
-    }
+    await logout();
+    router.replace('/admin/login');
   };
 
   const totalStr = String(stats?.total ?? 0);
