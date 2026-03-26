@@ -17,15 +17,12 @@ export default function MemberSuccessScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     member_number: string;
-    first_name: string;
-    last_name: string;
+    full_name: string;
   }>();
 
   const memberNumber = params.member_number ?? '';
-  const firstName = params.first_name ?? '';
-  const lastName = params.last_name ?? '';
-  const fullName = `${firstName} ${lastName}`.trim();
-  const welcomeText = `Bienvenue, ${fullName} !`;
+  const fullName = params.full_name ?? '';
+  const welcomeText = fullName ? `Bienvenue, ${fullName} !` : 'Bienvenue !';
 
   const handleGoHome = () => {
     console.log('[MemberSuccess] Bouton "Retour à l\'accueil" appuyé');
@@ -71,7 +68,7 @@ export default function MemberSuccessScreen() {
         {/* Save note */}
         <View style={styles.noteRow}>
           <Ionicons name="information-circle" size={18} color={C.textSecondary} style={{ marginRight: 8, marginTop: 1 }} />
-          <Text style={styles.noteText}>Conservez ce numéro précieusement</Text>
+          <Text style={styles.noteText}>Conservez ce numéro précieusement. Il vous permettra de retrouver votre carte d'adhérent.</Text>
         </View>
 
         {/* Divider */}
@@ -152,7 +149,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   memberNumber: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '900',
     color: C.primary,
     letterSpacing: 2,
