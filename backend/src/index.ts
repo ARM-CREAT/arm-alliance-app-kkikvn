@@ -19,7 +19,8 @@ import * as analyticsRoutes from './routes/analytics.js';
 import * as adminRoutes from './routes/admin.js';
 import * as conferenceRoutes from './routes/conferences.js';
 import * as adminAnalyticsRoutes from './routes/adminAnalytics.js';
-import * as memberManagementRoutes from './routes/memberManagement.js';
+// Disabled: memberManagement.ts conflicts with membersApi.ts - using membersApi.ts as the single source of truth
+// import * as memberManagementRoutes from './routes/memberManagement.js';
 import * as geographyRoutes from './routes/geography.js';
 import * as electionsRoutes from './routes/elections.js';
 import * as internalMessagingRoutes from './routes/internalMessaging.js';
@@ -135,7 +136,7 @@ analyticsRoutes.register(app, app.fastify);
 adminRoutes.register(app, app.fastify);
 conferenceRoutes.register(app, app.fastify);
 adminAnalyticsRoutes.register(app, app.fastify);
-memberManagementRoutes.register(app, app.fastify);
+// memberManagementRoutes.register(app, app.fastify); // Disabled: conflicts with membersApi.ts
 geographyRoutes.register(app, app.fastify);
 electionsRoutes.register(app, app.fastify);
 internalMessagingRoutes.register(app, app.fastify);
