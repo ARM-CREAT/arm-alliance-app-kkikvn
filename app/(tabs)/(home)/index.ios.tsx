@@ -17,6 +17,8 @@ import { IconSymbol } from "@/components/IconSymbol";
 import { apiGet } from "@/utils/api";
 import { colors } from "@/styles/commonStyles";
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from "@expo/vector-icons";
+import { PROGRAM_POINTS } from "@/constants/programData";
 
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
@@ -219,6 +221,12 @@ export default function HomeScreen() {
     router.push('/program');
   };
 
+  const handleProgramPoint = (idx: number) => {
+    console.log('[HomeScreen iOS] Carte programme appuyée, point:', idx + 1, PROGRAM_POINTS[idx].title);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({ pathname: '/program', params: { index: String(idx) } });
+  };
+
   const handleMembersList = () => {
     console.log('[HomeScreen iOS] Bouton Liste des adhérents appuyé');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -301,6 +309,49 @@ export default function HomeScreen() {
                   <Text style={styles.statsBannerLabel}>membres inscrits</Text>
                 </View>
               )}
+            </View>
+
+            {/* Notre Programme section */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionHeader}>
+                  <IconSymbol
+                    ios_icon_name="doc.text.fill"
+                    android_material_icon_name="description"
+                    size={24}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.sectionTitle}>Notre Programme</Text>
+                </View>
+                <TouchableOpacity onPress={handleProgram} activeOpacity={0.7}>
+                  <Text style={styles.voirToutText}>Voir tout</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.programGrid}>
+                {PROGRAM_POINTS.map((pt, idx) => {
+                  const num = String(idx + 1);
+                  return (
+                    <TouchableOpacity
+                      key={num}
+                      style={styles.programCard}
+                      onPress={() => handleProgramPoint(idx)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.programCardAccent, { backgroundColor: pt.color }]} />
+                      <View style={styles.programCardInner}>
+                        <Text style={[styles.programCardNumber, { color: pt.color }]}>{num}</Text>
+                        <View style={[styles.programCardIconWrap, { backgroundColor: pt.color + '18' }]}>
+                          <Ionicons name={pt.icon} size={20} color={pt.color} />
+                        </View>
+                        <Text style={styles.programCardTitle} numberOfLines={2}>{pt.title}</Text>
+                        <View style={styles.programCardArrow}>
+                          <Ionicons name="chevron-forward" size={13} color={pt.color} />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
 
             <View style={styles.section}>
@@ -1008,5 +1059,52 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 20,
+  },
+  programGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  programCard: {
+    width: '47.5%',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  programCardAccent: {
+    height: 4,
+    width: '100%',
+  },
+  programCardInner: {
+    padding: 12,
+  },
+  programCardNumber: {
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 30,
+    marginBottom: 6,
+  },
+  programCardIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  programCardTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    lineHeight: 17,
+    marginBottom: 6,
+  },
+  programCardArrow: {
+    alignSelf: 'flex-end',
   },
 });
