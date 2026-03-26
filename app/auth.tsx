@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   View,
@@ -14,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { Modal } from "@/components/ui/Modal";
 import { colors } from "@/styles/commonStyles";
+import { IconSymbol } from "@/components/IconSymbol";
 
 type Mode = "signin" | "signup";
 
@@ -27,6 +29,7 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalConfig, setModalConfig] = useState({
     title: '',
@@ -48,6 +51,7 @@ export default function AuthScreen() {
   }
 
   const handleEmailAuth = async () => {
+    console.log('User tapped email auth button');
     if (!email || !password) {
       showModal("Erreur", "Veuillez entrer votre email et mot de passe");
       return;
@@ -56,9 +60,11 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       if (mode === "signin") {
+        console.log('Signing in with email');
         await signInWithEmail(email, password);
         router.replace("/admin/dashboard");
       } else {
+        console.log('Signing up with email');
         await signUpWithEmail(email, password, name);
         showModal(
           "Succès",
@@ -68,6 +74,7 @@ export default function AuthScreen() {
         router.replace("/admin/dashboard");
       }
     } catch (error: any) {
+      console.error('Email auth error:', error);
       showModal("Erreur", error.message || "Échec de l'authentification");
     } finally {
       setLoading(false);
@@ -75,6 +82,7 @@ export default function AuthScreen() {
   };
 
   const handleSocialAuth = async (provider: "google" | "apple" | "github") => {
+    console.log('User tapped social auth button:', provider);
     setLoading(true);
     try {
       if (provider === "google") {
@@ -86,10 +94,16 @@ export default function AuthScreen() {
       }
       router.replace("/admin/dashboard");
     } catch (error: any) {
+      console.error('Social auth error:', error);
       showModal("Erreur", error.message || "Échec de l'authentification");
     } finally {
       setLoading(false);
     }
+  };
+
+  const togglePasswordVisibility = () => {
+    console.log('User toggled password visibility');
+    setShowPassword(!showPassword);
   };
 
   return (
@@ -133,15 +147,29 @@ export default function AuthScreen() {
             autoCorrect={false}
           />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe"
-            placeholderTextColor={colors.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Mot de passe"
+              placeholderTextColor={colors.textSecondary}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={togglePasswordVisibility}
+              activeOpacity={0.7}
+            >
+              <IconSymbol
+                ios_icon_name={showPassword ? "eye.slash.fill" : "eye.fill"}
+                android_material_icon_name={showPassword ? "visibility-off" : "visibility"}
+                size={24}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.primaryButton, loading && styles.buttonDisabled]}
@@ -242,6 +270,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: colors.card,
     color: colors.text,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    marginBottom: 16,
+    backgroundColor: colors.card,
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: colors.text,
+  },
+  eyeButton: {
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   primaryButton: {
     height: 50,

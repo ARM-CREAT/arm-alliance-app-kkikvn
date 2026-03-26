@@ -1,159 +1,124 @@
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
   Platform,
-  ActivityIndicator,
+  Alert,
   Dimensions,
+  ImageSourcePropType,
+  Image,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
-import { Modal } from '@/components/ui/Modal';
-import { colors } from '@/styles/commonStyles';
-import * as Haptics from 'expo-haptics';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
+const PRIMARY = '#2E7D32';
+const DARK_GREEN = '#1a5c2a';
+const ACCENT = '#FFC107';
 const { width } = Dimensions.get('window');
+const CARD_WIDTH = width - 40;
 
 interface MemberData {
-  id: string;
-  fullName: string;
-  membershipNumber: string;
-  commune: string;
-  profession: string;
-  status: 'pending' | 'active' | 'suspended';
-  role: string;
-  qrCode: string;
-  createdAt: string;
+  id?: string;
+  member_number?: string;
+  full_name?: string;
+  phone?: string;
+  commune?: string;
+  status?: string;
+  created_at?: string;
+}
+
+function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  if (typeof source === 'string') return { uri: source };
+  return source as ImageSourcePropType;
+}
+
+function formatDate(dateString?: string): string {
+  if (!dateString) return '—';
+  try {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateString;
+  }
 }
 
 export default function MemberCardScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [memberData, setMemberData] = useState<MemberData | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalMessage, setModalMessage] = useState('');
+  const params = useLocalSearchParams<{
+    member?: string;
+    member_number?: string;
+    full_name?: string;
+    commune?: string;
+    status?: string;
+    created_at?: string;
+  }>();
 
-  useEffect(() => {
-    loadMemberCard();
-  }, []);
+  let member: MemberData | null = null;
 
-  const loadMemberCard = async () => {
-    console.log('[MemberCard] Loading member card data');
-    setLoading(true);
-
+  if (params.member) {
     try {
-      const { authenticatedGet } = await import('@/utils/api');
-      
-      const response = await authenticatedGet('/api/members/me');
-      
-      console.log('[MemberCard] Member data loaded:', response);
-      
-      setMemberData(response);
-    } catch (error: any) {
-      console.error('[MemberCard] Error loading member card:', error);
-      showModal('Erreur', error?.message || 'Impossible de charger votre carte de membre. Veuillez vous connecter ou vous inscrire.');
-    } finally {
-      setLoading(false);
+      member = JSON.parse(params.member) as MemberData;
+      console.log('[MemberCard] Données reçues via param member:', member.member_number);
+    } catch {
+      console.log('[MemberCard] Erreur parsing param member');
     }
-  };
-
-  const showModal = (title: string, message: string) => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setModalVisible(true);
-  };
-
-  const handlePayCotisation = () => {
-    console.log('User tapped Pay Cotisation button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push('/member/cotisation');
-  };
-
-  const handleViewMessages = () => {
-    console.log('User tapped View Messages button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push('/member/messages' as any);
-  };
-
-  const handleSubmitElectionResults = () => {
-    console.log('User tapped Submit Election Results button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    router.push('/member/election-results' as any);
-  };
-
-  const getStatusColor = (status: string) => {
-    const statusColors = {
-      active: '#10B981',
-      pending: '#F59E0B',
-      suspended: '#EF4444',
+  } else if (params.member_number) {
+    member = {
+      member_number: params.member_number,
+      full_name: params.full_name,
+      commune: params.commune,
+      status: params.status,
+      created_at: params.created_at,
     };
-    return statusColors[status as keyof typeof statusColors] || colors.textSecondary;
-  };
-
-  const getStatusText = (status: string) => {
-    const statusTexts = {
-      active: 'Actif',
-      pending: 'En attente',
-      suspended: 'Suspendu',
-    };
-    return statusTexts[status as keyof typeof statusTexts] || status;
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Stack.Screen
-          options={{
-            title: 'Carte de Membre',
-            headerShown: true,
-          }}
-        />
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
-      </View>
-    );
+    console.log('[MemberCard] Données reçues via params individuels:', member.member_number);
   }
 
-  if (!memberData) {
+  const handleHome = () => {
+    console.log('[MemberCard] Bouton Retour à l\'accueil appuyé');
+    router.replace('/(tabs)');
+  };
+
+  const handleShare = () => {
+    console.log('[MemberCard] Bouton Partager ma carte appuyé');
+    Alert.alert('Partager', 'Fonctionnalité de partage bientôt disponible.');
+  };
+
+  if (!member) {
     return (
-      <View style={styles.errorContainer}>
+      <View style={styles.emptyContainer}>
         <Stack.Screen
           options={{
             title: 'Carte de Membre',
             headerShown: true,
+            headerBackTitle: 'Retour',
+            headerStyle: { backgroundColor: PRIMARY },
+            headerTintColor: '#fff',
           }}
         />
-        <IconSymbol
-          ios_icon_name="exclamationmark.triangle"
-          android_material_icon_name="warning"
-          size={48}
-          color={colors.textSecondary}
-        />
-        <Text style={styles.errorText}>Aucune carte de membre trouvée</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => router.push('/member/register')}
-        >
-          <Text style={styles.retryButtonText}>S&apos;inscrire</Text>
+        <Ionicons name="card-outline" size={64} color="#ccc" />
+        <Text style={styles.emptyText}>Aucune donnée de carte disponible</Text>
+        <TouchableOpacity style={styles.homeButton} onPress={handleHome} activeOpacity={0.85}>
+          <Text style={styles.homeButtonText}>Retour à l'accueil</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const statusColor = getStatusColor(memberData.status);
-  const statusText = getStatusText(memberData.status);
+  const memberNumber = member.member_number || '—';
+  const fullName = member.full_name || '—';
+  const commune = member.commune || '—';
+  const statusRaw = member.status || 'active';
+  const statusLabel = statusRaw === 'active' ? 'Actif' : statusRaw === 'pending' ? 'En attente' : statusRaw;
+  const statusColor = statusRaw === 'active' ? '#34C759' : statusRaw === 'pending' ? '#FF9500' : '#8E8E93';
+  const joinDate = formatDate(member.created_at);
+  const monoFont = Platform.OS === 'ios' ? 'Courier' : 'monospace';
 
   return (
     <View style={styles.container}>
@@ -161,165 +126,96 @@ export default function MemberCardScreen() {
         options={{
           title: 'Carte de Membre',
           headerShown: true,
+          headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: PRIMARY },
+          headerTintColor: '#fff',
+          headerTitleStyle: { fontWeight: '700' },
         }}
       />
-
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Digital Member Card */}
-        <View style={styles.cardContainer}>
+        {/* Success banner */}
+        <View style={styles.successBanner}>
+          <Ionicons name="checkmark-circle" size={28} color={ACCENT} />
+          <Text style={styles.successText}>Inscription confirmée !</Text>
+        </View>
+
+        {/* Digital Card */}
+        <View style={styles.cardShadow}>
           <View style={styles.card}>
             {/* Card Header */}
             <View style={styles.cardHeader}>
               <Image
-                source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
+                source={resolveImageSource(require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg'))}
                 style={styles.cardLogo}
-                resizeMode="contain"
               />
               <View style={styles.cardHeaderText}>
-                <Text style={styles.cardTitle}>A.R.M</Text>
-                <Text style={styles.cardSubtitle}>Carte de Membre</Text>
+                <Text style={styles.cardOrgName}>ALLIANCE POUR LE RENOUVEAU DU MALI</Text>
+                <Text style={styles.cardLabel}>CARTE DE MEMBRE</Text>
+              </View>
+              <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+                <Text style={styles.statusBadgeText}>{statusLabel}</Text>
               </View>
             </View>
 
-            {/* Member Info */}
-            <View style={styles.cardBody}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Nom</Text>
-                <Text style={styles.infoValue}>{memberData.fullName}</Text>
-              </View>
+            {/* Gold stripe */}
+            <View style={styles.goldStripe} />
 
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>N° Membre</Text>
-                <Text style={styles.infoValueBold}>{memberData.membershipNumber}</Text>
-              </View>
-
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Commune</Text>
-                <Text style={styles.infoValue}>{memberData.commune}</Text>
-              </View>
-
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Profession</Text>
-                <Text style={styles.infoValue}>{memberData.profession}</Text>
-              </View>
-
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Statut</Text>
-                <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-                  <Text style={styles.statusText}>{statusText}</Text>
-                </View>
-              </View>
+            {/* Shield icon */}
+            <View style={styles.shieldRow}>
+              <Ionicons name="shield-checkmark" size={32} color={ACCENT} />
             </View>
 
-            {/* QR Code */}
-            <View style={styles.qrCodeContainer}>
-              <Image
-                source={{ uri: memberData.qrCode }}
-                style={styles.qrCode}
-                resizeMode="contain"
-              />
-              <Text style={styles.qrCodeLabel}>Code QR de vérification</Text>
+            {/* Member number */}
+            <View style={styles.memberNumberBox}>
+              <Text style={styles.memberNumberLabel}>NUMÉRO DE MEMBRE</Text>
+              <Text style={[styles.memberNumber, { fontFamily: monoFont }]}>{memberNumber}</Text>
+            </View>
+
+            {/* Divider */}
+            <View style={styles.cardDivider} />
+
+            {/* Info rows */}
+            <View style={styles.infoSection}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>NOM COMPLET</Text>
+                <Text style={styles.infoValue}>{fullName}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>COMMUNE / VILLE</Text>
+                <Text style={styles.infoValue}>{commune}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>DATE D'ADHÉSION</Text>
+                <Text style={styles.infoValue}>{joinDate}</Text>
+              </View>
             </View>
 
             {/* Card Footer */}
             <View style={styles.cardFooter}>
-              <Text style={styles.cardFooterText}>
-                Membre depuis {new Date(memberData.createdAt).toLocaleDateString('fr-FR')}
-              </Text>
+              <Text style={styles.cardFooterText}>Fraternité • Liberté • Égalité</Text>
             </View>
           </View>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.actionsSection}>
-          <Text style={styles.sectionTitle}>Actions Rapides</Text>
+        {/* Hint */}
+        <Text style={styles.hint}>Conservez ce numéro précieusement</Text>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handlePayCotisation}
-            activeOpacity={0.8}
-          >
-            <View style={styles.actionIconContainer}>
-              <IconSymbol
-                ios_icon_name="creditcard.fill"
-                android_material_icon_name="payment"
-                size={24}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Payer ma Cotisation</Text>
-              <Text style={styles.actionSubtitle}>Mensuelle ou annuelle</Text>
-            </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
+        {/* Action buttons */}
+        <TouchableOpacity style={styles.homeButton} onPress={handleHome} activeOpacity={0.85}>
+          <Ionicons name="home" size={18} color="#fff" style={styles.btnIcon} />
+          <Text style={styles.homeButtonText}>Retour à l'accueil</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleViewMessages}
-            activeOpacity={0.8}
-          >
-            <View style={styles.actionIconContainer}>
-              <IconSymbol
-                ios_icon_name="envelope.fill"
-                android_material_icon_name="email"
-                size={24}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Messages Internes</Text>
-              <Text style={styles.actionSubtitle}>Notifications du parti</Text>
-            </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
+        <TouchableOpacity style={styles.shareButton} onPress={handleShare} activeOpacity={0.85}>
+          <Ionicons name="share-social-outline" size={18} color={PRIMARY} style={styles.btnIcon} />
+          <Text style={styles.shareButtonText}>Partager ma carte</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleSubmitElectionResults}
-            activeOpacity={0.8}
-          >
-            <View style={styles.actionIconContainer}>
-              <IconSymbol
-                ios_icon_name="doc.text.fill"
-                android_material_icon_name="description"
-                size={24}
-                color={colors.primary}
-              />
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Module Sentinelle</Text>
-              <Text style={styles.actionSubtitle}>Soumettre résultats électoraux</Text>
-            </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-        </View>
+        <View style={{ height: 40 }} />
       </ScrollView>
-
-      <Modal
-        visible={modalVisible}
-        title={modalTitle}
-        message={modalMessage}
-        onClose={() => setModalVisible(false)}
-      />
     </View>
   );
 }
@@ -327,193 +223,207 @@ export default function MemberCardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F5F5F5',
   },
-  scrollView: {
+  emptyContainer: {
     flex: 1,
-  },
-  contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
-    paddingBottom: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 32,
+    gap: 16,
   },
-  loadingText: {
-    marginTop: 16,
+  emptyText: {
     fontSize: 16,
-    color: colors.textSecondary,
-  },
-  errorContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginTop: 16,
-    marginBottom: 24,
+    color: '#666',
     textAlign: 'center',
   },
-  retryButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.background,
-  },
-  cardContainer: {
+  scrollContent: {
     padding: 20,
+    paddingBottom: 32,
+    alignItems: 'center',
   },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    overflow: 'hidden',
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: DARK_GREEN,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginBottom: 20,
+    gap: 10,
+    width: '100%',
+  },
+  successText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  cardShadow: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 12,
+    borderRadius: 20,
+    marginBottom: 16,
+    width: CARD_WIDTH,
+  },
+  card: {
+    width: CARD_WIDTH,
+    backgroundColor: DARK_GREEN,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: ACCENT + '60',
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
   },
   cardLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: colors.background,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: ACCENT,
   },
   cardHeaderText: {
-    marginLeft: 16,
+    flex: 1,
   },
-  cardTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.background,
+  cardOrgName: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.5,
+    lineHeight: 13,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: colors.background,
-    marginTop: 2,
-  },
-  cardBody: {
-    padding: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontWeight: '500',
-  },
-  infoValue: {
-    fontSize: 15,
-    color: colors.text,
-    fontWeight: '600',
-  },
-  infoValueBold: {
-    fontSize: 16,
-    color: colors.primary,
-    fontWeight: 'bold',
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: ACCENT,
+    letterSpacing: 1.5,
+    marginTop: 3,
   },
   statusBadge: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  statusText: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: '600',
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
-  qrCodeContainer: {
+  goldStripe: {
+    height: 3,
+    backgroundColor: ACCENT,
+  },
+  shieldRow: {
     alignItems: 'center',
-    paddingVertical: 24,
-    backgroundColor: colors.backgroundAlt,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
-  qrCode: {
-    width: 180,
-    height: 180,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 8,
+  memberNumberBox: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
-  qrCodeLabel: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 12,
+  memberNumberLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.6)',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  memberNumber: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: ACCENT,
+    letterSpacing: 2,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginHorizontal: 16,
+  },
+  infoSection: {
+    padding: 16,
+    gap: 12,
+  },
+  infoRow: {
+    gap: 3,
+  },
+  infoLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.55)',
+    letterSpacing: 1.2,
+  },
+  infoValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
   },
   cardFooter: {
-    backgroundColor: colors.backgroundAlt,
-    padding: 16,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     alignItems: 'center',
   },
   cardFooterText: {
+    fontSize: 11,
+    color: ACCENT,
+    fontStyle: 'italic',
+    letterSpacing: 1,
+    fontWeight: '600',
+  },
+  hint: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontStyle: 'italic',
   },
-  actionsSection: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
-  },
-  actionButton: {
+  homeButton: {
+    backgroundColor: PRIMARY,
+    borderRadius: 14,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  actionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.backgroundAlt,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
+    width: '100%',
+    marginBottom: 12,
+    shadowColor: PRIMARY,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  actionContent: {
-    flex: 1,
-  },
-  actionTitle: {
+  homeButtonText: {
+    color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
+    fontWeight: '700',
   },
-  actionSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
+  shareButton: {
+    borderWidth: 2,
+    borderColor: PRIMARY,
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  shareButtonText: {
+    color: PRIMARY,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  btnIcon: {
+    marginRight: 8,
   },
 });

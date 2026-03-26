@@ -1,14 +1,14 @@
 {
   "expo": {
     "name": "Alliance ARM",
-    "slug": "arm-alliance-app-kkikvn",
-    "version": "1.0.0",
+    "slug": "alliance-arm",
+    "version": "1.0.8",
     "orientation": "portrait",
-    "icon": "./assets/images/natively-dark.png",
+    "icon": "./assets/images/SAVE_20251219_163224.jpg",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/natively-dark.png",
+      "image": "./assets/images/SAVE_20251219_163224.jpg",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -21,11 +21,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/natively-dark.png",
+        "foregroundImage": "./assets/images/SAVE_20251219_163224.jpg",
         "backgroundColor": "#000000"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.armmali.app"
+      "package": "com.anonymous.Natively",
+      "versionCode": 10
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -35,16 +35,23 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
-      "expo-localization"
+      "expo-localization",
+      [
+        "react-native-edge-to-edge",
+        {
+          "android": {
+            "enforceNavigationBarContrast": false
+          }
+        }
+      ]
     ],
-    "scheme": "Alliance ARM",
+    "scheme": "alliancearm",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://x2ffj78xtewg9dgzmmm2n8gfuktrnz6m.app.specular.dev"
+      "backendUrl": "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev"
     }
-  },
-  "scheme": "Alliance ARM"
+  }
 }

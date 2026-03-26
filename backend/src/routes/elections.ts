@@ -65,22 +65,48 @@ export function register(app: App, fastify: FastifyInstance) {
       );
 
       try {
-        // Find member by userId
+        // Validate required fields
+        if (!electionType || !region || !cercle || !commune || !bureauVote || !resultsData) {
+          return reply.status(400).send({ error: 'Missing required fields' });
+        }
+
+        // Find member by userId or create a temporary reference
+        let memberId: string | null = null;
         const memberResult = await app.db
           .select()
           .from(schema.memberProfiles)
           .where(eq(schema.memberProfiles.userId, session.user.id));
 
-        if (memberResult.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
+        if (memberResult.length > 0) {
+          memberId = memberResult[0].id;
+        } else {
+          // Log warning but allow submission from non-registered users
+          app.logger.warn(
+            { userId: session.user.id },
+            'Election result submission from user without member profile'
+          );
+          // Create a temporary member profile if needed
+          const tempMember = await app.db
+            .insert(schema.memberProfiles)
+            .values({
+              userId: session.user.id,
+              fullName: 'Pending Verification',
+              commune: commune || 'Unknown',
+              profession: 'Sentinel',
+              phone: '',
+              membershipNumber: `TEMP-${Date.now()}`,
+              qrCode: '',
+              status: 'pending',
+              role: 'militant',
+            })
+            .returning();
+          memberId = tempMember[0].id;
         }
-
-        const memberId = memberResult[0].id;
 
         const result = await app.db
           .insert(schema.electionResults)
           .values({
-            memberId,
+            memberId: memberId as any,
             electionType,
             region,
             cercle,
@@ -93,20 +119,21 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         app.logger.info(
-          { resultId: result[0].id, userId: session.user.id },
-          'Election results submitted'
+          { resultId: result[0].id, userId: session.user.id, electionType, bureauVote },
+          'Election results submitted successfully'
         );
 
         return {
           resultId: result[0].id,
           status: 'pending',
+          message: 'Results submitted successfully and pending verification',
         };
       } catch (error) {
         app.logger.error(
-          { err: error, userId: session.user.id },
+          { err: error, userId: session.user.id, electionType },
           'Failed to submit election results'
         );
-        throw error;
+        return reply.status(500).send({ error: 'Failed to submit election results' });
       }
     }
   );

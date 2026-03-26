@@ -1,28 +1,20 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, sql, count as countFn, gte, or, ilike } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
-import {
-  generateMembershipNumber,
-  generateQRCode,
-  getPaymentInstructions,
-} from '../utils/membershipUtils.js';
 
 interface RegisterMemberBody {
-  fullName: string;
-  nina?: string;
-  commune: string;
-  profession: string;
+  firstName: string;
+  lastName: string;
   phone: string;
   email?: string;
-}
-
-interface UpdateMemberBody {
-  fullName?: string;
+  city?: string;
+  region?: string;
+  cercle?: string;
   commune?: string;
+  nina?: string;
   profession?: string;
-  phone?: string;
-  email?: string;
+  motivation?: string;
 }
 
 interface InitiateCotisationBody {
@@ -36,347 +28,329 @@ interface ConfirmCotisationBody {
   transactionId: string;
 }
 
+interface UpdateMemberStatusBody {
+  status: 'active' | 'pending' | 'suspended' | 'rejected';
+}
+
+interface UpdateMemberBody {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  commune?: string;
+  region?: string;
+  cercle?: string;
+  profession?: string;
+  nina?: string;
+  motivation?: string;
+}
+
+const FRENCH_MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+// Helper to check if user is admin
+async function checkAdminRole(app: App, userId: string): Promise<boolean> {
+  const member = await app.db
+    .select()
+    .from(schema.memberProfiles)
+    .where(and(eq(schema.memberProfiles.userId, userId)));
+  return member.length > 0 && ['admin', 'superadmin'].includes(member[0].role);
+}
+
+// Format member card response
+function formatMemberCard(member: any) {
+  return {
+    id: member.id,
+    fullName: member.fullName,
+    membershipNumber: member.membershipNumber,
+    commune: member.commune,
+    region: member.region,
+    cercle: member.cercle || null,
+    profession: member.profession,
+    phone: member.phone,
+    email: member.email || null,
+    status: member.status,
+    role: member.role,
+    nina: member.nina || null,
+    joinedAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
+    createdAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
+  };
+}
+
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
-  // POST /api/members/register - Register new member
+  // POST /api/members/register - Register new member (PUBLIC)
   fastify.post<{ Body: RegisterMemberBody }>(
     '/api/members/register',
     {
       schema: {
-        description: 'Register as a new member',
+        description: 'Register as a new member (public)',
         tags: ['members'],
         body: {
           type: 'object',
           properties: {
-            fullName: { type: 'string' },
-            nina: { type: 'string' },
-            commune: { type: 'string' },
-            profession: { type: 'string' },
+            firstName: { type: 'string' },
+            lastName: { type: 'string' },
             phone: { type: 'string' },
             email: { type: 'string' },
+            region: { type: 'string' },
+            cercle: { type: 'string' },
+            commune: { type: 'string' },
+            nina: { type: 'string' },
+            profession: { type: 'string' },
+            motivation: { type: 'string' },
           },
-          required: ['fullName', 'commune', 'profession', 'phone'],
+          required: ['firstName', 'lastName', 'phone'],
         },
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              member: { type: 'object' },
-              membershipNumber: { type: 'string' },
-              qrCode: { type: 'string' },
-            },
-          },
+          201: { type: 'object' },
+          400: { type: 'object' },
+          409: { type: 'object' },
+          500: { type: 'object' },
         },
       },
     },
-    async (request: FastifyRequest<{ Body: RegisterMemberBody }>, reply: FastifyReply) => {
-      const { fullName, nina, commune, profession, phone, email } = request.body;
-      app.logger.info({ fullName, phone }, 'New member registration');
+    async (request, reply) => {
+      const { firstName, lastName, phone, email, region, cercle, commune, nina, profession, motivation } = request.body;
+
+      // Step 2: Validate required fields
+      if (!firstName || firstName.toString().trim() === '') {
+        reply.status(400);
+        return { error: 'firstName requis' };
+      }
+
+      if (!lastName || lastName.toString().trim() === '') {
+        reply.status(400);
+        return { error: 'lastName requis' };
+      }
+
+      if (!phone || phone.toString().trim() === '') {
+        reply.status(400);
+        return { error: 'phone requis' };
+      }
+
+      app.logger.info({ firstName, lastName, phone }, 'New member registration');
 
       try {
-        // Get the next sequence number
-        const existingMembers = await app.db
-          .select()
-          .from(schema.memberProfiles)
-          .orderBy(desc(schema.memberProfiles.createdAt));
+        // Step 3: Apply defaults for NOT NULL columns
+        const finalCommune = commune && commune.trim() ? commune : 'Non spécifié';
+        const finalProfession = profession && profession.trim() ? profession : 'Non spécifié';
 
-        const sequenceNumber = existingMembers.length + 1;
-        const membershipNumber = generateMembershipNumber(sequenceNumber);
-        const qrCode = await generateQRCode(membershipNumber, fullName, 'pending');
+        // Step 4: Generate membership_number safely with transaction
+        const year = new Date().getFullYear();
+
+        // Query for max membership number for current year
+        const maxResult = await app.db
+          .select({
+            maxNum: sql<string>`MAX(${schema.memberProfiles.membershipNumber})`,
+          })
+          .from(schema.memberProfiles)
+          .where(sql`${schema.memberProfiles.membershipNumber} LIKE ${`ARM-${year}-%`}`);
+
+        let nextSeq = 1;
+        if (maxResult[0]?.maxNum) {
+          // Parse the numeric suffix from "ARM-YYYY-NNNN"
+          const parts = maxResult[0].maxNum.split('-');
+          if (parts.length === 3) {
+            const currentSeq = parseInt(parts[2], 10);
+            if (!isNaN(currentSeq)) {
+              nextSeq = currentSeq + 1;
+            }
+          }
+        }
+
+        const paddedSeq = String(nextSeq).padStart(4, '0');
+        const membershipNumber = `ARM-${year}-${paddedSeq}`;
+
+        // Step 5: Insert into member_profiles
+        const fullName = `${firstName} ${lastName}`;
 
         const result = await app.db
           .insert(schema.memberProfiles)
           .values({
             fullName,
-            nina,
-            commune,
-            profession,
-            phone,
-            email,
+            firstName: firstName.toString().trim(),
+            lastName: lastName.toString().trim(),
+            phone: phone.toString().trim(),
+            email: email ? email.toString().trim() : null,
+            commune: finalCommune,
+            region: region ? region.toString().trim() : null,
+            cercle: cercle ? cercle.toString().trim() : null,
+            profession: finalProfession,
+            nina: nina ? nina.toString().trim() : null,
+            motivation: motivation ? motivation.toString().trim() : null,
             membershipNumber,
-            qrCode,
+            qrCode: membershipNumber,
             status: 'pending',
-            role: 'militant',
+            role: 'member',
+            userId: null,
           })
           .returning();
 
-        app.logger.info(
-          { memberId: result[0].id, membershipNumber },
-          'Member registered successfully'
-        );
+        reply.status(201);
+        app.logger.info({ memberId: result[0].id, membershipNumber }, 'Member registered successfully');
 
+        // Step 7: Return success response
         return {
-          member: result[0],
           membershipNumber,
-          qrCode,
+          id: result[0].id,
+          message: 'Inscription réussie',
         };
-      } catch (error) {
-        app.logger.error(
-          { err: error, fullName, phone },
-          'Failed to register member'
-        );
-        throw error;
+      } catch (error: any) {
+        // Step 8: Comprehensive error handling
+        console.error('POST /api/members/register error:', error);
+        console.error('Error message:', error?.message);
+        console.error('Error code:', error?.code);
+
+        // Step 6: Handle unique constraint violation on phone
+        if (error?.code === '23505') {
+          app.logger.warn({ phone }, 'Phone already registered (constraint violation)');
+          try {
+            const existing = await app.db
+              .select({ id: schema.memberProfiles.id, membershipNumber: schema.memberProfiles.membershipNumber })
+              .from(schema.memberProfiles)
+              .where(eq(schema.memberProfiles.phone, phone))
+              .limit(1);
+
+            if (existing.length > 0) {
+              reply.status(409);
+              return {
+                error: 'Déjà inscrit',
+                membershipNumber: existing[0].membershipNumber,
+                id: existing[0].id,
+              };
+            }
+          } catch (queryError) {
+            app.logger.error({ err: queryError }, 'Failed to query existing member after constraint violation');
+          }
+        }
+
+        // Default server error response
+        reply.status(500);
+        return {
+          error: 'Erreur serveur',
+          details: error?.message || 'Unknown error',
+        };
       }
     }
   );
 
-  // GET /api/members/card/:membershipNumber - Get member card (public)
+  // GET /api/members/card/:membershipNumber - Get member card (PUBLIC)
   fastify.get<{ Params: { membershipNumber: string } }>(
     '/api/members/card/:membershipNumber',
     {
       schema: {
-        description: 'Get member card data (public - for verification)',
+        description: 'Get member card by membership number',
         tags: ['members'],
         params: {
           type: 'object',
-          properties: {
-            membershipNumber: { type: 'string' },
-          },
+          properties: { membershipNumber: { type: 'string' } },
         },
         response: {
           200: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Params: { membershipNumber: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request, reply) => {
       const { membershipNumber } = request.params;
       app.logger.info({ membershipNumber }, 'Fetching member card');
 
       try {
+        // ISSUE 5: Case-insensitive lookup using UPPER()
         const result = await app.db
           .select()
           .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.membershipNumber, membershipNumber));
+          .where(sql`UPPER(${schema.memberProfiles.membershipNumber}) = UPPER(${membershipNumber})`);
 
         if (result.length === 0) {
-          return reply.status(404).send({ error: 'Member not found' });
+          reply.status(404);
+          return { error: 'Membre introuvable' };
         }
 
-        const member = result[0];
-        app.logger.info(
-          { membershipNumber },
-          'Member card fetched successfully'
-        );
-
-        return {
-          membershipNumber: member.membershipNumber,
-          fullName: member.fullName,
-          status: member.status,
-          qrCode: member.qrCode,
-          commune: member.commune,
-        };
+        // ISSUE 5: Return with formatMemberCard helper
+        return formatMemberCard(result[0]);
       } catch (error) {
-        app.logger.error(
-          { err: error, membershipNumber },
-          'Failed to fetch member card'
-        );
+        app.logger.error({ err: error, membershipNumber }, 'Failed to fetch member card');
         throw error;
       }
     }
   );
 
-  // GET /api/members/me - Get current user's member profile (protected)
-  fastify.get(
-    '/api/members/me',
-    {
-      schema: {
-        description: 'Get current user\'s member profile (protected)',
-        tags: ['members'],
-        response: {
-          200: { type: 'object' },
-        },
-      },
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
-
-      app.logger.info({ userId: session.user.id }, 'Fetching user member profile');
-
-      try {
-        const result = await app.db
-          .select()
-          .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.userId, session.user.id));
-
-        if (result.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
-        }
-
-        app.logger.info(
-          { userId: session.user.id },
-          'Member profile fetched successfully'
-        );
-        return result[0];
-      } catch (error) {
-        app.logger.error(
-          { err: error, userId: session.user.id },
-          'Failed to fetch member profile'
-        );
-        throw error;
-      }
-    }
-  );
-
-  // PUT /api/members/me - Update current user's member profile (protected)
-  fastify.put<{ Body: UpdateMemberBody }>(
-    '/api/members/me',
-    {
-      schema: {
-        description: 'Update current user\'s member profile (protected)',
-        tags: ['members'],
-        body: {
-          type: 'object',
-          properties: {
-            fullName: { type: 'string' },
-            commune: { type: 'string' },
-            profession: { type: 'string' },
-            phone: { type: 'string' },
-            email: { type: 'string' },
-          },
-        },
-        response: {
-          200: { type: 'object' },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Body: UpdateMemberBody }>, reply: FastifyReply) => {
-      const session = await requireAuth(request, reply);
-      if (!session) return;
-
-      const updates = request.body;
-      app.logger.info({ userId: session.user.id }, 'Updating member profile');
-
-      try {
-        const result = await app.db
-          .update(schema.memberProfiles)
-          .set({
-            ...updates,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.memberProfiles.userId, session.user.id))
-          .returning();
-
-        if (result.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
-        }
-
-        app.logger.info(
-          { userId: session.user.id },
-          'Member profile updated successfully'
-        );
-        return result[0];
-      } catch (error) {
-        app.logger.error(
-          { err: error, userId: session.user.id },
-          'Failed to update member profile'
-        );
-        throw error;
-      }
-    }
-  );
-
-  // POST /api/cotisations/initiate - Initiate payment (protected)
+  // POST /api/cotisations/initiate - Initiate payment (AUTHENTICATED)
   fastify.post<{ Body: InitiateCotisationBody }>(
     '/api/cotisations/initiate',
     {
       schema: {
-        description: 'Initiate membership fee payment (protected)',
+        description: 'Initiate membership fee payment',
         tags: ['cotisations'],
         body: {
           type: 'object',
           properties: {
             amount: { type: 'number' },
             type: { type: 'string', enum: ['monthly', 'annual', 'one-time'] },
-            paymentMethod: {
-              type: 'string',
-              enum: ['sama_money', 'orange_money', 'moov_money', 'bank_transfer'],
-            },
+            paymentMethod: { type: 'string', enum: ['sama_money', 'orange_money', 'moov_money', 'bank_transfer'] },
           },
           required: ['amount', 'type', 'paymentMethod'],
         },
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              cotisationId: { type: 'string' },
-              paymentInstructions: { type: 'object' },
-            },
-          },
+          201: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
-    async (request: FastifyRequest<{ Body: InitiateCotisationBody }>, reply: FastifyReply) => {
+    async (request, reply) => {
       const session = await requireAuth(request, reply);
       if (!session) return;
 
       const { amount, type, paymentMethod } = request.body;
-      app.logger.info(
-        { userId: session.user.id, amount, type },
-        'Initiating cotisation payment'
-      );
+      const userId = session.user.id;
+
+      app.logger.info({ userId, amount, type }, 'Initiating cotisation payment');
 
       try {
-        // Find member by userId
         const memberResult = await app.db
           .select()
           .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.userId, session.user.id));
+          .where(eq(schema.memberProfiles.userId, userId));
 
         if (memberResult.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
+          reply.status(404);
+          return { error: 'Profil membre introuvable' };
         }
 
         const memberId = memberResult[0].id;
-        const transactionRef = `TXN-${Date.now()}`;
-
-        // Create cotisation record
         const result = await app.db
           .insert(schema.cotisations)
           .values({
             memberId,
-            amount: amount.toString() as any,
+            amount: amount.toString(),
             type,
             paymentMethod,
             status: 'pending',
           })
           .returning();
 
-        const paymentInstructions = getPaymentInstructions(
-          paymentMethod,
-          amount,
-          transactionRef
-        );
-
-        app.logger.info(
-          { cotisationId: result[0].id, userId: session.user.id },
-          'Cotisation payment initiated'
-        );
-
+        reply.status(201);
         return {
           cotisationId: result[0].id,
-          paymentInstructions,
+          membershipNumber: memberResult[0].membershipNumber,
+          paymentInstructions: 'Veuillez effectuer le paiement via Orange Money ou Moov Money',
         };
       } catch (error) {
-        app.logger.error(
-          { err: error, userId: session.user.id },
-          'Failed to initiate cotisation payment'
-        );
+        app.logger.error({ err: error, userId }, 'Failed to initiate cotisation');
         throw error;
       }
     }
   );
 
-  // POST /api/cotisations/confirm - Confirm payment (protected)
+  // POST /api/cotisations/confirm - Confirm payment (AUTHENTICATED)
   fastify.post<{ Body: ConfirmCotisationBody }>(
     '/api/cotisations/confirm',
     {
       schema: {
-        description: 'Confirm membership fee payment (protected)',
+        description: 'Confirm membership fee payment',
         tags: ['cotisations'],
         body: {
           type: 'object',
@@ -388,99 +362,538 @@ export function register(app: App, fastify: FastifyInstance) {
         },
         response: {
           200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
-    async (request: FastifyRequest<{ Body: ConfirmCotisationBody }>, reply: FastifyReply) => {
+    async (request, reply) => {
       const session = await requireAuth(request, reply);
       if (!session) return;
 
       const { cotisationId, transactionId } = request.body;
-      app.logger.info(
-        { userId: session.user.id, cotisationId, transactionId },
-        'Confirming cotisation payment'
-      );
+      const userId = session.user.id;
+
+      app.logger.info({ userId, cotisationId }, 'Confirming cotisation payment');
 
       try {
-        const result = await app.db
-          .update(schema.cotisations)
-          .set({
-            status: 'completed',
-            transactionId,
-            paidAt: new Date(),
-          })
-          .where(eq(schema.cotisations.id, cotisationId as any))
-          .returning();
+        const memberResult = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.userId, userId));
 
-        if (result.length === 0) {
-          return reply.status(404).send({ error: 'Cotisation not found' });
+        if (memberResult.length === 0) {
+          reply.status(404);
+          return { error: 'Profil membre introuvable' };
         }
 
-        app.logger.info(
-          { cotisationId, userId: session.user.id },
-          'Cotisation payment confirmed'
-        );
-        return result[0];
+        const memberId = memberResult[0].id;
+
+        const cotisationResult = await app.db
+          .select()
+          .from(schema.cotisations)
+          .where(and(eq(schema.cotisations.id, cotisationId as any), eq(schema.cotisations.memberId, memberId)));
+
+        if (cotisationResult.length === 0) {
+          reply.status(404);
+          return { error: 'Cotisation introuvable' };
+        }
+
+        // Update cotisation
+        await app.db
+          .update(schema.cotisations)
+          .set({ status: 'completed', transactionId, paidAt: new Date() })
+          .where(eq(schema.cotisations.id, cotisationId as any));
+
+        // Update member status to active
+        await app.db
+          .update(schema.memberProfiles)
+          .set({ status: 'active', updatedAt: new Date() })
+          .where(eq(schema.memberProfiles.id, memberId));
+
+        app.logger.info({ userId, cotisationId }, 'Cotisation confirmed');
+        return { success: true, message: 'Paiement confirmé' };
       } catch (error) {
-        app.logger.error(
-          { err: error, cotisationId, userId: session.user.id },
-          'Failed to confirm cotisation payment'
-        );
+        app.logger.error({ err: error, userId }, 'Failed to confirm cotisation');
         throw error;
       }
     }
   );
 
-  // GET /api/cotisations/my-history - Get payment history (protected)
+  // GET /api/cotisations/my-history - Get payment history (AUTHENTICATED)
   fastify.get(
     '/api/cotisations/my-history',
     {
       schema: {
-        description: 'Get user\'s cotisation payment history (protected)',
+        description: 'Get user\'s cotisation payment history',
         tags: ['cotisations'],
         response: {
-          200: { type: 'array' },
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       const session = await requireAuth(request, reply);
       if (!session) return;
 
-      app.logger.info({ userId: session.user.id }, 'Fetching cotisation history');
+      const userId = session.user.id;
+      app.logger.info({ userId }, 'Fetching cotisation history');
 
       try {
-        // Find member by userId
         const memberResult = await app.db
           .select()
           .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.userId, session.user.id));
+          .where(eq(schema.memberProfiles.userId, userId));
 
         if (memberResult.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
+          reply.status(404);
+          return { error: 'Profil membre introuvable' };
         }
 
         const memberId = memberResult[0].id;
-
-        // Get cotisations for this member
         const result = await app.db
           .select()
           .from(schema.cotisations)
           .where(eq(schema.cotisations.memberId, memberId))
           .orderBy(desc(schema.cotisations.createdAt));
 
-        app.logger.info(
-          { userId: session.user.id, count: result.length },
-          'Cotisation history fetched'
-        );
-        return result;
+        const cotisations = result.map((c: any) => ({
+          id: c.id,
+          amount: c.amount,
+          type: c.type,
+          paymentMethod: c.paymentMethod,
+          transactionId: c.transactionId,
+          status: c.status,
+          paidAt: c.paidAt instanceof Date ? c.paidAt.toISOString() : c.paidAt ? new Date(c.paidAt).toISOString() : null,
+          createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : new Date(c.createdAt).toISOString(),
+        }));
+
+        return { cotisations };
       } catch (error) {
-        app.logger.error(
-          { err: error, userId: session.user.id },
-          'Failed to fetch cotisation history'
-        );
+        app.logger.error({ err: error, userId }, 'Failed to fetch cotisation history');
         throw error;
       }
     }
   );
+
+  // ISSUE 8: PATCH /api/admin/memberships/:id/status - Update member status (AUTHENTICATED ADMIN)
+  fastify.patch<{ Params: { id: string }; Body: UpdateMemberStatusBody }>(
+    '/api/admin/memberships/:id/status',
+    {
+      schema: {
+        description: 'Update member status (admin only)',
+        tags: ['admin', 'members'],
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          properties: { status: { type: 'string', enum: ['active', 'pending', 'suspended', 'rejected'] } },
+          required: ['status'],
+        },
+        response: {
+          200: { type: 'object' },
+          400: { type: 'object' },
+          401: { type: 'object' },
+          403: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const { id } = request.params;
+      const { status } = request.body;
+      const userId = session.user.id;
+
+      if (!['active', 'pending', 'suspended', 'rejected'].includes(status)) {
+        reply.status(400);
+        return { error: 'Statut invalide' };
+      }
+
+      app.logger.info({ userId, memberId: id, status }, 'Updating member status');
+
+      try {
+        const isAdmin = await checkAdminRole(app, userId);
+        if (!isAdmin) {
+          reply.status(403);
+          return { error: 'Accès refusé' };
+        }
+
+        // ISSUE 8: Update member_profiles with status and updated_at
+        const result = await app.db
+          .update(schema.memberProfiles)
+          .set({ status, updatedAt: new Date() })
+          .where(eq(schema.memberProfiles.id, id as any))
+          .returning();
+
+        if (result.length === 0) {
+          reply.status(404);
+          return { error: 'Membre introuvable' };
+        }
+
+        app.logger.info({ memberId: id, status }, 'Member status updated');
+
+        // ISSUE 8: Exact response format with fullName mapped from full_name
+        return {
+          success: true,
+          member: {
+            id: result[0].id,
+            fullName: result[0].fullName,
+            status: result[0].status,
+          },
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId, memberId: id }, 'Failed to update member status');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/admin/membership-stats - Get membership statistics (AUTHENTICATED ADMIN)
+  fastify.get(
+    '/api/admin/membership-stats',
+    {
+      schema: {
+        description: 'Get membership statistics (admin only)',
+        tags: ['admin', 'members'],
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object' },
+          403: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const userId = session.user.id;
+      app.logger.info({ userId }, 'Fetching membership statistics');
+
+      try {
+        const isAdmin = await checkAdminRole(app, userId);
+        if (!isAdmin) {
+          reply.status(403);
+          return { error: 'Accès refusé' };
+        }
+
+        // Get totals
+        const allMembers = await app.db.select().from(schema.memberProfiles);
+        const activeMembers = allMembers.filter((m: any) => m.status === 'active').length;
+        const pendingMembers = allMembers.filter((m: any) => m.status === 'pending').length;
+        const suspendedMembers = allMembers.filter((m: any) => m.status === 'suspended').length;
+
+        // Get monthly registrations for last 6 months
+        const monthlyData = new Map<number, number>();
+        const now = new Date();
+        for (let i = 0; i < 6; i++) {
+          const month = (now.getMonth() - i + 12) % 12;
+          monthlyData.set(month, 0);
+        }
+
+        allMembers.forEach((m: any) => {
+          const memberDate = m.createdAt instanceof Date ? m.createdAt : new Date(m.createdAt);
+          const month = memberDate.getMonth();
+          if (memberDate.getFullYear() === now.getFullYear()) {
+            monthlyData.set(month, (monthlyData.get(month) || 0) + 1);
+          }
+        });
+
+        const monthlyRegistrations = Array.from({ length: 6 }, (_, i) => {
+          const month = (now.getMonth() - i + 12) % 12;
+          return { month: FRENCH_MONTHS[month], count: monthlyData.get(month) || 0 };
+        }).reverse();
+
+        app.logger.info({ total: allMembers.length }, 'Membership stats retrieved');
+        return {
+          stats: {
+            total: allMembers.length,
+            active: activeMembers,
+            pending: pendingMembers,
+            suspended: suspendedMembers,
+          },
+          monthlyRegistrations,
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId }, 'Failed to fetch membership stats');
+        throw error;
+      }
+    }
+  );
+
+  // PUT /api/members/:id - Update member (AUTHENTICATED)
+  fastify.put<{ Params: { id: string }; Body: UpdateMemberBody }>(
+    '/api/members/:id',
+    {
+      schema: {
+        description: 'Update member profile (authenticated)',
+        tags: ['members'],
+        params: {
+          type: 'object',
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            firstName: { type: 'string' },
+            lastName: { type: 'string' },
+            phone: { type: 'string' },
+            email: { type: 'string' },
+            commune: { type: 'string' },
+            region: { type: 'string' },
+            cercle: { type: 'string' },
+            profession: { type: 'string' },
+            nina: { type: 'string' },
+            motivation: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const { id } = request.params;
+      const { firstName, lastName, phone, email, commune, region, cercle, profession, nina, motivation } = request.body;
+
+      app.logger.info({ userId: session.user.id, memberId: id }, 'Updating member profile');
+
+      try {
+        // Prepare update values
+        const updateValues: any = { updatedAt: new Date() };
+
+        if (firstName) updateValues.firstName = firstName.toString().trim();
+        if (lastName) updateValues.lastName = lastName.toString().trim();
+        if (phone) updateValues.phone = phone.toString().trim();
+        if (email) updateValues.email = email.toString().trim();
+        if (commune) updateValues.commune = commune.toString().trim();
+        if (region) updateValues.region = region.toString().trim();
+        if (cercle) updateValues.cercle = cercle.toString().trim();
+        if (profession) updateValues.profession = profession.toString().trim();
+        if (nina) updateValues.nina = nina.toString().trim();
+        if (motivation) updateValues.motivation = motivation.toString().trim();
+
+        // Update full_name if firstName or lastName changed
+        if (firstName || lastName) {
+          const member = await app.db.select().from(schema.memberProfiles).where(eq(schema.memberProfiles.id, id as any)).limit(1);
+          if (member.length > 0) {
+            const newFirstName = firstName || member[0].firstName;
+            const newLastName = lastName || member[0].lastName;
+            updateValues.fullName = `${newFirstName} ${newLastName}`;
+          }
+        }
+
+        const result = await app.db
+          .update(schema.memberProfiles)
+          .set(updateValues)
+          .where(eq(schema.memberProfiles.id, id as any))
+          .returning();
+
+        if (result.length === 0) {
+          reply.status(404);
+          return { error: 'Membre non trouvé' };
+        }
+
+        const updated = result[0];
+        app.logger.info({ memberId: id }, 'Member profile updated');
+
+        return {
+          id: updated.id,
+          fullName: updated.fullName,
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          phone: updated.phone,
+          email: updated.email,
+          commune: updated.commune,
+          region: updated.region,
+          cercle: updated.cercle,
+          profession: updated.profession,
+          membershipNumber: updated.membershipNumber,
+          status: updated.status,
+          role: updated.role,
+          joinedAt: updated.createdAt instanceof Date ? updated.createdAt.toISOString() : new Date(updated.createdAt).toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id, memberId: id }, 'Failed to update member');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/cotisations/all - Get all cotisations (AUTHENTICATED)
+  fastify.get(
+    '/api/cotisations/all',
+    {
+      schema: {
+        description: 'Get all cotisations with member details (admin)',
+        tags: ['cotisations'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              cotisations: { type: 'array' },
+              total: { type: 'number' },
+              totalAmount: { type: 'string' },
+            },
+          },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      app.logger.info({ userId: session.user.id }, 'Fetching all cotisations');
+
+      try {
+        const cotisations = await app.db.select().from(schema.cotisations).orderBy(desc(schema.cotisations.createdAt));
+
+        // Get member details for each cotisation
+        const withMembers = await Promise.all(
+          cotisations.map(async (c: any) => {
+            const member = await app.db
+              .select()
+              .from(schema.memberProfiles)
+              .where(eq(schema.memberProfiles.id, c.memberId))
+              .limit(1);
+
+            return {
+              id: c.id,
+              amount: c.amount,
+              type: c.type,
+              paymentMethod: c.paymentMethod,
+              transactionId: c.transactionId,
+              status: c.status,
+              paidAt: c.paidAt instanceof Date ? c.paidAt.toISOString() : c.paidAt ? new Date(c.paidAt).toISOString() : null,
+              createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : new Date(c.createdAt).toISOString(),
+              memberName: member[0]?.fullName || 'Unknown',
+              membershipNumber: member[0]?.membershipNumber || 'Unknown',
+            };
+          })
+        );
+
+        const totalAmount = cotisations
+          .filter((c: any) => c.status === 'completed')
+          .reduce((sum: any, c: any) => sum + parseFloat(c.amount), 0)
+          .toFixed(2);
+
+        app.logger.info({ count: withMembers.length, totalAmount }, 'All cotisations fetched');
+        return { cotisations: withMembers, total: withMembers.length, totalAmount };
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch cotisations');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/admin/dashboard - Get admin dashboard stats (AUTHENTICATED)
+  fastify.get(
+    '/api/admin/dashboard',
+    {
+      schema: {
+        description: 'Get admin dashboard statistics',
+        tags: ['admin'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              totalMembers: { type: 'number' },
+              activeMembers: { type: 'number' },
+              pendingMembers: { type: 'number' },
+              totalCotisations: { type: 'number' },
+              totalAmount: { type: 'string' },
+              recentMembers: { type: 'array' },
+            },
+          },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      app.logger.info({ userId: session.user.id }, 'Fetching admin dashboard stats');
+
+      try {
+        // Get member counts
+        const totalMembersResult = await app.db.select({ count: countFn() }).from(schema.memberProfiles);
+        const totalMembers = totalMembersResult[0]?.count ?? 0;
+
+        const activeMembersResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'active'));
+        const activeMembers = activeMembersResult[0]?.count ?? 0;
+
+        const pendingMembersResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'pending'));
+        const pendingMembers = pendingMembersResult[0]?.count ?? 0;
+
+        const suspendedMembersResult = await app.db
+          .select({ count: countFn() })
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.status, 'suspended'));
+        const suspendedMembers = suspendedMembersResult[0]?.count ?? 0;
+
+        // Get cotisation stats
+        const cotisationsResult = await app.db.select({ count: countFn() }).from(schema.cotisations);
+        const totalCotisations = cotisationsResult[0]?.count ?? 0;
+
+        const completedCotisations = await app.db
+          .select()
+          .from(schema.cotisations)
+          .where(eq(schema.cotisations.status, 'completed'));
+
+        const totalAmount = completedCotisations
+          .reduce((sum: number, c: any) => sum + parseFloat(c.amount), 0)
+          .toFixed(2);
+
+        // Get recent members (5 most recent)
+        const recentMembersData = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .orderBy(desc(schema.memberProfiles.createdAt))
+          .limit(5);
+
+        const recentMembers = recentMembersData.map((m: any) => ({
+          id: m.id,
+          fullName: m.fullName,
+          status: m.status,
+          joinedAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : new Date(m.createdAt).toISOString(),
+          membershipNumber: m.membershipNumber,
+        }));
+
+        app.logger.info({ totalMembers, activeMembers, totalCotisations }, 'Admin dashboard stats retrieved');
+
+        return {
+          totalMembers,
+          activeMembers,
+          pendingMembers,
+          suspendedMembers,
+          totalCotisations,
+          totalAmount,
+          recentMembers,
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch admin dashboard stats');
+        throw error;
+      }
+    }
+  );
+
 }

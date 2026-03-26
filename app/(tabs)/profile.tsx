@@ -1,203 +1,304 @@
 
 import React, { useState } from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
   Platform,
   TextInput,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator
+  ActivityIndicator,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
-import * as Haptics from 'expo-haptics';
+import { AnimatedPressable } from "@/components/AnimatedPressable";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+
+const BACKEND_URL = "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev";
+const REGISTER_URL = `${BACKEND_URL}/api/members/register`;
+
+interface FormErrors {
+  fullName?: string;
+  phone?: string;
+}
 
 export default function MembershipScreen() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [region, setRegion] = useState('');
-  const [cercle, setCercle] = useState('');
-  const [commune, setCommune] = useState('');
+  const router = useRouter();
+
+  // Required fields
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  // Optional fields
+  const [email, setEmail] = useState("");
+  const [region, setRegion] = useState("");
+  const [commune, setCommune] = useState("");
+  const [profession, setProfession] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [errorBanner, setErrorBanner] = useState("");
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const validate = (): boolean => {
+    const newErrors: FormErrors = {};
+    if (!fullName.trim()) newErrors.fullName = "Le nom complet est requis";
+    if (!phone.trim()) newErrors.phone = "Le numéro de téléphone est requis";
+    else if (phone.trim().length < 8) newErrors.phone = "Le numéro doit contenir au moins 8 caractères";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async () => {
-    console.log('User tapped Submit Membership button');
-    
-    if (!name || !email || !phone || !region) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+    console.log("[Profile] Bouton 'Envoyer ma demande' appuyé");
+    setErrorBanner("");
+
+    if (!validate()) {
+      console.log("[Profile] Validation échouée", errors);
       return;
     }
 
-    if (Platform.OS === 'ios') {
+    if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
     setLoading(true);
-    console.log('Submitting membership:', { name, email, phone, region, cercle, commune });
+
+    const payload: Record<string, string> = {
+      full_name: fullName.trim(),
+      phone: phone.trim(),
+    };
+    if (email.trim()) payload.email = email.trim();
+    if (region.trim()) payload.region = region.trim();
+    if (commune.trim()) payload.commune = commune.trim();
+    if (profession.trim()) payload.profession = profession.trim();
+
+    console.log("[Profile] POST /api/members/register", JSON.stringify(payload));
 
     try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall('/api/membership', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          email,
-          phone,
-          region,
-          cercle: cercle || undefined,
-          commune: commune || undefined,
-        }),
+      const response = await fetch(REGISTER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      setLoading(false);
+      if (!response.ok) {
+        const text = await response.text();
+        console.log("[Profile] Erreur HTTP", response.status, text);
 
-      if (error) {
-        Alert.alert('Erreur', `Impossible d'envoyer votre demande: ${error}`);
+        if (response.status === 409) {
+          setErrorBanner("Un membre avec ce numéro de téléphone existe déjà.");
+          return;
+        }
+
+        let message = `Erreur ${response.status}. Veuillez réessayer.`;
+        try {
+          const json = JSON.parse(text);
+          message = json.error || json.message || message;
+        } catch {
+          message = text || message;
+        }
+        setErrorBanner(message);
         return;
       }
 
-      if (Platform.OS === 'ios') {
+      const data = await response.json();
+      const membershipNumber = data.membership_number ?? data.membershipNumber ?? "";
+      const returnedName = data.full_name ?? fullName.trim();
+      console.log("[Profile] Inscription réussie:", membershipNumber);
+
+      if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      Alert.alert(
-        'Demande envoyée',
-        'Votre demande d\'adhésion a été envoyée avec succès. Nous vous contactons bientôt.',
-        [{ text: 'OK', onPress: () => {
-          setName('');
-          setEmail('');
-          setPhone('');
-          setRegion('');
-          setCercle('');
-          setCommune('');
-        }}]
-      );
-    } catch (error) {
+      router.push({
+        pathname: "/member/success",
+        params: {
+          membership_number: membershipNumber,
+          full_name: returnedName,
+        },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[Profile] Erreur réseau:", message);
+      setErrorBanner("Erreur réseau. Vérifiez votre connexion.");
+    } finally {
       setLoading(false);
-      console.error('Error submitting membership:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue. Veuillez réessayer.');
     }
   };
 
+  const inputStyle = (field: string, hasError?: boolean) => [
+    styles.input,
+    focusedField === field && styles.inputFocused,
+    hasError && styles.inputError,
+  ];
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Header */}
       <View style={styles.header}>
-        <IconSymbol 
-          ios_icon_name="person.badge.plus.fill" 
-          android_material_icon_name="person-add" 
-          size={48} 
-          color={colors.primary} 
-        />
-        <Text style={styles.title}>Adhérer au Parti</Text>
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerBadgeText}>ARM</Text>
+        </View>
+        <Text style={styles.title}>Adhésion ARM</Text>
         <Text style={styles.subtitle}>
-          Rejoignez l&apos;Alliance pour le Rassemblement Malien
+          Rejoignez l'Alliance pour le Rassemblement Malien
         </Text>
       </View>
 
+      {/* Error Banner */}
+      {errorBanner ? (
+        <View style={styles.errorBanner}>
+          <Ionicons name="alert-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
+          <Text style={styles.errorBannerText}>{errorBanner}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.form}>
+        <Text style={styles.sectionLabel}>Informations requises</Text>
+
+        {/* Nom complet */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Nom complet *</Text>
+          <Text style={styles.label}>
+            Nom complet <Text style={styles.required}>*</Text>
+          </Text>
           <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Votre nom complet"
-            placeholderTextColor={colors.textSecondary}
+            style={inputStyle("fullName", !!errors.fullName)}
+            value={fullName}
+            onChangeText={(t) => {
+              setFullName(t);
+              if (errors.fullName) setErrors((e) => ({ ...e, fullName: undefined }));
+            }}
+            placeholder="Prénom et nom de famille"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
             editable={!loading}
+            onFocus={() => setFocusedField("fullName")}
+            onBlur={() => setFocusedField(null)}
           />
+          {errors.fullName ? <Text style={styles.errorText}>{errors.fullName}</Text> : null}
         </View>
 
+        {/* Téléphone */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email *</Text>
+          <Text style={styles.label}>
+            Téléphone <Text style={styles.required}>*</Text>
+          </Text>
           <TextInput
-            style={styles.input}
+            style={inputStyle("phone", !!errors.phone)}
+            value={phone}
+            onChangeText={(t) => {
+              setPhone(t);
+              if (errors.phone) setErrors((e) => ({ ...e, phone: undefined }));
+            }}
+            placeholder="+223 XX XX XX XX"
+            placeholderTextColor={colors.textTertiary}
+            keyboardType="phone-pad"
+            editable={!loading}
+            onFocus={() => setFocusedField("phone")}
+            onBlur={() => setFocusedField(null)}
+          />
+          {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+        </View>
+
+        <View style={styles.divider} />
+        <Text style={styles.sectionLabel}>Informations optionnelles</Text>
+
+        {/* Email */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={inputStyle("email")}
             value={email}
             onChangeText={setEmail}
             placeholder="votre@email.com"
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={colors.textTertiary}
             keyboardType="email-address"
             autoCapitalize="none"
             editable={!loading}
+            onFocus={() => setFocusedField("email")}
+            onBlur={() => setFocusedField(null)}
           />
         </View>
 
+        {/* Région */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Téléphone *</Text>
+          <Text style={styles.label}>Région</Text>
           <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="+223 XX XX XX XX"
-            placeholderTextColor={colors.textSecondary}
-            keyboardType="phone-pad"
-            editable={!loading}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Région *</Text>
-          <TextInput
-            style={styles.input}
+            style={inputStyle("region")}
             value={region}
             onChangeText={setRegion}
             placeholder="Votre région"
-            placeholderTextColor={colors.textSecondary}
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
             editable={!loading}
+            onFocus={() => setFocusedField("region")}
+            onBlur={() => setFocusedField(null)}
           />
         </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Cercle</Text>
-          <TextInput
-            style={styles.input}
-            value={cercle}
-            onChangeText={setCercle}
-            placeholder="Votre cercle (optionnel)"
-            placeholderTextColor={colors.textSecondary}
-            editable={!loading}
-          />
-        </View>
-
+        {/* Commune */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Commune</Text>
           <TextInput
-            style={styles.input}
+            style={inputStyle("commune")}
             value={commune}
             onChangeText={setCommune}
-            placeholder="Votre commune (optionnel)"
-            placeholderTextColor={colors.textSecondary}
+            placeholder="Votre commune"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
             editable={!loading}
+            onFocus={() => setFocusedField("commune")}
+            onBlur={() => setFocusedField(null)}
           />
         </View>
 
-        <TouchableOpacity 
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.background} />
-          ) : (
-            <Text style={styles.submitButtonText}>Envoyer ma demande</Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.infoBox}>
-          <IconSymbol 
-            ios_icon_name="info.circle.fill" 
-            android_material_icon_name="info" 
-            size={20} 
-            color={colors.primary} 
+        {/* Profession */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Profession</Text>
+          <TextInput
+            style={inputStyle("profession")}
+            value={profession}
+            onChangeText={setProfession}
+            placeholder="Votre profession"
+            placeholderTextColor={colors.textTertiary}
+            autoCapitalize="words"
+            editable={!loading}
+            onFocus={() => setFocusedField("profession")}
+            onBlur={() => setFocusedField(null)}
           />
+        </View>
+
+        {/* Info */}
+        <View style={styles.infoBox}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} style={{ marginRight: 10, marginTop: 1 }} />
           <Text style={styles.infoText}>
-            Votre demande sera examinée par notre équipe. Vous recevrez une confirmation par email.
+            Votre numéro d'adhérent sera généré automatiquement après soumission.
           </Text>
         </View>
+
+        <AnimatedPressable
+          onPress={handleSubmit}
+          disabled={loading}
+          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+        >
+          {loading ? (
+            <>
+              <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
+              <Text style={styles.submitButtonText}>Inscription en cours...</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.submitButtonText}>Adhérer maintenant</Text>
+            </>
+          )}
+        </AnimatedPressable>
       </View>
 
       <View style={styles.bottomSpacer} />
@@ -211,41 +312,94 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 48 : 0,
+    paddingTop: Platform.OS === "android" ? 48 : 0,
     paddingBottom: 100,
   },
   header: {
-    alignItems: 'center',
-    paddingVertical: 32,
+    alignItems: "center",
+    paddingVertical: 36,
     paddingHorizontal: 20,
+    backgroundColor: colors.primary,
+  },
+  headerBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.accent,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  headerBadgeText: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: colors.primary,
+    letterSpacing: 1,
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 16,
+    fontWeight: "800",
+    color: "#FFFFFF",
     marginBottom: 8,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    fontSize: 15,
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.danger,
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   form: {
     paddingHorizontal: 20,
+    paddingTop: 24,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginVertical: 20,
   },
   inputGroup: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: "600",
     color: colors.text,
     marginBottom: 8,
   },
+  required: {
+    color: colors.danger,
+  },
   input: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -253,11 +407,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
+  inputFocused: {
+    borderColor: colors.primary,
+    backgroundColor: "#FFFFFF",
+  },
+  inputError: {
+    borderColor: colors.danger,
+    backgroundColor: "#FFF5F5",
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: colors.primaryMuted,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
   submitButton: {
+    flexDirection: "row",
     backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
@@ -269,23 +455,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.background,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 24,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 12,
-    lineHeight: 20,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   bottomSpacer: {
     height: 20,

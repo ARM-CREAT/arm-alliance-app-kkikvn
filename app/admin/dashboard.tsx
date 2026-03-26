@@ -1,370 +1,312 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Stack, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { useAuth } from '@/contexts/AuthContext';
-import { authenticatedApiCall } from '@/utils/api';
-import { Modal } from '@/components/ui/Modal';
+import { IconSymbol } from '@/components/IconSymbol';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
 
-interface Analytics {
-  totalMembers: number;
-  totalDonations: string;
-  totalMessages: number;
-  recentActivity: any[];
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'x-admin-password': 'admin123' };
+
+interface Stats {
+  total: number;
+  active: number;
+  pending: number;
+  suspended: number;
+}
+
+interface RecentMember {
+  id: string;
+  member_number: string;
+  full_name: string;
+  commune: string;
+  status: string;
+  created_at: string;
+}
+
+function getStatusColor(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'active') return colors.success;
+  if (s === 'pending') return colors.warning;
+  if (s === 'suspended') return colors.danger;
+  return colors.textSecondary;
+}
+
+function getStatusLabel(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'active') return 'Actif';
+  if (s === 'pending') return 'En attente';
+  if (s === 'suspended') return 'Suspendu';
+  return status;
+}
+
+function formatDate(dateString?: string) {
+  if (!dateString) return '—';
+  try {
+    return new Date(dateString).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch { return dateString; }
 }
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const { user, loading: authLoading, signOut } = useAuth();
-  const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalConfig, setModalConfig] = useState({
-    title: '',
-    message: '',
-    type: 'confirm' as 'info' | 'success' | 'warning' | 'error' | 'confirm',
-    onConfirm: () => {},
-  });
+  const { logout } = useAdminAuth();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [recentMembers, setRecentMembers] = useState<RecentMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadAnalytics = useCallback(async () => {
-    console.log('[AdminDashboard] Loading analytics');
-    setIsLoading(true);
-
+  const loadDashboard = useCallback(async () => {
+    console.log('[AdminDashboard] GET /api/members/stats + /api/members?limit=5');
+    setError(null);
     try {
-      // Try the new admin statistics endpoint first, fallback to old one
-      let data;
-      try {
-        data = await authenticatedApiCall<Analytics>('/api/admin/statistics', { method: 'GET' });
-      } catch (err) {
-        console.log('[AdminDashboard] Trying fallback analytics endpoint');
-        data = await authenticatedApiCall<Analytics>('/api/analytics/overview', { method: 'GET' });
+      const [statsRes, membersRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS }),
+        fetch(`${BACKEND_URL}/api/members?limit=5`, { headers: ADMIN_HEADERS }),
+      ]);
+
+      if (!statsRes.ok) {
+        const text = await statsRes.text();
+        console.error('[AdminDashboard] Stats erreur:', statsRes.status, text);
+        throw new Error(`Erreur stats ${statsRes.status}`);
+      }
+      if (!membersRes.ok) {
+        const text = await membersRes.text();
+        console.error('[AdminDashboard] Members erreur:', membersRes.status, text);
+        throw new Error(`Erreur membres ${membersRes.status}`);
       }
 
-      if (data) {
-        setAnalytics(data);
-      }
-    } catch (error) {
-      console.error('[AdminDashboard] Error loading analytics:', error);
+      const [statsData, membersData] = await Promise.all([
+        statsRes.json(),
+        membersRes.json(),
+      ]);
+
+      console.log('[AdminDashboard] Stats chargées:', JSON.stringify(statsData));
+      console.log('[AdminDashboard] Derniers adhérents chargés:', membersData?.members?.length ?? 0);
+
+      setStats(statsData);
+      setRecentMembers(membersData?.members ?? []);
+    } catch (err: any) {
+      console.error('[AdminDashboard] Erreur chargement:', err.message);
+      setError(err.message || 'Impossible de charger les statistiques.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.replace('/auth');
-      return;
-    }
-    if (user) {
-      loadAnalytics();
-    }
-  }, [user, authLoading, router, loadAnalytics]);
+    const checkSetup = async () => {
+      await AsyncStorage.getItem('quick_setup_completed');
+    };
+    checkSetup();
+    loadDashboard();
+  }, [loadDashboard]);
 
-  const handleLogout = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setModalConfig({
-      title: 'Déconnexion',
-      message: 'Voulez-vous vraiment vous déconnecter ?',
-      type: 'confirm',
-      onConfirm: async () => {
-        setModalVisible(false);
-        await signOut();
-        router.replace('/auth');
-      },
-    });
-    setModalVisible(true);
+  const onRefresh = useCallback(() => {
+    console.log('[AdminDashboard] Pull-to-refresh');
+    setRefreshing(true);
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const handleNavigation = (path: string, label: string) => {
+    console.log('[AdminDashboard] Navigation vers', label);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(path as any);
   };
 
-  const adminUsername = user?.name || user?.email || 'Admin';
+  const handleLogout = async () => {
+    console.log('[AdminDashboard] Bouton Déconnexion appuyé');
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await logout();
+    router.replace('/admin/login');
+  };
 
-  if (authLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
+  const totalStr = String(stats?.total ?? 0);
+  const activeStr = String(stats?.active ?? 0);
+  const pendingStr = String(stats?.pending ?? 0);
+  const suspendedStr = String(stats?.suspended ?? 0);
 
   return (
     <>
       <Stack.Screen
         options={{
+          title: 'Tableau de Bord',
           headerShown: true,
-          title: 'Tableau de bord',
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: '#FFFFFF',
           headerTitleStyle: { fontWeight: 'bold' },
-          headerRight: () => (
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <IconSymbol
-                ios_icon_name="rectangle.portrait.and.arrow.right"
-                android_material_icon_name="logout"
-                size={24}
-                color="#FFFFFF"
-              />
-            </TouchableOpacity>
-          ),
         }}
       />
-      <Modal
-        visible={modalVisible}
-        title={modalConfig.title}
-        message={modalConfig.message}
-        type={modalConfig.type}
-        onClose={() => setModalVisible(false)}
-        onConfirm={modalConfig.onConfirm}
-      />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <View style={styles.welcomeCard}>
-          <IconSymbol
-            ios_icon_name="person.circle.fill"
-            android_material_icon_name="account-circle"
-            size={60}
-            color={colors.primary}
-          />
-          <Text style={styles.welcomeText}>Bienvenue,</Text>
-          <Text style={styles.adminName}>{adminUsername}</Text>
-        </View>
 
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.loadingText}>Chargement des statistiques...</Text>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+          }
+        >
+          {/* Stats section */}
+          {loading ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator color={colors.primary} size="large" />
+              <Text style={styles.loadingText}>Chargement des statistiques...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorTitle}>Impossible de charger les stats</Text>
+              <Text style={styles.errorText}>{error}</Text>
+              <AnimatedPressable
+                style={styles.retryBtn}
+                onPress={() => {
+                  console.log('[AdminDashboard] Bouton Réessayer appuyé');
+                  setLoading(true);
+                  loadDashboard();
+                }}
+              >
+                <Text style={styles.retryBtnText}>Réessayer</Text>
+              </AnimatedPressable>
+            </View>
+          ) : (
+            <>
+              {/* Total card */}
+              <View style={styles.totalCard}>
+                <Text style={styles.totalNumber}>{totalStr}</Text>
+                <Text style={styles.totalLabel}>Adhérents inscrits</Text>
+              </View>
+
+              {/* Stats grid */}
+              <View style={styles.statsGrid}>
+                <View style={[styles.statCard, { borderLeftColor: colors.success }]}>
+                  <Text style={[styles.statNumber, { color: colors.success }]}>{activeStr}</Text>
+                  <Text style={styles.statLabel}>Actifs</Text>
+                </View>
+                <View style={[styles.statCard, { borderLeftColor: colors.warning }]}>
+                  <Text style={[styles.statNumber, { color: colors.warning }]}>{pendingStr}</Text>
+                  <Text style={styles.statLabel}>En attente</Text>
+                </View>
+                <View style={[styles.statCard, { borderLeftColor: colors.danger }]}>
+                  <Text style={[styles.statNumber, { color: colors.danger }]}>{suspendedStr}</Text>
+                  <Text style={styles.statLabel}>Suspendus</Text>
+                </View>
+              </View>
+
+              {/* Recent members */}
+              {recentMembers.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Derniers adhérents</Text>
+                    <AnimatedPressable onPress={() => handleNavigation('/admin/memberships', 'Adhésions')}>
+                      <Text style={styles.sectionLink}>Voir tous →</Text>
+                    </AnimatedPressable>
+                  </View>
+                  {recentMembers.map((member) => {
+                    const statusColor = getStatusColor(member.status);
+                    const statusLabel = getStatusLabel(member.status);
+                    const dateStr = formatDate(member.created_at);
+                    const initial = (member.full_name || '?').charAt(0).toUpperCase();
+                    return (
+                      <View key={member.id} style={styles.memberRow}>
+                        <View style={styles.memberAvatar}>
+                          <Text style={styles.memberAvatarText}>{initial}</Text>
+                        </View>
+                        <View style={styles.memberInfo}>
+                          <Text style={styles.memberName} numberOfLines={1}>{member.full_name}</Text>
+                          <Text style={styles.memberNumber}>{member.member_number}</Text>
+                          <Text style={styles.memberMeta}>{member.commune || '—'}</Text>
+                          <Text style={styles.memberDate}>{dateStr}</Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>
+                          <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </>
+          )}
+
+          {/* Quick actions */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Actions rapides</Text>
+            <View style={styles.actionsRow}>
+              <AnimatedPressable
+                style={styles.actionBtn}
+                onPress={() => handleNavigation('/admin/memberships', 'Adhésions')}
+              >
+                <Text style={styles.actionBtnIcon}>📋</Text>
+                <Text style={styles.actionBtnText}>Gérer les adhésions</Text>
+                <Text style={styles.actionBtnChevron}>›</Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                style={styles.actionBtn}
+                onPress={() => handleNavigation('/admin/leadership', 'Direction')}
+              >
+                <Text style={styles.actionBtnIcon}>👤</Text>
+                <Text style={styles.actionBtnText}>Gérer la direction</Text>
+                <Text style={styles.actionBtnChevron}>›</Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                style={styles.actionBtn}
+                onPress={() => handleNavigation('/admin/membership-stats', 'Statistiques')}
+              >
+                <Text style={styles.actionBtnIcon}>📊</Text>
+                <Text style={styles.actionBtnText}>Statistiques détaillées</Text>
+                <Text style={styles.actionBtnChevron}>›</Text>
+              </AnimatedPressable>
+            </View>
           </View>
-        ) : (
-          <>
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <IconSymbol
-                  ios_icon_name="person.3.fill"
-                  android_material_icon_name="group"
-                  size={32}
-                  color={colors.primary}
-                />
-                <Text style={styles.statValue}>{analytics?.totalMembers || 0}</Text>
-                <Text style={styles.statLabel}>Membres</Text>
-              </View>
 
-              <View style={styles.statCard}>
-                <IconSymbol
-                  ios_icon_name="dollarsign.circle.fill"
-                  android_material_icon_name="payment"
-                  size={32}
-                  color={colors.secondary}
-                />
-                <Text style={styles.statValue}>{analytics?.totalDonations || 0}</Text>
-                <Text style={styles.statLabel}>Dons</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <IconSymbol
-                  ios_icon_name="envelope.fill"
-                  android_material_icon_name="email"
-                  size={32}
-                  color={colors.accent}
-                />
-                <Text style={styles.statValue}>{analytics?.totalMessages || 0}</Text>
-                <Text style={styles.statLabel}>Messages</Text>
-              </View>
+          {/* Content management */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Gestion</Text>
+            <View style={styles.grid}>
+              {[
+                { path: '/admin/leadership', label: 'Direction', icon: '👤' },
+                { path: '/admin/conferences', label: 'Conférences', icon: '🎤' },
+                { path: '/admin/membership-stats', label: 'Stats', icon: '📊' },
+                { path: '/admin/contacts', label: 'Contacts', icon: '📞' },
+                { path: '/admin/program', label: 'Programme', icon: '📜' },
+                { path: '/admin/offline-access', label: 'Hors ligne', icon: '📴' },
+              ].map((item) => (
+                <AnimatedPressable
+                  key={item.path}
+                  style={styles.gridCard}
+                  onPress={() => handleNavigation(item.path, item.label)}
+                >
+                  <Text style={styles.gridCardIcon}>{item.icon}</Text>
+                  <Text style={styles.gridCardLabel}>{item.label}</Text>
+                </AnimatedPressable>
+              ))}
             </View>
+          </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Gestion des Membres</Text>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/manage-members' as any);
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="person.3.fill"
-                  android_material_icon_name="group"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Gérer les membres</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/election-verification' as any);
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="checkmark.seal.fill"
-                  android_material_icon_name="verified"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Vérifier résultats électoraux</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/send-message' as any);
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="paperplane.fill"
-                  android_material_icon_name="send"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Envoyer message interne</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Gestion du contenu</Text>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/manage-news-full');
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="newspaper.fill"
-                  android_material_icon_name="article"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Gérer les actualités</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/manage-events');
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="calendar"
-                  android_material_icon_name="event"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Gérer les événements</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/manage-leadership');
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="person.2.fill"
-                  android_material_icon_name="people"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Gérer les dirigeants</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/manage-conferences');
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="video.fill"
-                  android_material_icon_name="videocam"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Vidéoconférences</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/admin/media-upload');
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="photo.fill"
-                  android_material_icon_name="photo-library"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.menuItemText}>Télécharger des médias</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-      </ScrollView>
+          {/* Logout */}
+          <AnimatedPressable style={styles.logoutButton} onPress={handleLogout}>
+            <IconSymbol
+              ios_icon_name="rectangle.portrait.and.arrow.right"
+              android_material_icon_name="logout"
+              size={20}
+              color="#FFFFFF"
+            />
+            <Text style={styles.logoutButtonText}>Déconnexion</Text>
+          </AnimatedPressable>
+        </ScrollView>
+      </View>
     </>
   );
 }
@@ -374,94 +316,254 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
     padding: 20,
-    paddingTop: Platform.OS === 'android' ? 48 : 20,
+    paddingBottom: 40,
   },
-  logoutButton: {
-    marginRight: 16,
-  },
-  welcomeCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 24,
+  loadingBox: {
     alignItems: 'center',
-    marginBottom: 24,
-    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
-    elevation: 4,
-  },
-  welcomeText: {
-    fontSize: 18,
-    color: colors.textSecondary,
-    marginTop: 12,
-  },
-  adminName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 4,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingVertical: 40,
+    gap: 12,
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.textSecondary,
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.danger + '30',
+  },
+  errorTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+  },
+  retryBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  totalCard: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  totalNumber: {
+    fontSize: 56,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+  },
+  totalLabel: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+    marginTop: 4,
   },
   statsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
     marginBottom: 24,
   },
   statCard: {
     flex: 1,
-    minWidth: 100,
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
-    alignItems: 'center',
-    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
-    elevation: 3,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  statValue: {
+  statNumber: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 8,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 4,
+    fontWeight: '600',
+    marginTop: 2,
   },
   section: {
     marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 16,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  menuItem: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.2,
+    marginBottom: 12,
+  },
+  sectionLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 12,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primaryMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  memberAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  memberInfo: {
+    flex: 1,
+  },
+  memberName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  memberNumber: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFC107',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    marginTop: 1,
+  },
+  memberMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  memberDate: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    marginTop: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  actionsRow: {
+    gap: 8,
+  },
+  actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
-    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
     gap: 12,
   },
-  menuItemText: {
+  actionBtnIcon: {
+    fontSize: 20,
+  },
+  actionBtnText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
+  },
+  actionBtnChevron: {
+    fontSize: 22,
+    color: colors.textSecondary,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  gridCard: {
+    width: '31%',
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  gridCardIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  gridCardLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  logoutButton: {
+    backgroundColor: colors.danger,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  logoutButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

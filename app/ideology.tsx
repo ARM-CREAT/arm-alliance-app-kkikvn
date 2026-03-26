@@ -1,497 +1,742 @@
 
-import React from "react";
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
+import React, { useState } from "react";
+import {
+  StyleSheet,
+  View,
+  Text,
   ScrollView,
-  Platform
+  TouchableOpacity,
+  Platform,
 } from "react-native";
 import { Stack } from "expo-router";
 import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
 
-export default function IdeologyScreen() {
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+interface FamilleItem {
+  emoji: string;
+  title: string;
+  color: string;
+  description: string;
+  exemples: string[];
+}
+
+interface PartiItem {
+  emoji: string;
+  title: string;
+  color: string;
+  description: string;
+}
+
+interface TransversaleItem {
+  emoji: string;
+  title: string;
+  color: string;
+  description: string;
+}
+
+const FAMILLES: FamilleItem[] = [
+  {
+    emoji: "🔴",
+    title: "La Gauche",
+    color: "#E53935",
+    description:
+      "Défend l'égalité sociale, la justice et la solidarité. Favorable à l'intervention de l'État dans l'économie. Priorité aux services publics (santé, éducation, emploi).",
+    exemples: ["Socialisme", "Progressisme", "Écologisme"],
+  },
+  {
+    emoji: "🔵",
+    title: "La Droite",
+    color: "#1565C0",
+    description:
+      "Défend la liberté économique, l'ordre et la tradition. Favorable au secteur privé et à l'initiative individuelle. Moins d'intervention de l'État.",
+    exemples: ["Libéralisme économique", "Conservatisme"],
+  },
+  {
+    emoji: "⚪",
+    title: "Le Centre",
+    color: "#757575",
+    description:
+      "Position intermédiaire entre gauche et droite. Mélange de politiques sociales et économiques. Recherche du compromis et de la stabilité.",
+    exemples: ["Centrisme"],
+  },
+];
+
+const PARTIS: PartiItem[] = [
+  {
+    emoji: "🟢",
+    title: "Parti Populaire",
+    color: "#2E7D32",
+    description:
+      "Proche du peuple. Défense des classes moyennes et pauvres. Souvent mélange de gauche et de nationalisme.",
+  },
+  {
+    emoji: "🟡",
+    title: "Parti Républicain",
+    color: "#F9A825",
+    description:
+      "Défend la République, la démocratie et les institutions. Importance de la loi, de l'État et de la citoyenneté. Peut être de droite ou du centre.",
+  },
+  {
+    emoji: "🔵",
+    title: "Parti de l'Unité Nationale",
+    color: "#1565C0",
+    description:
+      "Priorité à la cohésion nationale. Rassemblement au-delà des divisions ethniques ou politiques. Souvent utilisé dans des contextes de crise ou de reconstruction.",
+  },
+  {
+    emoji: "🔴",
+    title: "Parti Socialiste",
+    color: "#C62828",
+    description:
+      "Réduction des inégalités. Redistribution des richesses. Services publics forts. Protection des travailleurs.",
+  },
+  {
+    emoji: "🔵",
+    title: "Parti Démocrate",
+    color: "#1976D2",
+    description:
+      "Défense de la démocratie, des libertés et des élections libres. Peut être de gauche, centre ou droite selon le pays. Accent sur les droits humains.",
+  },
+  {
+    emoji: "⚪",
+    title: "Parti Centriste",
+    color: "#616161",
+    description:
+      "Équilibre entre social et économie. Dialogue et compromis. Gouvernance modérée.",
+  },
+  {
+    emoji: "🟥",
+    title: "Parti de Gauche",
+    color: "#B71C1C",
+    description:
+      "Transformation sociale profonde. Lutte contre la pauvreté. Parfois critique du capitalisme.",
+  },
+  {
+    emoji: "🟦",
+    title: "Parti de Droite",
+    color: "#0D47A1",
+    description:
+      "Sécurité, ordre, tradition. Économie libérale. Valorisation du mérite individuel.",
+  },
+  {
+    emoji: "🟢",
+    title: "Parti Rassemblement",
+    color: "#388E3C",
+    description:
+      "Regroupe plusieurs tendances politiques. Vision d'unité nationale. Souvent pragmatique (moins idéologique).",
+  },
+  {
+    emoji: "🟡",
+    title: "Parti Citoyen",
+    color: "#F57F17",
+    description:
+      "Met le citoyen au centre. Participation populaire. Transparence et bonne gouvernance.",
+  },
+  {
+    emoji: "🟠",
+    title: "Parti Conservateur",
+    color: "#E65100",
+    description:
+      "Défense des traditions, de la culture et des valeurs. Résistance aux changements rapides.",
+  },
+  {
+    emoji: "🟣",
+    title: "Parti Progressiste",
+    color: "#6A1B9A",
+    description:
+      "Favorable au changement social. Modernisation de la société. Droits sociaux avancés.",
+  },
+  {
+    emoji: "⚫",
+    title: "Parti Nationaliste",
+    color: "#212121",
+    description:
+      "Défense de la souveraineté nationale. Priorité aux intérêts du pays. Peut être de droite ou populaire.",
+  },
+  {
+    emoji: "🟢",
+    title: "Parti Écologiste",
+    color: "#1B5E20",
+    description:
+      "Protection de l'environnement. Développement durable. Transition énergétique.",
+  },
+];
+
+const TRANSVERSALES: TransversaleItem[] = [
+  {
+    emoji: "🗽",
+    title: "Libéralisme",
+    color: "#1565C0",
+    description:
+      "Liberté individuelle et économique. L'État doit intervenir le moins possible dans la vie des citoyens et l'économie.",
+  },
+  {
+    emoji: "🏴",
+    title: "Nationalisme",
+    color: "#37474F",
+    description:
+      "Souveraineté nationale. Priorité aux intérêts et à l'identité du pays face aux influences extérieures.",
+  },
+  {
+    emoji: "🌍",
+    title: "Panafricanisme",
+    color: "#C8A84B",
+    description:
+      "Unité et développement de l'Afrique. Solidarité entre les peuples africains pour construire un continent fort et indépendant.",
+  },
+  {
+    emoji: "⚖️",
+    title: "Démocratie Sociale",
+    color: "#2E7D32",
+    description:
+      "Équilibre entre marché et justice sociale. L'État régule l'économie pour garantir l'égalité des chances.",
+  },
+  {
+    emoji: "✊",
+    title: "Populisme",
+    color: "#E65100",
+    description:
+      "Défense directe du peuple contre les élites. Le pouvoir doit appartenir au peuple ordinaire, pas aux privilégiés.",
+  },
+];
+
+// ─── Tab types ────────────────────────────────────────────────────────────────
+
+type TabKey = "familles" | "partis" | "transversales" | "aes";
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: "familles", label: "Familles" },
+  { key: "partis", label: "Partis" },
+  { key: "transversales", label: "Transversales" },
+  { key: "aes", label: "AES" },
+];
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function FamilleCard({ item }: { item: FamilleItem }) {
+  return (
+    <View style={[styles.card, styles.cardRow]}>
+      <View style={[styles.colorBand, { backgroundColor: item.color }]} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardEmoji}>{item.emoji}</Text>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+        </View>
+        <Text style={styles.cardDescription}>{item.description}</Text>
+        <View style={styles.badgesRow}>
+          {item.exemples.map((ex) => (
+            <View key={ex} style={[styles.badge, { backgroundColor: item.color + "18", borderColor: item.color + "40" }]}>
+              <Text style={[styles.badgeText, { color: item.color }]}>{ex}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PartiCard({ item }: { item: PartiItem }) {
+  return (
+    <View style={[styles.card, styles.cardRow]}>
+      <View style={[styles.colorBand, { backgroundColor: item.color }]} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardEmoji}>{item.emoji}</Text>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+        </View>
+        <Text style={styles.cardDescription}>{item.description}</Text>
+      </View>
+    </View>
+  );
+}
+
+function TransversaleCard({ item }: { item: TransversaleItem }) {
+  return (
+    <View style={[styles.card, styles.cardRow]}>
+      <View style={[styles.colorBand, { backgroundColor: item.color }]} />
+      <View style={styles.cardBody}>
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardEmoji}>{item.emoji}</Text>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+        </View>
+        <Text style={styles.cardDescription}>{item.description}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── AES Section ─────────────────────────────────────────────────────────────
+
+function AESSection() {
+  return (
+    <View>
+      {/* Section header */}
+      <View style={aesStyles.sectionHeader}>
+        <Text style={aesStyles.sectionHeaderIcon}>📣</Text>
+        <Text style={aesStyles.sectionHeaderTitle}>Discours Officiel du Président</Text>
+      </View>
+
+      {/* Card with red left border */}
+      <View style={aesStyles.redBorderCard}>
+        {/* Red left border */}
+        <View style={aesStyles.redLeftBorder} />
+        <View style={aesStyles.redBorderCardBody}>
+          {/* Red bold title */}
+          <Text style={aesStyles.cardRedTitle}>Sur l'Alliance des États du Sahel (AES)</Text>
+
+          {/* Green filled box */}
+          <View style={aesStyles.greenBox}>
+            <Text style={aesStyles.greenBoxText}>L'AES n'est pas un slogan.</Text>
+            <Text style={aesStyles.greenBoxText}>L'AES n'est pas une simple organisation de plus.</Text>
+            <Text style={aesStyles.greenBoxText}>L'AES est une réponse historique à des décennies de dépendance, d'insécurité imposée et de modèles de développement inadaptés à nos réalités.</Text>
+          </View>
+
+          {/* Section 1 */}
+          <Text style={aesStyles.subHeading}>1.  La vision de l'ARM sur l'AES</Text>
+          <Text style={aesStyles.bodyText}>L'Alliance pour le Rassemblement Malien salue la création et la consolidation de l'AES comme un acte de souveraineté collective. Notre rôle, en tant que parti politique responsable, n'est pas de réinventer l'AES, mais de l'accompagner, de l'enraciner et de l'intégrer intelligemment dans les politiques nationales du Mali.</Text>
+
+          {/* Section 2 */}
+          <Text style={aesStyles.subHeading}>2.  AES et gouvernance intègre</Text>
+          <Text style={aesStyles.bodyText}>Aucune intégration régionale ne peut réussir sans une gouvernance exemplaire. C'est pourquoi l'ARM lie indissociablement l'accompagnement de l'AES à une lutte ferme contre la corruption.</Text>
+
+          {/* Red filled box */}
+          <View style={aesStyles.redBox}>
+            <Text style={aesStyles.redBoxText}>Notre destin est lié.</Text>
+            <Text style={aesStyles.redBoxText}>Nos combats sont communs.</Text>
+            <Text style={aesStyles.redBoxText}>Nos victoires seront partagées.</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Final green box */}
+      <View style={aesStyles.greenBoxFinal}>
+        <Text style={aesStyles.greenBoxFinalText}>L'Alliance pour le Rassemblement Malien est née d'un cri du cœur : celui de tout un peuple qui aspire à être entendu, respecté et servi.</Text>
+        <Text style={aesStyles.greenBoxGoldText}>A.R.M n'est pas seulement un nom. C'est une vision, une force, une mission.</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
+export default function IdeologyGuideScreen() {
+  const [activeTab, setActiveTab] = useState<TabKey>("familles");
+
+  const handleTabPress = (key: TabKey) => {
+    console.log("[IdeologyGuide] Onglet sélectionné:", key);
+    setActiveTab(key);
+  };
+
+  const sectionCount =
+    activeTab === "familles"
+      ? FAMILLES.length
+      : activeTab === "partis"
+      ? PARTIS.length
+      : activeTab === "transversales"
+      ? TRANSVERSALES.length
+      : 0;
+
+  const sectionCountText = String(sectionCount);
+
   return (
     <>
-      <Stack.Screen 
-        options={{ 
+      <Stack.Screen
+        options={{
           headerShown: true,
-          title: "Idéologie du Parti",
-          headerStyle: {
-            backgroundColor: colors.primary,
-          },
-          headerTintColor: colors.background,
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
-        }} 
+          title: "Guide Idéologique",
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: "#FFFFFF",
+          headerTitleStyle: { fontWeight: "bold" },
+        }}
       />
-      <ScrollView 
-        style={styles.container} 
-        contentContainerStyle={styles.contentContainer}
-      >
-        {/* Introduction */}
-        <View style={styles.section}>
-          <View style={styles.headerCard}>
-            <Text style={styles.mainTitle}>Alliance pour le Rassemblement Malien</Text>
-            <Text style={styles.subtitle}>Une vision, une force, une mission</Text>
+
+      <View style={styles.container}>
+        {/* Hero header */}
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>Guide Idéologique</Text>
+          <Text style={styles.heroSubtitle}>Comprendre les partis politiques</Text>
+          <View style={styles.heroCountBadge}>
+            <Text style={styles.heroCountText}>{sectionCountText}</Text>
+            <Text style={styles.heroCountLabel}> entrées</Text>
           </View>
         </View>
 
-        {/* Fondements */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="star.fill" 
-              android_material_icon_name="star" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Fondements de l&apos;idéologie</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.bodyText}>
-              L&apos;Alliance pour le Rassemblement Malien est un mouvement politique qui puise sa légitimité et sa vision dans les réalités profondes du peuple malien.
-            </Text>
-            <Text style={styles.bodyText}>
-              Son idéologie repose sur trois piliers fondamentaux : la fraternité, la liberté et l&apos;égalité, qui ne sont pas de simples slogans, mais des engagements concrets pour bâtir une société plus juste, plus unie, et plus digne.
-            </Text>
-          </View>
+        {/* Tab bar */}
+        <View style={styles.tabBar}>
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tabItem, isActive && styles.tabItemActive]}
+                onPress={() => handleTabPress(tab.key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                  {tab.label}
+                </Text>
+                {isActive && <View style={styles.tabUnderline} />}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* Les trois piliers */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="flag.fill" 
-              android_material_icon_name="flag" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Les Trois Piliers</Text>
-          </View>
-          
-          <View style={styles.pillarCard}>
-            <View style={styles.pillarHeader}>
-              <IconSymbol 
-                ios_icon_name="heart.fill" 
-                android_material_icon_name="favorite" 
-                size={28} 
-                color={colors.accent} 
-              />
-              <Text style={styles.pillarTitle}>Fraternité</Text>
-            </View>
-            <Text style={styles.pillarText}>
-              Rassembler le peuple malien au-delà des appartenances ethniques, religieuses ou régionales. A.R.M croit en un Mali réconcilié avec lui-même, où l&apos;unité nationale surpasse les divisions.
-            </Text>
-          </View>
-
-          <View style={styles.pillarCard}>
-            <View style={styles.pillarHeader}>
-              <IconSymbol 
-                ios_icon_name="hand.raised.fill" 
-                android_material_icon_name="front-hand" 
-                size={28} 
-                color={colors.accent} 
-              />
-              <Text style={styles.pillarTitle}>Liberté</Text>
-            </View>
-            <Text style={styles.pillarText}>
-              Défendre l&apos;État de droit, la démocratie participative, la transparence et l&apos;alternance. Le parti se veut la voix des silencieux, le bras des laissés-pour-compte.
-            </Text>
-          </View>
-
-          <View style={styles.pillarCard}>
-            <View style={styles.pillarHeader}>
-              <IconSymbol 
-                ios_icon_name="equal.circle.fill" 
-                android_material_icon_name="balance" 
-                size={28} 
-                color={colors.accent} 
-              />
-              <Text style={styles.pillarTitle}>Égalité</Text>
-            </View>
-            <Text style={styles.pillarText}>
-              Garantir la justice sociale pour tous. Le cœur de ceux qui aspirent à une vie meilleure dans la paix, la dignité, et le progrès.
-            </Text>
-          </View>
-        </View>
-
-        {/* Idéologie enracinée */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="leaf.fill" 
-              android_material_icon_name="eco" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Enracinée dans la société malienne</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.bodyText}>
-              A.R.M est un parti qui comprend le quotidien des Maliens, car il part du terrain, des villages, des quartiers populaires, des marchés, des champs, des écoles et des dispensaires.
-            </Text>
-            <Text style={styles.bodyText}>
-              L&apos;idéologie du parti est donc sociale, réaliste et inclusive.
-            </Text>
-          </View>
-        </View>
-
-        {/* Caractéristiques */}
-        <View style={styles.section}>
-          <View style={styles.characteristicCard}>
-            <View style={styles.characteristicHeader}>
-              <IconSymbol 
-                ios_icon_name="person.3.fill" 
-                android_material_icon_name="group" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.characteristicTitle}>Sociale</Text>
-            </View>
-            <Text style={styles.characteristicText}>
-              Parce qu&apos;elle place l&apos;humain avant tout : santé, éducation, logement, sécurité alimentaire et justice sociale.
-            </Text>
-          </View>
-
-          <View style={styles.characteristicCard}>
-            <View style={styles.characteristicHeader}>
-              <IconSymbol 
-                ios_icon_name="building.columns.fill" 
-                android_material_icon_name="account-balance" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.characteristicTitle}>Républicaine</Text>
-            </View>
-            <Text style={styles.characteristicText}>
-              Car elle défend l&apos;État de droit, la démocratie participative, la transparence et l&apos;alternance.
-            </Text>
-          </View>
-
-          <View style={styles.characteristicCard}>
-            <View style={styles.characteristicHeader}>
-              <IconSymbol 
-                ios_icon_name="flag.fill" 
-                android_material_icon_name="flag" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.characteristicTitle}>Patriotique</Text>
-            </View>
-            <Text style={styles.characteristicText}>
-              Car elle met en avant l&apos;indépendance du pays, la souveraineté nationale, la valorisation des cultures maliennes et la protection des ressources naturelles.
-            </Text>
-          </View>
-        </View>
-
-        {/* Priorités */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="list.bullet" 
-              android_material_icon_name="list" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Grandes Priorités</Text>
-          </View>
-          
-          <View style={styles.priorityCard}>
-            <View style={styles.priorityNumber}>
-              <Text style={styles.priorityNumberText}>1</Text>
-            </View>
-            <View style={styles.priorityContent}>
-              <Text style={styles.priorityTitle}>Rassembler</Text>
-              <Text style={styles.priorityText}>
-                Rassembler le peuple malien au-delà des appartenances ethniques, religieuses ou régionales.
+        {/* Content */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {activeTab === "familles" && (
+            <>
+              <Text style={styles.sectionIntro}>
+                Les grandes familles politiques définissent les grandes orientations idéologiques d'un parti.
               </Text>
-            </View>
-          </View>
+              {FAMILLES.map((item) => (
+                <FamilleCard key={item.title} item={item} />
+              ))}
+            </>
+          )}
 
-          <View style={styles.priorityCard}>
-            <View style={styles.priorityNumber}>
-              <Text style={styles.priorityNumberText}>2</Text>
-            </View>
-            <View style={styles.priorityContent}>
-              <Text style={styles.priorityTitle}>Refonder l&apos;État</Text>
-              <Text style={styles.priorityText}>
-                Refonder l&apos;État malien en le rendant plus proche du peuple, plus efficace, moins corrompu. Numériser l&apos;administration pour plus de transparence et d&apos;efficacité.
+          {activeTab === "partis" && (
+            <>
+              <Text style={styles.sectionIntro}>
+                Chaque type de parti porte une identité politique distincte. Découvrez leurs caractéristiques.
               </Text>
-            </View>
-          </View>
+              {PARTIS.map((item) => (
+                <PartiCard key={item.title} item={item} />
+              ))}
+            </>
+          )}
 
-          <View style={styles.priorityCard}>
-            <View style={styles.priorityNumber}>
-              <Text style={styles.priorityNumberText}>3</Text>
-            </View>
-            <View style={styles.priorityContent}>
-              <Text style={styles.priorityTitle}>Éduquer pour libérer</Text>
-              <Text style={styles.priorityText}>
-                L&apos;école est l&apos;arme la plus puissante pour briser les chaînes de la pauvreté et de l&apos;ignorance.
+          {activeTab === "transversales" && (
+            <>
+              <Text style={styles.sectionIntro}>
+                Ces idéologies traversent les clivages gauche/droite et influencent de nombreux partis.
               </Text>
-            </View>
-          </View>
+              {TRANSVERSALES.map((item) => (
+                <TransversaleCard key={item.title} item={item} />
+              ))}
+            </>
+          )}
 
-          <View style={styles.priorityCard}>
-            <View style={styles.priorityNumber}>
-              <Text style={styles.priorityNumberText}>4</Text>
-            </View>
-            <View style={styles.priorityContent}>
-              <Text style={styles.priorityTitle}>Créer des opportunités</Text>
-              <Text style={styles.priorityText}>
-                Créer des opportunités économiques locales pour lutter contre l&apos;exode rural, le chômage des jeunes et la dépendance extérieure.
-              </Text>
-            </View>
-          </View>
+          {activeTab === "aes" && <AESSection />}
 
-          <View style={styles.priorityCard}>
-            <View style={styles.priorityNumber}>
-              <Text style={styles.priorityNumberText}>5</Text>
-            </View>
-            <View style={styles.priorityContent}>
-              <Text style={styles.priorityTitle}>Bâtir la paix</Text>
-              <Text style={styles.priorityText}>
-                Bâtir une paix durable, enracinée dans la justice, le dialogue intercommunautaire et le respect mutuel.
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Vision moderne */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="arrow.forward.circle.fill" 
-              android_material_icon_name="arrow-forward" 
-              size={24} 
-              color={colors.primary} 
-            />
-            <Text style={styles.sectionTitle}>Une idéologie en mouvement</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={styles.bodyText}>
-              A.R.M n&apos;est pas un parti figé dans le passé : c&apos;est un mouvement innovant, ambitieux, moderne, qui intègre les outils numériques, la jeunesse, la diaspora et les femmes dans tous ses processus de réflexion et de décision.
-            </Text>
-            <Text style={styles.bodyText}>
-              Le parti se voit comme un levier de transformation sociale, un artisan du progrès local, et un bâtisseur d&apos;un Mali fort dans une Afrique forte.
-            </Text>
-          </View>
-        </View>
-
-        {/* Conclusion */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol 
-              ios_icon_name="heart.circle.fill" 
-              android_material_icon_name="favorite" 
-              size={24} 
-              color={colors.accent} 
-            />
-            <Text style={styles.sectionTitle}>Le sens profond du rassemblement</Text>
-          </View>
-          <View style={styles.conclusionCard}>
-            <Text style={styles.conclusionText}>
-              L&apos;Alliance pour le Rassemblement Malien est née d&apos;un cri du cœur : celui de tout un peuple qui aspire à être entendu, respecté et servi.
-            </Text>
-            <Text style={styles.conclusionText}>
-              Ce n&apos;est pas un parti de promesses électorales, mais un projet de société structuré, fondé sur les valeurs maliennes les plus nobles : le respect, le courage, la solidarité, et le sens du sacrifice collectif.
-            </Text>
-            <Text style={styles.conclusionHighlight}>
-              A.R.M n&apos;est pas seulement un nom. C&apos;est une vision, une force, une mission.
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
+      </View>
     </>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const ARM_GREEN = "#2E7D32";
+const ARM_GOLD = "#C8A84B";
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: "#F5F5F5",
   },
-  contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
+
+  // Hero
+  hero: {
+    backgroundColor: ARM_GREEN,
+    paddingTop: Platform.OS === "android" ? 16 : 12,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.8)",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  heroCountBadge: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginTop: 10,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  heroCountText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: ARM_GOLD,
+  },
+  heroCountLabel: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "600",
+  },
+
+  // Tab bar
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 14,
+    position: "relative",
+  },
+  tabItemActive: {
+    backgroundColor: "#FAFAFA",
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#9E9E9E",
+    letterSpacing: 0.2,
+  },
+  tabLabelActive: {
+    color: ARM_GREEN,
+    fontWeight: "700",
+  },
+  tabUnderline: {
+    position: "absolute",
+    bottom: 0,
+    left: "15%",
+    right: "15%",
+    height: 3,
+    backgroundColor: ARM_GOLD,
+    borderRadius: 2,
+  },
+
+  // Scroll
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 40,
   },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 24,
+
+  // Section intro
+  sectionIntro: {
+    fontSize: 13,
+    color: "#616161",
+    lineHeight: 19,
+    marginBottom: 14,
+    paddingHorizontal: 4,
+    fontStyle: "italic",
   },
-  headerCard: {
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-  },
-  mainTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.background,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.secondary,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginLeft: 8,
-    flex: 1,
-  },
+
+  // Card
   card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  bodyText: {
-    fontSize: 16,
-    color: colors.text,
-    lineHeight: 24,
-    marginBottom: 16,
-  },
-  pillarCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: colors.accent,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  pillarHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
     marginBottom: 12,
-  },
-  pillarTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginLeft: 12,
-  },
-  pillarText: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
-  },
-  characteristicCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 3,
+    overflow: "hidden",
   },
-  characteristicHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  cardRow: {
+    flexDirection: "row",
+  },
+  colorBand: {
+    width: 5,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
+  cardBody: {
+    flex: 1,
+    padding: 14,
+  },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
   },
-  characteristicTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginLeft: 8,
-  },
-  characteristicText: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
-  },
-  priorityCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  priorityNumber: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  priorityNumberText: {
+  cardEmoji: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.background,
+    marginRight: 8,
   },
-  priorityContent: {
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1A1A1A",
     flex: 1,
   },
-  priorityTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 6,
+  cardDescription: {
+    fontSize: 13,
+    color: "#424242",
+    lineHeight: 20,
   },
-  priorityText: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
+
+  // Badges (familles only)
+  badgesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 10,
+    gap: 6,
   },
-  conclusionCard: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
   },
-  conclusionText: {
-    fontSize: 16,
-    color: colors.background,
-    lineHeight: 24,
-    marginBottom: 16,
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
-  conclusionHighlight: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.secondary,
-    lineHeight: 26,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
+
   bottomSpacer: {
     height: 20,
+  },
+});
+
+// ─── AES Styles ───────────────────────────────────────────────────────────────
+
+const AES_GREEN = "#2E7D32";
+const AES_RED = "#C62828";
+const AES_GOLD = "#FFD700";
+
+const aesStyles = StyleSheet.create({
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    marginTop: 4,
+  },
+  sectionHeaderIcon: {
+    fontSize: 22,
+    marginRight: 8,
+  },
+  sectionHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1A1A1A",
+    flex: 1,
+  },
+
+  // Card with red left border
+  redBorderCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  redLeftBorder: {
+    width: 4,
+    backgroundColor: AES_RED,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
+  redBorderCardBody: {
+    flex: 1,
+    padding: 16,
+  },
+  cardRedTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: AES_RED,
+    textAlign: "center",
+    marginBottom: 16,
+    lineHeight: 26,
+  },
+
+  // Green filled box
+  greenBox: {
+    backgroundColor: AES_GREEN,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    gap: 10,
+  },
+  greenBoxText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    lineHeight: 22,
+  },
+
+  // Sub-headings (green bold)
+  subHeading: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: AES_GREEN,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+
+  // Body text (justified)
+  bodyText: {
+    fontSize: 15,
+    color: "#212121",
+    lineHeight: 24,
+    textAlign: "justify",
+    marginBottom: 20,
+  },
+
+  // Red filled box
+  redBox: {
+    backgroundColor: AES_RED,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    gap: 6,
+  },
+  redBoxText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    lineHeight: 24,
+  },
+
+  // Final green box
+  greenBoxFinal: {
+    backgroundColor: AES_GREEN,
+    borderRadius: 14,
+    padding: 20,
+    marginBottom: 8,
+    gap: 12,
+  },
+  greenBoxFinalText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#FFFFFF",
+    lineHeight: 24,
+  },
+  greenBoxGoldText: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: AES_GOLD,
+    lineHeight: 24,
   },
 });

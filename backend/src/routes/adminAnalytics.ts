@@ -21,54 +21,78 @@ export function register(app: App, fastify: FastifyInstance) {
               recentActivity: { type: 'array' },
             },
           },
+          401: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+          403: {
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+            },
+          },
         },
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      app.logger.info({}, 'Admin analytics endpoint called');
+
       const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
+      if (!admin) {
+        app.logger.warn({}, 'Admin analytics request rejected due to failed authentication');
+        return;
+      }
 
       app.logger.info(
         { adminId: admin.userId },
-        'Fetching admin analytics'
+        'Admin authentication successful, fetching analytics data'
       );
 
       try {
         // Fetch all required data in parallel
         const [members, donations, messages, news, events] = await Promise.all([
-          app.db.select().from(schema.members),
-          app.db.select().from(schema.donations),
-          app.db.select().from(schema.messages),
-          app.db.select().from(schema.news),
-          app.db.select().from(schema.events),
+          app.db.select().from(schema.members).catch(() => []),
+          app.db.select().from(schema.donations).catch(() => []),
+          app.db.select().from(schema.messages).catch(() => []),
+          app.db.select().from(schema.news).catch(() => []),
+          app.db.select().from(schema.events).catch(() => []),
         ]);
 
+        app.logger.debug(
+          { memberCount: members.length, donationCount: donations.length, messageCount: messages.length },
+          'Data fetched from database'
+        );
+
         // Calculate totals
-        const totalMembers = members.length;
-        const completedDonations = donations.filter(d => d.status === 'completed');
-        const totalDonations = completedDonations
-          .reduce((sum, d) => sum + parseFloat(d.amount as unknown as string), 0)
-          .toFixed(2);
-        const totalMessages = messages.length;
+        const totalMembers = members?.length || 0;
+        const completedDonations = donations?.filter(d => d?.status === 'completed') || [];
+        const totalDonations = completedDonations.length > 0
+          ? completedDonations
+              .reduce((sum, d) => sum + parseFloat(d.amount as unknown as string), 0)
+              .toFixed(2)
+          : '0.00';
+        const totalMessages = messages?.length || 0;
 
         // Build recent activity
         const recentActivity = [
-          ...messages.slice(-5).map(m => ({
+          ...(messages?.slice(-5) || []).map(m => ({
             type: 'message',
             title: m.subject,
             description: `From: ${m.senderName}`,
             timestamp: m.createdAt,
           })),
-          ...news.slice(-5).map(n => ({
+          ...(news?.slice(-5) || []).map(n => ({
             type: 'news',
             title: n.title,
             description: 'News article published',
             timestamp: n.publishedAt,
           })),
-          ...events.slice(-5).map(e => ({
+          ...(events?.slice(-5) || []).map(e => ({
             type: 'event',
             title: e.title,
-            description: `Scheduled for ${e.date?.toLocaleDateString()}`,
+            description: `Scheduled for ${e.date?.toLocaleDateString?.()}`,
             timestamp: e.createdAt,
           })),
         ]
@@ -83,17 +107,20 @@ export function register(app: App, fastify: FastifyInstance) {
         };
 
         app.logger.info(
-          { adminId: admin.userId, totalMembers, totalMessages },
-          'Admin analytics calculated'
+          { adminId: admin.userId, totalMembers, totalMessages, totalDonations },
+          'Admin analytics calculated successfully'
         );
 
-        return analytics;
+        reply.status(200).send(analytics);
       } catch (error) {
         app.logger.error(
           { err: error, adminId: admin.userId },
           'Failed to fetch admin analytics'
         );
-        throw error;
+        reply.status(500).send({
+          error: 'Failed to fetch analytics data',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        });
       }
     }
   );

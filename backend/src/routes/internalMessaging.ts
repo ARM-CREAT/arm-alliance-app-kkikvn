@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 import { verifyAdminAuth } from '../utils/adminAuth.js';
@@ -24,7 +24,26 @@ export function register(app: App, fastify: FastifyInstance) {
         description: 'Get messages for current user based on role/location',
         tags: ['messaging'],
         response: {
-          200: { type: 'array' },
+          200: {
+            type: 'object',
+            properties: {
+              messages: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    title: { type: 'string' },
+                    content: { type: 'string' },
+                    sentAt: { type: 'string', format: 'date-time' },
+                    isRead: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+          },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
@@ -42,49 +61,50 @@ export function register(app: App, fastify: FastifyInstance) {
           .where(eq(schema.memberProfiles.userId, session.user.id));
 
         if (memberResult.length === 0) {
-          return reply.status(404).send({ error: 'Member profile not found' });
+          return reply.status(404).send({ error: 'Profil membre non trouvé' });
         }
 
         const member = memberResult[0];
 
-        // Get messages for this user
-        // Messages are for: all (no target), user's role, user's region, cercle, or commune
+        // Get all messages
         const allMessages = await app.db.select().from(schema.internalMessages);
 
+        // Filter messages based on member's role, region, cercle, commune
         const userMessages = allMessages.filter(msg => {
-          // Check if message is for everyone
-          if (!msg.targetRole && !msg.targetRegion && !msg.targetCercle && !msg.targetCommune) {
-            return true;
-          }
+          // Message must match user's filters (OR logic for each filter type)
+          const roleMatches = !msg.targetRole || msg.targetRole === member.role;
+          const regionMatches = !msg.targetRegion || msg.targetRegion === member.region;
+          const cercleMatches = !msg.targetCercle || msg.targetCercle === member.cercle;
+          const communeMatches = !msg.targetCommune || msg.targetCommune === member.commune;
 
-          // Check role filter
-          if (msg.targetRole && msg.targetRole === member.role) {
-            return true;
-          }
-
-          // Check region filter
-          if (msg.targetRegion && msg.targetRegion === member.commune) {
-            return true;
-          }
-
-          // Check cercle filter
-          if (msg.targetCercle && msg.targetCercle === member.commune) {
-            return true;
-          }
-
-          // Check commune filter
-          if (msg.targetCommune && msg.targetCommune === member.commune) {
-            return true;
-          }
-
-          return false;
+          return roleMatches && regionMatches && cercleMatches && communeMatches;
         });
 
+        // Get read status for each message
+        const messageReads = await app.db.select().from(schema.messageReads);
+
+        const messages = userMessages.map(msg => {
+          const isRead = messageReads.some(
+            read => read.messageId === msg.id && read.memberProfileId === member.id
+          );
+
+          return {
+            id: msg.id,
+            title: msg.title,
+            content: msg.content,
+            sentAt: msg.sentAt instanceof Date ? msg.sentAt.toISOString() : new Date(msg.sentAt).toISOString(),
+            isRead,
+          };
+        });
+
+        // Sort by sentAt DESC
+        messages.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+
         app.logger.info(
-          { userId: session.user.id, count: userMessages.length },
+          { userId: session.user.id, count: messages.length },
           'User messages fetched'
         );
-        return userMessages;
+        return { messages };
       } catch (error) {
         app.logger.error(
           { err: error, userId: session.user.id },
@@ -95,9 +115,9 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/messages/mark-read/:messageId - Mark as read (protected)
-  fastify.post<{ Params: { messageId: string } }>(
-    '/api/messages/mark-read/:messageId',
+  // POST /api/messages/mark-read/:id - Mark as read (protected)
+  fastify.post<{ Params: { id: string } }>(
+    '/api/messages/mark-read/:id',
     {
       schema: {
         description: 'Mark message as read',
@@ -105,30 +125,157 @@ export function register(app: App, fastify: FastifyInstance) {
         params: {
           type: 'object',
           properties: {
-            messageId: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
           },
         },
         response: {
           200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
     async (
-      request: FastifyRequest<{ Params: { messageId: string } }>,
+      request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
     ) => {
       const session = await requireAuth(request, reply);
       if (!session) return;
 
-      const { messageId } = request.params;
+      const { id: messageId } = request.params;
       app.logger.info(
         { userId: session.user.id, messageId },
         'Marking message as read'
       );
 
-      // In a production system, you would track read status
-      // For now, we just acknowledge the request
-      return { success: true };
+      try {
+        // Get user's member profile
+        const memberResult = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.userId, session.user.id));
+
+        if (memberResult.length === 0) {
+          return reply.status(404).send({ error: 'Profil membre non trouvé' });
+        }
+
+        const memberProfileId = memberResult[0].id;
+
+        // Check if message exists
+        const message = await app.db
+          .select()
+          .from(schema.internalMessages)
+          .where(eq(schema.internalMessages.id, messageId as any));
+
+        if (message.length === 0) {
+          return reply.status(404).send({ error: 'Message non trouvé' });
+        }
+
+        // Check if already marked as read
+        const existingRead = await app.db
+          .select()
+          .from(schema.messageReads)
+          .where(
+            and(
+              eq(schema.messageReads.messageId, messageId as any),
+              eq(schema.messageReads.memberProfileId, memberProfileId)
+            )
+          );
+
+        // If not already read, insert
+        if (existingRead.length === 0) {
+          await app.db
+            .insert(schema.messageReads)
+            .values({
+              messageId: messageId as any,
+              memberProfileId,
+              readAt: new Date(),
+            });
+        }
+
+        app.logger.info({ messageId }, 'Message marked as read');
+        return { success: true };
+      } catch (error) {
+        app.logger.error(
+          { err: error, userId: session.user.id, messageId },
+          'Failed to mark message as read'
+        );
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/notifications/send - Send notification message (admin)
+  fastify.post<{ Body: SendMessageBody }>(
+    '/api/notifications/send',
+    {
+      schema: {
+        description: 'Send notification message to targeted members (admin)',
+        tags: ['admin', 'notifications'],
+        body: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            content: { type: 'string' },
+            targetRole: { type: 'string' },
+            targetRegion: { type: 'string' },
+            targetCercle: { type: 'string' },
+            targetCommune: { type: 'string' },
+          },
+          required: ['title', 'content'],
+        },
+        response: {
+          201: {
+            type: 'object',
+            properties: {
+              messageId: { type: 'string' },
+              sent: { type: 'boolean' },
+            },
+          },
+          401: { type: 'object' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: SendMessageBody }>, reply: FastifyReply) => {
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const { title, content, targetRole, targetRegion, targetCercle, targetCommune } = request.body;
+
+      app.logger.info(
+        { userId: session.user.id, title },
+        'Sending notification message'
+      );
+
+      try {
+        const result = await app.db
+          .insert(schema.internalMessages)
+          .values({
+            title,
+            content,
+            senderId: session.user.id,
+            targetRole: targetRole || null,
+            targetRegion: targetRegion || null,
+            targetCercle: targetCercle || null,
+            targetCommune: targetCommune || null,
+            sentAt: new Date(),
+            createdAt: new Date(),
+          })
+          .returning();
+
+        reply.status(201);
+        app.logger.info(
+          { messageId: result[0].id, userId: session.user.id },
+          'Notification message sent'
+        );
+        return { messageId: result[0].id, sent: true };
+      } catch (error) {
+        app.logger.error(
+          { err: error, userId: session.user.id },
+          'Failed to send notification message'
+        );
+        throw error;
+      }
     }
   );
 

@@ -1,231 +1,245 @@
-
 import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   TextInput,
-  TouchableOpacity,
-  ActivityIndicator,
+  StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { Modal } from '@/components/ui/Modal';
+import { IconSymbol } from '@/components/IconSymbol';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+
+const ADMIN_PASSWORD = 'admin123';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalMessage, setModalMessage] = useState('');
-  const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+  const { login, isChecking } = useAdminAuth();
 
-  const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setModalType(type);
-    setModalVisible(true);
-  };
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = async () => {
-    console.log('Admin login attempt');
-    
+    console.log('[AdminLogin] Bouton Se connecter appuyé');
+
     if (!password.trim()) {
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-      showModal('Erreur', 'Veuillez entrer le mot de passe secret', 'error');
+      console.log('[AdminLogin] Mot de passe vide');
+      setError('Veuillez entrer le mot de passe.');
       return;
     }
 
-    setLoading(true);
-    console.log('Verifying admin password...');
+    console.log('[AdminLogin] Vérification mot de passe');
 
+    if (password !== ADMIN_PASSWORD) {
+      console.log('[AdminLogin] Mot de passe incorrect');
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setError('Mot de passe incorrect.');
+      return;
+    }
+
+    console.log('[AdminLogin] Mot de passe correct, enregistrement session');
     try {
-      // Store the admin password temporarily for authenticated requests
-      // This will be used in the admin dashboard and management screens
-      if (Platform.OS === 'web') {
-        localStorage.setItem('admin_password', password);
-      }
-
-      // For now, we'll just navigate to the dashboard
-      // The actual verification will happen when making admin API calls
-      console.log('Admin login successful, navigating to dashboard');
-      
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      router.replace('/admin/dashboard');
-    } catch (error) {
-      console.error('Admin login error:', error);
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-      showModal('Erreur', 'Mot de passe incorrect', 'error');
-    } finally {
-      setLoading(false);
+      await login();
+      console.log('[AdminLogin] Session enregistrée, redirection vers dashboard');
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.replace('/admin');
+    } catch (err) {
+      console.error('[AdminLogin] Erreur enregistrement session:', err);
+      setError('Erreur interne. Veuillez réessayer.');
     }
   };
+
+  if (isChecking) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  const isDisabled = !password.trim();
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Connexion Administrateur',
           headerShown: true,
-          headerStyle: {
-            backgroundColor: colors.primary,
-          },
-          headerTintColor: '#fff',
+          title: 'Connexion Administrateur',
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: { fontWeight: 'bold' },
         }}
       />
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.content}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
+        {/* Header */}
+        <View style={styles.headerSection}>
+          <View style={styles.lockBadge}>
+            <Text style={styles.lockIcon}>🔒</Text>
+          </View>
+          <Text style={styles.title}>Espace Admin</Text>
+          <Text style={styles.subtitle}>Alliance pour le Rassemblement Malien</Text>
+        </View>
+
+        <View style={styles.form}>
+          {/* Password field */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Mot de passe</Text>
+            <View style={[styles.inputWrapper, error ? styles.inputWrapperError : null]}>
+              <TextInput
+                style={styles.input}
+                placeholder="Entrez le mot de passe"
+                placeholderTextColor={colors.textTertiary}
+                value={password}
+                onChangeText={(v) => { setPassword(v); setError(''); }}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+              <AnimatedPressable
+                style={styles.eyeButton}
+                onPress={() => {
+                  console.log('[AdminLogin] Toggle visibilité mot de passe');
+                  setShowPassword(!showPassword);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name={showPassword ? 'eye.slash' : 'eye'}
+                  android_material_icon_name={showPassword ? 'visibility-off' : 'visibility'}
+                  size={22}
+                  color={colors.textSecondary}
+                />
+              </AnimatedPressable>
+            </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
           </View>
 
-          <Text style={styles.title}>Espace Administrateur</Text>
-          <Text style={styles.subtitle}>A.R.M - Alliance pour le Rassemblement Malien</Text>
-
-          <View style={styles.form}>
-            <Text style={styles.label}>Mot de passe secret</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Entrez le mot de passe secret"
-              placeholderTextColor={colors.textSecondary}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              editable={!loading}
-            />
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={loading}
-              activeOpacity={0.7}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Se connecter</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Fraternité • Liberté • Égalité
-            </Text>
-          </View>
+          <AnimatedPressable
+            style={[styles.loginButton, isDisabled && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={isDisabled}
+          >
+            <Text style={styles.loginButtonText}>Se connecter</Text>
+          </AnimatedPressable>
         </View>
       </KeyboardAvoidingView>
-
-      <Modal
-        visible={modalVisible}
-        title={modalTitle}
-        message={modalMessage}
-        type={modalType}
-        onClose={() => setModalVisible(false)}
-      />
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-  },
-  logoContainer: {
+  headerSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    backgroundColor: colors.primary,
+    paddingVertical: 48,
+    paddingHorizontal: 20,
   },
-  logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+  lockBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  lockIcon: {
+    fontSize: 32,
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: 8,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
-    marginBottom: 48,
   },
   form: {
+    padding: 24,
+    maxWidth: 440,
     width: '100%',
-    maxWidth: 400,
     alignSelf: 'center',
+    marginTop: 8,
+  },
+  inputGroup: {
+    marginBottom: 20,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
     marginBottom: 8,
   },
-  input: {
-    backgroundColor: colors.card,
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceSecondary,
     borderRadius: 12,
-    padding: 16,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+  },
+  inputWrapperError: {
+    borderColor: colors.danger,
+  },
+  input: {
+    flex: 1,
+    height: 52,
     fontSize: 16,
     color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 24,
   },
-  button: {
+  eyeButton: {
+    padding: 8,
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: colors.danger,
+    fontWeight: '500',
+  },
+  loginButton: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    borderRadius: 14,
+    height: 52,
     justifyContent: 'center',
-    minHeight: 56,
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    marginTop: 4,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  footer: {
-    marginTop: 48,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
+  loginButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
   },
 });

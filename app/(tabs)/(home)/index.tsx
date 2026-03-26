@@ -1,45 +1,34 @@
 
+import { IconSymbol } from "@/components/IconSymbol";
 import React, { useState, useEffect, useCallback } from "react";
-import { 
-  StyleSheet, 
-  View, 
-  Text, 
-  ScrollView, 
-  Image, 
+import { useRouter } from "expo-router";
+import * as Haptics from 'expo-haptics';
+import { colors } from "@/styles/commonStyles";
+import { apiGet } from "@/utils/api";
+import { Ionicons } from "@expo/vector-icons";
+import { PROGRAM_POINTS } from "@/constants/programData";
+import {
+  StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  Image,
   TouchableOpacity,
-  Dimensions,
   Platform,
   ImageSourcePropType,
   RefreshControl,
   ActivityIndicator,
   Animated
 } from "react-native";
-import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
-import { useRouter } from "expo-router";
-import * as Haptics from 'expo-haptics';
 
-// Helper to resolve image sources
 function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
   if (!source) return { uri: '' };
   if (typeof source === 'string') return { uri: source };
   return source as ImageSourcePropType;
 }
 
-interface NewsItem {
-  id: string;
-  title: string;
-  content: string;
-  imageUrl?: string;
-  publishedAt: string;
-}
-
-interface EventItem {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  location: string;
+interface MemberStats {
+  totalMembers: number;
 }
 
 interface LeadershipMember {
@@ -50,211 +39,165 @@ interface LeadershipMember {
   location?: string;
 }
 
-const { width } = Dimensions.get('window');
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [events, setEvents] = useState<EventItem[]>([]);
   const [leadership, setLeadership] = useState<LeadershipMember[]>([]);
+  const [memberStats, setMemberStats] = useState<MemberStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const fabScale = useState(new Animated.Value(1))[0];
-
-  const loadNews = useCallback(async () => {
-    console.log('Loading news articles');
-    try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<NewsItem[]>('/api/news');
-      
-      if (error) {
-        console.error('Failed to load news:', error);
-        return;
-      }
-      
-      if (data) {
-        setNews(data);
-        console.log('Loaded', data.length, 'news articles');
-      }
-    } catch (error) {
-      console.error('Error loading news:', error);
-    }
-  }, []);
-
-  const loadEvents = useCallback(async () => {
-    console.log('Loading events');
-    try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<EventItem[]>('/api/events');
-      
-      if (error) {
-        console.error('Failed to load events:', error);
-        return;
-      }
-      
-      if (data) {
-        setEvents(data);
-        console.log('Loaded', data.length, 'events');
-      }
-    } catch (error) {
-      console.error('Error loading events:', error);
-    }
-  }, []);
-
-  const loadLeadership = useCallback(async () => {
-    console.log('Loading leadership members');
-    try {
-      const { apiCall } = await import('@/utils/api');
-      const { data, error } = await apiCall<LeadershipMember[]>('/api/leadership');
-      
-      if (error) {
-        console.error('Failed to load leadership:', error);
-        return;
-      }
-      
-      if (data) {
-        setLeadership(data);
-        console.log('Loaded', data.length, 'leadership members');
-      }
-    } catch (error) {
-      console.error('Error loading leadership:', error);
-    }
-  }, []);
+  const [error, setError] = useState<string | null>(null);
+  const [fadeAnim] = useState(new Animated.Value(0));
 
   const loadAllData = useCallback(async () => {
-    await Promise.all([
-      loadNews(),
-      loadEvents(),
-      loadLeadership()
-    ]);
-    setLoading(false);
-    
-    // Fade in animation
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  }, [loadNews, loadEvents, loadLeadership, fadeAnim]);
+    console.log('[HomeScreen] Chargement de toutes les données');
+    setError(null);
+
+    try {
+      const [leaderResult, statsResult] = await Promise.allSettled([
+        apiGet<LeadershipMember[]>('/api/leadership'),
+        fetch(`${BACKEND_URL}/api/members/stats`).then(async (res) => {
+          if (!res.ok) throw new Error(`Stats: ${res.status}`);
+          return res.json();
+        }),
+      ]);
+
+      if (leaderResult.status === 'fulfilled' && Array.isArray(leaderResult.value)) {
+        console.log('[HomeScreen] Direction chargée:', leaderResult.value.length, 'éléments');
+        setLeadership(leaderResult.value);
+      } else {
+        console.warn('[HomeScreen] Échec du chargement de la direction:', leaderResult);
+      }
+
+      if (statsResult.status === 'fulfilled') {
+        console.log('[HomeScreen] Stats membres chargées:', statsResult.value);
+        setMemberStats(statsResult.value);
+      }
+
+      if (leaderResult.status === 'rejected') {
+        setError('Impossible de charger les données. Affichage du contenu par défaut.');
+      }
+    } catch (err: any) {
+      console.error('[HomeScreen] Erreur lors du chargement:', err);
+      setError('Une erreur est survenue. Affichage du contenu par défaut.');
+    } finally {
+      setLoading(false);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [fadeAnim]);
 
   useEffect(() => {
-    console.log('HomeScreen: Loading party data');
+    console.log('[HomeScreen] Composant monté, chargement des données');
+
+    const loadingTimeout = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) {
+          console.warn('[HomeScreen] Délai de chargement dépassé');
+          setError('Chargement lent. Affichage du contenu par défaut.');
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }).start();
+          return false;
+        }
+        return prev;
+      });
+    }, 3000);
+
     loadAllData();
+
+    return () => clearTimeout(loadingTimeout);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadAllData]);
 
   const onRefresh = useCallback(async () => {
-    console.log('User pulled to refresh');
+    console.log('[HomeScreen] Actualisation par glissement');
     setRefreshing(true);
     await loadAllData();
     setRefreshing(false);
-    
-    // Haptic feedback on refresh complete
     if (Platform.OS === 'ios') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   }, [loadAllData]);
 
-  const handleDonation = (amount: number) => {
-    console.log('User tapped donation button:', amount, 'EUR');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+  const handleDonation = () => {
+    console.log('[HomeScreen] Bouton Don appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/donation');
   };
 
   const handleJoinParty = () => {
-    console.log('User tapped Join Party button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    console.log('[HomeScreen] Bouton Adhérer appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/member/register');
   };
 
   const handleMemberCard = () => {
-    console.log('User tapped Member Card button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    console.log('[HomeScreen] Bouton Carte de Membre appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/member/card');
   };
 
-  const handleContact = () => {
-    console.log('User tapped Contact button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push('/contact');
-  };
-
-  const handleChat = () => {
-    console.log('User tapped Public Chat button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push('/chat/public');
-  };
-
   const handleIdeology = () => {
-    console.log('User tapped Ideology button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    console.log('[HomeScreen] Bouton Idéologie appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/ideology');
   };
 
-  const handleAIChat = () => {
-    console.log('User tapped AI Assistant button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
-    
-    // Animate button press
-    Animated.sequence([
-      Animated.timing(fabScale, {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fabScale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    router.push('/ai-chat');
-  };
-
-  const handleAdminLogin = () => {
-    console.log('User tapped Admin Login button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
+  const handleAdminAccess = () => {
+    console.log('[HomeScreen] Bouton Accès Admin appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/admin/login');
   };
 
-  const handleSettings = () => {
-    console.log('User tapped Settings button');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push('/settings');
+  const handleProgram = () => {
+    console.log('[HomeScreen] Bouton Notre Programme appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/program');
+  };
+
+  const handleProgramPoint = (idx: number) => {
+    console.log('[HomeScreen] Carte programme appuyée, point:', idx + 1, PROGRAM_POINTS[idx].title);
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({ pathname: '/program', params: { index: String(idx) } });
+  };
+
+  const handleMembersList = () => {
+    console.log('[HomeScreen] Bouton Liste des adhérents appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/members-list');
+  };
+
+  const handleIdeologyGuide = () => {
+    console.log('[HomeScreen] Bouton Guide des Partis appuyé');
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/ideology');
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
+        <Image
+          source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
+          style={styles.loadingLogo}
+          resizeMode="contain"
+        />
+        <ActivityIndicator size="large" color={colors.primary} style={styles.loadingSpinner} />
+        <Text style={styles.loadingText}>Chargement de A.R.M...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <ScrollView 
-        style={styles.scrollView} 
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         refreshControl={
           <RefreshControl
@@ -266,9 +209,23 @@ export default function HomeScreen() {
         }
       >
         <Animated.View style={{ opacity: fadeAnim }}>
-          {/* Header avec logo */}
+          {error && (
+            <View style={styles.errorContainer}>
+              <IconSymbol
+                ios_icon_name="exclamationmark.triangle.fill"
+                android_material_icon_name="warning"
+                size={24}
+                color={colors.warning}
+              />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity onPress={loadAllData} style={styles.retryButton}>
+                <Text style={styles.retryButtonText}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.header}>
-            <Image 
+            <Image
               source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
               style={styles.logo}
               resizeMode="contain"
@@ -280,21 +237,69 @@ export default function HomeScreen() {
               <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
               <View style={styles.mottoLine} />
             </View>
+            {memberStats != null && (
+              <View style={styles.statsBanner}>
+                <Text style={styles.statsBannerNumber}>{String(memberStats.totalMembers)}</Text>
+                <Text style={styles.statsBannerLabel}>membres inscrits</Text>
+              </View>
+            )}
           </View>
 
-          {/* Idéologie du parti */}
+          {/* Notre Programme section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeader}>
+                <IconSymbol
+                  ios_icon_name="doc.text.fill"
+                  android_material_icon_name="description"
+                  size={24}
+                  color={colors.primary}
+                />
+                <Text style={styles.sectionTitle}>Notre Programme</Text>
+              </View>
+              <TouchableOpacity onPress={handleProgram} activeOpacity={0.7}>
+                <Text style={styles.voirToutText}>Voir tout</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.programGrid}>
+              {PROGRAM_POINTS.map((pt, idx) => {
+                const num = String(idx + 1);
+                return (
+                  <TouchableOpacity
+                    key={num}
+                    style={styles.programCard}
+                    onPress={() => handleProgramPoint(idx)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.programCardAccent, { backgroundColor: pt.color }]} />
+                    <View style={styles.programCardInner}>
+                      <Text style={[styles.programCardNumber, { color: pt.color }]}>{num}</Text>
+                      <View style={[styles.programCardIconWrap, { backgroundColor: pt.color + '18' }]}>
+                        <Ionicons name={pt.icon} size={20} color={pt.color} />
+                      </View>
+                      <Text style={styles.programCardTitle} numberOfLines={2}>{pt.title}</Text>
+                      <View style={styles.programCardArrow}>
+                        <Ionicons name="chevron-forward" size={13} color={pt.color} />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="book.fill" 
-                android_material_icon_name="menu-book" 
-                size={24} 
-                color={colors.primary} 
+              <IconSymbol
+                ios_icon_name="book.fill"
+                android_material_icon_name="menu-book"
+                size={24}
+                color={colors.primary}
               />
               <Text style={styles.sectionTitle}>Notre Idéologie</Text>
             </View>
-            <TouchableOpacity 
-              style={styles.ideologyCard} 
+            <TouchableOpacity
+              style={styles.ideologyCard}
               onPress={handleIdeology}
               activeOpacity={0.8}
             >
@@ -305,52 +310,24 @@ export default function HomeScreen() {
                 </Text>
                 <View style={styles.ideologyButton}>
                   <Text style={styles.ideologyButtonText}>Découvrir notre idéologie</Text>
-                  <IconSymbol 
-                    ios_icon_name="arrow.right" 
-                    android_material_icon_name="arrow-forward" 
-                    size={20} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="arrow.right"
+                    android_material_icon_name="arrow-forward"
+                    size={20}
+                    color={colors.primary}
                   />
                 </View>
               </View>
             </TouchableOpacity>
           </View>
 
-          {/* Programme politique */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="doc.text.fill" 
-                android_material_icon_name="description" 
-                size={24} 
-                color={colors.primary} 
-              />
-              <Text style={styles.sectionTitle}>Notre Programme</Text>
-            </View>
-            <View style={styles.card}>
-              <Text style={styles.programText}>
-                L&apos;A.R.M s&apos;engage pour le développement du Mali à travers des programmes concrets dans tous les secteurs : éducation, santé, économie, agriculture, et infrastructure.
-              </Text>
-              <TouchableOpacity style={styles.linkButton} activeOpacity={0.7}>
-                <Text style={styles.linkButtonText}>Voir le programme complet</Text>
-                <IconSymbol 
-                  ios_icon_name="chevron.right" 
-                  android_material_icon_name="chevron-right" 
-                  size={20} 
-                  color={colors.primary} 
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Contributions */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="heart.fill" 
-                android_material_icon_name="favorite" 
-                size={24} 
-                color={colors.accent} 
+              <IconSymbol
+                ios_icon_name="heart.fill"
+                android_material_icon_name="favorite"
+                size={24}
+                color={colors.accent}
               />
               <Text style={styles.sectionTitle}>Soutenez-nous</Text>
             </View>
@@ -358,212 +335,158 @@ export default function HomeScreen() {
               <Text style={styles.donationText}>Votre contribution régulière aide à construire un Mali meilleur</Text>
               <View style={styles.contributionInfo}>
                 <View style={styles.contributionOption}>
-                  <IconSymbol 
-                    ios_icon_name="calendar" 
-                    android_material_icon_name="event" 
-                    size={20} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="calendar"
+                    android_material_icon_name="event"
+                    size={20}
+                    color={colors.primary}
                   />
                   <Text style={styles.contributionOptionText}>Contribution mensuelle</Text>
                 </View>
                 <View style={styles.contributionOption}>
-                  <IconSymbol 
-                    ios_icon_name="calendar.badge.clock" 
-                    android_material_icon_name="date-range" 
-                    size={20} 
-                    color={colors.primary} 
+                  <IconSymbol
+                    ios_icon_name="calendar.badge.clock"
+                    android_material_icon_name="date-range"
+                    size={20}
+                    color={colors.primary}
                   />
                   <Text style={styles.contributionOptionText}>Contribution annuelle</Text>
                 </View>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.contributionButton}
-                onPress={() => handleDonation(0)}
+                onPress={handleDonation}
                 activeOpacity={0.8}
               >
                 <Text style={styles.contributionButtonText}>Faire une contribution</Text>
-                <IconSymbol 
-                  ios_icon_name="arrow.right" 
-                  android_material_icon_name="arrow-forward" 
-                  size={20} 
-                  color={colors.background} 
+                <IconSymbol
+                  ios_icon_name="arrow.right"
+                  android_material_icon_name="arrow-forward"
+                  size={20}
+                  color={colors.background}
                 />
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* Actualités */}
-          {news.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="newspaper.fill" 
-                  android_material_icon_name="article" 
-                  size={24} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.sectionTitle}>Actualités</Text>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {news.slice(0, 5).map((item) => (
-                  <TouchableOpacity key={item.id} style={styles.newsCard} activeOpacity={0.9}>
-                    {item.imageUrl && (
-                      <Image 
-                        source={resolveImageSource(item.imageUrl)}
-                        style={styles.newsImage}
-                        resizeMode="cover"
-                      />
-                    )}
-                    <View style={styles.newsContent}>
-                      <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
-                      <Text style={styles.newsExcerpt} numberOfLines={3}>{item.content}</Text>
-                      <Text style={styles.newsDate}>
-                        {new Date(item.publishedAt).toLocaleDateString('fr-FR')}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Événements */}
-          {events.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <IconSymbol 
-                  ios_icon_name="calendar.badge.clock" 
-                  android_material_icon_name="event" 
-                  size={24} 
-                  color={colors.primary} 
-                />
-                <Text style={styles.sectionTitle}>Événements à venir</Text>
-              </View>
-              {events.slice(0, 3).map((item) => (
-                <TouchableOpacity key={item.id} style={styles.eventCard} activeOpacity={0.9}>
-                  <View style={styles.eventDate}>
-                    <Text style={styles.eventDay}>
-                      {new Date(item.date).getDate()}
-                    </Text>
-                    <Text style={styles.eventMonth}>
-                      {new Date(item.date).toLocaleDateString('fr-FR', { month: 'short' })}
-                    </Text>
-                  </View>
-                  <View style={styles.eventInfo}>
-                    <Text style={styles.eventTitle}>{item.title}</Text>
-                    <Text style={styles.eventDescription} numberOfLines={2}>
-                      {item.description}
-                    </Text>
-                    <View style={styles.eventLocation}>
-                      <IconSymbol 
-                        ios_icon_name="location.fill" 
-                        android_material_icon_name="place" 
-                        size={14} 
-                        color={colors.textSecondary} 
-                      />
-                      <Text style={styles.eventLocationText}>{item.location}</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
 
           {/* Actions rapides */}
           <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol
+                ios_icon_name="square.grid.2x2.fill"
+                android_material_icon_name="apps"
+                size={24}
+                color={colors.primary}
+              />
+              <Text style={styles.sectionTitle}>Actions rapides</Text>
+            </View>
             <View style={styles.quickActions}>
-              <TouchableOpacity 
-                style={styles.actionCard} 
+              <TouchableOpacity
+                style={styles.actionCard}
                 onPress={handleJoinParty}
                 activeOpacity={0.8}
               >
-                <IconSymbol 
-                  ios_icon_name="person.badge.plus" 
-                  android_material_icon_name="person-add" 
-                  size={32} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="person.badge.plus"
+                  android_material_icon_name="person-add"
+                  size={32}
+                  color={colors.primary}
                 />
                 <Text style={styles.actionTitle}>Adhérer</Text>
-                <Text style={styles.actionSubtitle}>Rejoignez-nous</Text>
+                <Text style={styles.actionSubtitle}>Rejoindre l'ARM</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.actionCard} 
+              <TouchableOpacity
+                style={styles.actionCard}
                 onPress={handleMemberCard}
                 activeOpacity={0.8}
               >
-                <IconSymbol 
-                  ios_icon_name="person.text.rectangle" 
-                  android_material_icon_name="badge" 
-                  size={32} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="person.text.rectangle"
+                  android_material_icon_name="badge"
+                  size={32}
+                  color={colors.primary}
                 />
                 <Text style={styles.actionTitle}>Ma Carte</Text>
-                <Text style={styles.actionSubtitle}>Carte membre</Text>
+                <Text style={styles.actionSubtitle}>Accès libre</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleSettings}
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={handleAdminAccess}
                 activeOpacity={0.8}
               >
-                <IconSymbol 
-                  ios_icon_name="gear" 
-                  android_material_icon_name="settings" 
-                  size={32} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="lock.shield"
+                  android_material_icon_name="admin-panel-settings"
+                  size={32}
+                  color={colors.accent}
                 />
-                <Text style={styles.actionTitle}>Paramètres</Text>
-                <Text style={styles.actionSubtitle}>Langue & Devise</Text>
+                <Text style={styles.actionTitle}>Admin</Text>
+                <Text style={styles.actionSubtitle}>Accès sécurisé</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleContact}
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardProgram]}
+                onPress={handleProgram}
                 activeOpacity={0.8}
               >
-                <IconSymbol 
-                  ios_icon_name="envelope.fill" 
-                  android_material_icon_name="email" 
-                  size={32} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="doc.text"
+                  android_material_icon_name="description"
+                  size={32}
+                  color="#1B5E20"
                 />
-                <Text style={styles.actionTitle}>Contact</Text>
-                <Text style={styles.actionSubtitle}>Écrivez-nous</Text>
+                <Text style={styles.actionTitle}>Notre Programme</Text>
+                <Text style={[styles.actionSubtitle, { color: '#1B5E20' }]}>Programme politique</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
-                style={styles.actionCard} 
-                onPress={handleChat}
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardMembers]}
+                onPress={handleMembersList}
                 activeOpacity={0.8}
               >
-                <IconSymbol 
-                  ios_icon_name="bubble.left.and.bubble.right.fill" 
-                  android_material_icon_name="chat" 
-                  size={32} 
-                  color={colors.primary} 
+                <IconSymbol
+                  ios_icon_name="person.3.fill"
+                  android_material_icon_name="group"
+                  size={32}
+                  color="#0369A1"
                 />
-                <Text style={styles.actionTitle}>Chat Public</Text>
-                <Text style={styles.actionSubtitle}>Discutez</Text>
+                <Text style={styles.actionTitle}>Adhérents</Text>
+                <Text style={[styles.actionSubtitle, { color: '#0369A1' }]}>Liste complète</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardGuide]}
+                onPress={handleIdeologyGuide}
+                activeOpacity={0.8}
+              >
+                <IconSymbol
+                  ios_icon_name="books.vertical.fill"
+                  android_material_icon_name="menu-book"
+                  size={32}
+                  color="#2E7D32"
+                />
+                <Text style={styles.actionTitle}>Guide des Partis</Text>
+                <Text style={[styles.actionSubtitle, { color: '#2E7D32' }]}>Outil pédagogique</Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Direction du parti */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="person.3.fill" 
-                android_material_icon_name="group" 
-                size={24} 
-                color={colors.primary} 
+              <IconSymbol
+                ios_icon_name="person.3.fill"
+                android_material_icon_name="group"
+                size={24}
+                color={colors.primary}
               />
               <Text style={styles.sectionTitle}>Direction du Parti</Text>
             </View>
             <View style={styles.card}>
               {leadership.length > 0 ? (
                 leadership.map((leader) => (
-                  <LeaderCard 
+                  <LeaderCard
                     key={leader.id}
                     name={leader.name}
                     position={leader.position}
@@ -573,52 +496,24 @@ export default function HomeScreen() {
                 ))
               ) : (
                 <>
-                  <LeaderCard 
-                    name="Lassine Diakité"
-                    position="Président"
-                    location="Yuncos, Toledo, Espagne"
-                    phone="0034632607101"
-                  />
-                  <LeaderCard 
-                    name="Dadou Sangare"
-                    position="Premier Vice-Président"
-                    location="Milan, Italie"
-                  />
-                  <LeaderCard 
-                    name="Oumar Keita"
-                    position="Deuxième Vice-Président"
-                    location="Koutiala, Mali"
-                    phone="0022376304869"
-                  />
-                  <LeaderCard 
-                    name="Karifa Keita"
-                    position="Secrétaire Général"
-                    location="Bamako, Mali"
-                  />
-                  <LeaderCard 
-                    name="Modibo Keita"
-                    position="Secrétaire Administratif"
-                    location="Bamako Sebenikoro, Mali"
-                  />
-                  <LeaderCard 
-                    name="Sokona Keita"
-                    position="Trésorière"
-                    location="Bamako Sebenikoro, Mali"
-                    phone="0022375179920"
-                  />
+                  <LeaderCard name="Lassine Diakité" position="Président" location="Yuncos, Toledo, Espagne" phone="0034632607101" />
+                  <LeaderCard name="Dadou Sangare" position="Premier Vice-Président" location="Milan, Italie" />
+                  <LeaderCard name="Oumar Keita" position="Deuxième Vice-Président" location="Koutiala, Mali" phone="0022376304869" />
+                  <LeaderCard name="Karifa Keita" position="Secrétaire Général" location="Bamako, Mali" />
+                  <LeaderCard name="Modibo Keita" position="Secrétaire Administratif" location="Bamako Sebenikoro, Mali" />
+                  <LeaderCard name="Sokona Keita" position="Trésorière" location="Bamako Sebenikoro, Mali" phone="0022375179920" />
                 </>
               )}
             </View>
           </View>
 
-          {/* Siège du parti */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <IconSymbol 
-                ios_icon_name="building.2.fill" 
-                android_material_icon_name="location-city" 
-                size={24} 
-                color={colors.primary} 
+              <IconSymbol
+                ios_icon_name="building.2.fill"
+                android_material_icon_name="location-city"
+                size={24}
+                color={colors.primary}
               />
               <Text style={styles.sectionTitle}>Siège du Parti</Text>
             </View>
@@ -629,65 +524,23 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Espace Administrateur */}
-          <View style={styles.section}>
-            <TouchableOpacity 
-              style={styles.adminCard} 
-              onPress={handleAdminLogin}
-              activeOpacity={0.8}
-            >
-              <IconSymbol 
-                ios_icon_name="lock.shield.fill" 
-                android_material_icon_name="admin-panel-settings" 
-                size={32} 
-                color={colors.textSecondary} 
-              />
-              <Text style={styles.adminText}>Espace Administrateur</Text>
-              <IconSymbol 
-                ios_icon_name="chevron.right" 
-                android_material_icon_name="chevron-right" 
-                size={20} 
-                color={colors.textSecondary} 
-              />
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.bottomSpacer} />
         </Animated.View>
       </ScrollView>
-
-      {/* Floating AI Button */}
-      <Animated.View style={[styles.fabContainer, { transform: [{ scale: fabScale }] }]}>
-        <TouchableOpacity 
-          style={styles.fab}
-          onPress={handleAIChat}
-          activeOpacity={0.9}
-        >
-          <View style={styles.fabGradient}>
-            <IconSymbol 
-              ios_icon_name="sparkles" 
-              android_material_icon_name="auto-awesome" 
-              size={28} 
-              color="#FFFFFF" 
-            />
-            <Text style={styles.fabText}>IA</Text>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
     </View>
   );
 }
 
-function LeaderCard({ name, position, location, phone }: { 
-  name: string; 
-  position: string; 
-  location?: string; 
+function LeaderCard({ name, position, location, phone }: {
+  name: string;
+  position: string;
+  location?: string;
   phone?: string;
 }) {
   return (
     <View style={styles.leaderCard}>
       <View style={styles.leaderIcon}>
-        <Image 
+        <Image
           source={require('@/assets/images/48b93c14-0824-4757-b7a4-95824e04a9a8.jpeg')}
           style={styles.leaderAvatar}
           resizeMode="cover"
@@ -720,11 +573,50 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingLogo: {
+    width: 120,
+    height: 120,
+    marginBottom: 24,
+    borderRadius: 60,
+  },
+  loadingSpinner: {
+    marginVertical: 16,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
     color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 12,
+    padding: 16,
+    margin: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    marginLeft: 12,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background,
   },
   header: {
     alignItems: 'center',
@@ -774,6 +666,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 24,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -784,6 +682,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     marginLeft: 8,
+  },
+  voirToutText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
   },
   card: {
     backgroundColor: colors.card,
@@ -830,23 +733,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   ideologyButtonText: {
-    fontSize: 15,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  programText: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  linkButtonText: {
     fontSize: 15,
     color: colors.primary,
     fontWeight: '600',
@@ -907,6 +793,21 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  actionCardProgram: {
+    borderWidth: 1.5,
+    borderColor: '#1B5E2020',
+    backgroundColor: '#F1F8F1',
+  },
+  actionCardMembers: {
+    borderWidth: 1.5,
+    borderColor: '#0369A120',
+    backgroundColor: '#F0F9FF',
+  },
+  actionCardGuide: {
+    borderWidth: 1.5,
+    borderColor: '#2E7D3220',
+    backgroundColor: '#F1F8F1',
+  },
   actionTitle: {
     fontSize: 14,
     fontWeight: 'bold',
@@ -915,8 +816,9 @@ const styles = StyleSheet.create({
   },
   actionSubtitle: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.success,
     marginTop: 2,
+    fontWeight: '600',
   },
   leaderCard: {
     flexDirection: 'row',
@@ -959,146 +861,76 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginVertical: 2,
   },
+  statsBanner: {
+    marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  statsBannerNumber: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: colors.accent,
+    letterSpacing: -0.5,
+  },
+  statsBannerLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+    marginTop: 2,
+  },
   bottomSpacer: {
     height: 20,
   },
-  newsCard: {
-    width: width * 0.75,
+  programGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  programCard: {
+    width: '47.5%',
     backgroundColor: colors.card,
-    borderRadius: 16,
-    marginRight: 16,
+    borderRadius: 14,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.09,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  newsImage: {
+  programCardAccent: {
+    height: 4,
     width: '100%',
-    height: 150,
-    backgroundColor: colors.border,
   },
-  newsContent: {
-    padding: 16,
+  programCardInner: {
+    padding: 12,
   },
-  newsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
+  programCardNumber: {
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 30,
+    marginBottom: 6,
   },
-  newsExcerpt: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  newsDate: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  eventCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  eventDate: {
-    width: 60,
-    height: 60,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
+  programCardIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
-  },
-  eventDay: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.background,
-  },
-  eventMonth: {
-    fontSize: 12,
-    color: colors.background,
-    textTransform: 'uppercase',
-  },
-  eventInfo: {
-    flex: 1,
-  },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  eventDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
     marginBottom: 8,
   },
-  eventLocation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eventLocationText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginLeft: 4,
-  },
-  fabContainer: {
-    position: 'absolute',
-    bottom: 100,
-    right: 20,
-    zIndex: 1000,
-  },
-  fab: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  fabGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-  },
-  fabText: {
+  programCardTitle: {
     fontSize: 12,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginTop: 2,
+    fontWeight: '700',
+    color: colors.text,
+    lineHeight: 17,
+    marginBottom: 6,
   },
-  adminCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  adminText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginLeft: 12,
+  programCardArrow: {
+    alignSelf: 'flex-end',
   },
 });

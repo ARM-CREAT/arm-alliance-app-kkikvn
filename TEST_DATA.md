@@ -12,6 +12,51 @@ Use this test data to quickly populate your application for testing.
 **Name:** Administrateur ARM  
 **Role:** administrateur
 
+### 🔐 Admin Authentication System
+
+The admin authentication uses a **dual-header verification** approach:
+
+#### How It Works:
+1. **Frontend Storage**: Stores `admin_password` and `admin_secret_code` in AsyncStorage/localStorage
+2. **API Headers**: Sends both `x-admin-password` and `x-admin-secret` headers with every admin request
+3. **Backend Verification**: Checks that BOTH headers match the `ADMIN_PASSWORD` environment variable
+
+#### Testing Admin Login:
+1. Navigate to `/admin/login`
+2. Enter password: `admin123`
+3. Click "Se connecter"
+4. ✅ Success: Redirects to `/admin/dashboard`
+5. ✅ Session persists across app restarts
+
+#### Error Cases:
+- ❌ Empty password: "Veuillez entrer le mot de passe administrateur"
+- ❌ Wrong password: "Mot de passe incorrect. Le mot de passe par défaut est: admin123"
+- ❌ Network error: "Impossible de se connecter au serveur"
+
+#### Protected Admin Routes:
+All these routes require admin authentication:
+- `/admin/dashboard` - Main admin dashboard
+- `/admin/manage-news-full` - News management
+- `/admin/manage-events` - Events management
+- `/admin/manage-leadership` - Leadership management
+- `/admin/manage-members` - Member management
+- `/admin/member-registry` - Member registry
+- `/admin/election-verification` - Election verification
+- `/admin/media-upload` - Media upload
+- `/admin/send-message` - Send internal messages
+- `/admin/manage-conferences` - Conference management
+
+#### Debugging Admin Auth:
+Check these logs if authentication fails:
+```
+[AdminContext] Loading stored admin token
+[AdminContext] Admin login attempt
+[API] Calling: https://...
+[API] Fetch options: {...}
+Admin auth attempt - checking headers
+Admin authentication successful
+```
+
 ---
 
 ## 👥 Test Members

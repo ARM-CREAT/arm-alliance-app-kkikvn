@@ -1,3 +1,4 @@
+
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
@@ -5,15 +6,53 @@ import { BEARER_TOKEN_KEY } from "@/lib/auth";
 
 /**
  * Backend URL is configured in app.json under expo.extra.backendUrl
- * It is set automatically when the backend is deployed
+ * The production URL is hardcoded as fallback to ensure it is never empty
+ * in production APK/AAB builds where Constants.expoConfig may not be available.
  */
-export const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
+const PRODUCTION_BACKEND_URL = "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev";
+export const BACKEND_URL: string =
+  Constants.expoConfig?.extra?.backendUrl ||
+  PRODUCTION_BACKEND_URL;
+
+console.log('[API] BACKEND_URL resolved to:', BACKEND_URL);
 
 /**
  * Check if backend is properly configured
  */
 export const isBackendConfigured = (): boolean => {
   return !!BACKEND_URL && BACKEND_URL.length > 0;
+};
+
+/**
+ * Check if backend is reachable
+ * @returns true if backend responds, false otherwise
+ */
+export const checkBackendHealth = async (): Promise<boolean> => {
+  if (!isBackendConfigured()) {
+    console.log('[API] Backend not configured');
+    return false;
+  }
+
+  try {
+    console.log('[API] Checking backend health:', BACKEND_URL);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    const response = await fetch(`${BACKEND_URL}/api/health`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    // Any response below 500 means the server is reachable and online.
+    // Only a network failure (fetch throws) or a 5xx response means offline.
+    const isHealthy = response.status < 500;
+    console.log('[API] Backend health check status:', response.status, isHealthy ? 'ONLINE' : 'OFFLINE');
+    return isHealthy;
+  } catch (error: any) {
+    console.error('[API] Backend health check failed (network error):', error.message);
+    return false;
+  }
 };
 
 /**
@@ -37,59 +76,144 @@ export const getBearerToken = async (): Promise<string | null> => {
 };
 
 /**
- * Generic API call helper with error handling
+ * Fetch with timeout
+ * @param url - URL to fetch
+ * @param options - Fetch options
+ * @param timeoutMs - Timeout in milliseconds (default: 10000ms = 10 seconds)
+ * @returns Response
+ */
+const fetchWithTimeout = async (
+  url: string,
+  options?: RequestInit,
+  timeoutMs: number = 10000
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Le serveur ne répond pas. Veuillez vérifier votre connexion internet ou réessayer plus tard.');
+    }
+    throw error;
+  }
+};
+
+/**
+ * Generic API call helper with error handling and retry logic
  *
  * @param endpoint - API endpoint path (e.g., '/users', '/auth/login')
  * @param options - Fetch options (method, headers, body, etc.)
+ * @param retryCount - Number of retries (default: 1)
  * @returns Parsed JSON response
  * @throws Error if backend is not configured or request fails
  */
 export const apiCall = async <T = any>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit,
+  retryCount: number = 1
 ): Promise<T> => {
   if (!isBackendConfigured()) {
-    throw new Error("Backend URL not configured. Please rebuild the app.");
+    throw new Error("Le serveur n'est pas configuré. Veuillez utiliser le mode hors ligne.");
   }
 
   const url = `${BACKEND_URL}${endpoint}`;
   console.log("[API] Calling:", url, options?.method || "GET");
 
-  try {
-    const fetchOptions: RequestInit = {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
-    };
+  let lastError: any = null;
 
-    console.log("[API] Fetch options:", fetchOptions);
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`[API] Retry attempt ${attempt}/${retryCount}`);
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+      }
 
-    // Always send the token if we have it (needed for cross-domain/iframe support)
-    const token = await getBearerToken();
-    if (token) {
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        Authorization: `Bearer ${token}`,
+      const fetchOptions: RequestInit = {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
       };
+
+      console.log("[API] Fetch options:", JSON.stringify(fetchOptions, null, 2));
+
+      // Always send the token if we have it (needed for cross-domain/iframe support)
+      const token = await getBearerToken();
+      if (token) {
+        fetchOptions.headers = {
+          ...fetchOptions.headers,
+          Authorization: `Bearer ${token}`,
+        };
+      }
+
+      // Use fetchWithTimeout instead of regular fetch
+      const response = await fetchWithTimeout(url, fetchOptions, 10000);
+
+      if (!response.ok) {
+        let errorText = '';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          errorText = 'Impossible de lire la réponse du serveur';
+        }
+        console.error("[API] Error response:", response.status, errorText);
+        
+        // Parse error message if it's JSON
+        let errorMessage = `Erreur ${response.status}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.error || errorJson.message || errorMessage;
+        } catch (e) {
+          // Not JSON, use the text
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      console.log("[API] Success:", data);
+      return data;
+    } catch (error: any) {
+      lastError = error;
+      console.error(`[API] Request failed (attempt ${attempt + 1}/${retryCount + 1}):`, error);
+      
+      // Don't retry on authentication errors (401, 403)
+      if (error.message?.includes('401') || error.message?.includes('403') || error.message?.includes('Unauthorized')) {
+        throw error;
+      }
+      
+      // Don't retry on timeout errors - just fail fast
+      if (error.message?.includes('ne répond pas')) {
+        throw error;
+      }
+      
+      // Continue to next retry attempt
+      if (attempt < retryCount) {
+        continue;
+      }
     }
-
-    const response = await fetch(url, fetchOptions);
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("[API] Error response:", response.status, text);
-      throw new Error(`API error: ${response.status} - ${text}`);
-    }
-
-    const data = await response.json();
-    console.log("[API] Success:", data);
-    return data;
-  } catch (error) {
-    console.error("[API] Request failed:", error);
-    throw error;
   }
+
+  // All retries failed
+  console.error("[API] All retry attempts failed");
+  // Re-throw with a more user-friendly message if it's a network error
+  if (lastError?.message === 'Failed to fetch' || lastError?.message === 'Network request failed' || lastError?.name === 'TypeError') {
+    throw new Error("Le serveur n'est pas disponible. Veuillez utiliser le mode hors ligne ou réessayer plus tard.");
+  }
+  throw lastError;
 };
 
 /**

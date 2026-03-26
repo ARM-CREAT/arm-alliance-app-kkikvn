@@ -2,9 +2,11 @@
 # 🚀 Quick Start Guide - Member Management System
 
 ## Prerequisites
-- Backend is deployed at: `https://9jhxnf8kze6atkt4nns335jz9jc2wdkb.app.specular.dev`
+- Backend is deployed at: `https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev`
 - Authentication is configured (Better Auth with email/password + Google + Apple OAuth)
+- Admin authentication is configured (Custom headers with password: `admin123`)
 - All member management endpoints are live
+- CORS is properly configured for admin authentication headers
 
 ---
 
@@ -22,16 +24,52 @@ Then choose your platform:
 
 ---
 
-### Step 2: Create an Admin Account
+### Step 2: Admin Login (FIXED!)
 
-1. Navigate to `/auth` screen
-2. Click "Pas de compte ? Créer un compte"
-3. Enter:
-   - **Name:** Admin Test
-   - **Email:** admin@test.com
-   - **Password:** admin123
-4. Click "Créer un compte"
-5. You'll be redirected to `/admin/dashboard`
+The admin authentication system has been successfully integrated and is now working correctly.
+
+#### Default Admin Credentials
+- **Password:** `admin123`
+- **Environment Variable:** `ADMIN_PASSWORD` (backend)
+
+#### How to Login as Admin:
+
+1. Navigate to `/admin/login`
+2. Enter password: `admin123`
+3. Click "Se connecter"
+4. ✅ Success modal appears: "Connexion réussie ! Bienvenue dans l'espace administrateur."
+5. ✅ Automatic redirect to `/admin/dashboard` after 1 second
+6. ✅ Session persists across app restarts
+
+#### Admin Features Available:
+- **Dashboard** - View analytics and statistics
+- **News Management** - Create, edit, delete news articles
+- **Events Management** - Manage events
+- **Leadership Management** - Manage party leadership
+- **Member Management** - Manage members and roles
+- **Member Registry** - View all registered members
+- **Election Verification** - Verify election results
+- **Media Upload** - Upload photos, videos, documents
+- **Send Messages** - Send internal messages to members
+- **Conference Management** - Manage video conferences
+
+#### Technical Details:
+The admin authentication uses a **custom header verification** system:
+1. Frontend stores `admin_password` and `admin_secret_code` in AsyncStorage (native) or localStorage (web)
+2. API layer (`utils/api.ts`) automatically injects `x-admin-password` and `x-admin-secret` headers with every admin request
+3. Backend middleware (`verifyAdminAuth`) validates headers against `ADMIN_PASSWORD` environment variable
+4. CORS is configured to allow these custom headers across all platforms (Web, iOS, Android)
+
+**Admin API Functions:**
+- `adminGet(endpoint)` - GET request with admin headers
+- `adminPost(endpoint, data)` - POST request with admin headers
+- `adminPut(endpoint, data)` - PUT request with admin headers
+- `adminDelete(endpoint)` - DELETE request with admin headers
+
+**Credential Management:**
+- `setAdminCredentials(password, secretCode)` - Store admin credentials
+- `getAdminCredentials()` - Retrieve admin credentials
+- `clearAdminCredentials()` - Clear admin credentials (logout)
 
 ---
 

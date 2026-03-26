@@ -1,357 +1,852 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  ScrollView,
   TextInput,
   TouchableOpacity,
-  Platform,
-  KeyboardAvoidingView,
+  ScrollView,
+  StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Modal,
+  TextInput as TextInputType,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
-import { Modal } from '@/components/ui/Modal';
-import { colors } from '@/styles/commonStyles';
-import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
+import { BACKEND_URL } from '@/utils/api-helpers';
+import { Colors } from '@/constants/Colors';
 
-export default function MemberRegisterScreen() {
+const C = Colors.light;
+
+const GENDER_OPTIONS = [
+  { label: 'Homme', value: 'male' },
+  { label: 'Femme', value: 'female' },
+];
+
+function FieldLabel({ text, required }: { text: string; required?: boolean }) {
+  const requiredMark = required ? ' *' : '';
+  const labelText = text + requiredMark;
+  return <Text style={styles.label}>{labelText}</Text>;
+}
+
+function FieldError({ message }: { message: string }) {
+  if (!message) return null;
+  return <Text style={styles.fieldError}>{message}</Text>;
+}
+
+export default function RegisterScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalMessage, setModalMessage] = useState('');
-  const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
+  const [errorBanner, setErrorBanner] = useState('');
 
-  const [formData, setFormData] = useState({
-    fullName: '',
-    nina: '',
-    commune: '',
-    profession: '',
-    phone: '',
-    email: '',
-  });
+  // Required fields
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
 
-  const showModal = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'error' | 'confirm') => {
-    setModalTitle(title);
-    setModalMessage(message);
-    setModalType(type);
-    setModalVisible(true);
+  // Optional fields
+  const [email, setEmail] = useState('');
+  const [commune, setCommune] = useState('');
+  const [region, setRegion] = useState('');
+  const [profession, setProfession] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
+  const [genderPickerVisible, setGenderPickerVisible] = useState(false);
+
+  // Validation errors
+  const [fullNameError, setFullNameError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+
+  // Duplicate member modal
+  const [duplicateModal, setDuplicateModal] = useState(false);
+  const [duplicateMemberNumber, setDuplicateMemberNumber] = useState('');
+  const [duplicateFullName, setDuplicateFullName] = useState('');
+
+  // Refs for keyboard navigation
+  const phoneRef = useRef<TextInputType>(null);
+  const emailRef = useRef<TextInputType>(null);
+  const communeRef = useRef<TextInputType>(null);
+  const regionRef = useRef<TextInputType>(null);
+  const professionRef = useRef<TextInputType>(null);
+  const dateOfBirthRef = useRef<TextInputType>(null);
+
+  const validate = (): boolean => {
+    let valid = true;
+    if (!fullName.trim()) {
+      setFullNameError('Le nom complet est requis');
+      valid = false;
+    } else {
+      setFullNameError('');
+    }
+    if (!phone.trim()) {
+      setPhoneError('Le numéro de téléphone est requis');
+      valid = false;
+    } else if (phone.trim().length < 8) {
+      setPhoneError('Le numéro doit contenir au moins 8 caractères');
+      valid = false;
+    } else {
+      setPhoneError('');
+    }
+    return valid;
   };
 
   const handleSubmit = async () => {
-    console.log('User tapped Register Member button');
-    
-    // Validation
-    if (!formData.fullName.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre nom complet', 'error');
+    console.log('[Register] Bouton "Adhérer maintenant" appuyé');
+    setErrorBanner('');
+    if (!validate()) {
+      console.log('[Register] Validation échouée');
       return;
-    }
-    if (!formData.commune.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre commune de résidence', 'error');
-      return;
-    }
-    if (!formData.profession.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre profession', 'error');
-      return;
-    }
-    if (!formData.phone.trim()) {
-      showModal('Erreur', 'Veuillez entrer votre numéro de téléphone', 'error');
-      return;
-    }
-
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
 
     setLoading(true);
 
+    const payload: Record<string, string> = {
+      full_name: fullName.trim(),
+      phone: phone.trim(),
+    };
+    if (email.trim()) payload.email = email.trim();
+    if (commune.trim()) payload.commune = commune.trim();
+    if (region.trim()) payload.region = region.trim();
+    if (profession.trim()) payload.profession = profession.trim();
+    if (dateOfBirth.trim()) payload.date_of_birth = dateOfBirth.trim();
+    if (gender) payload.gender = gender;
+
+    console.log('[Register] POST /api/members/register', JSON.stringify(payload));
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.warn('[Register] Timeout de 30 secondes atteint');
+    }, 30000);
+
     try {
-      const { apiPost } = await import('@/utils/api');
-      
-      console.log('[MemberRegister] Submitting member registration:', formData);
-      
-      const response = await apiPost('/api/members/register', {
-        fullName: formData.fullName,
-        nina: formData.nina || undefined,
-        commune: formData.commune,
-        profession: formData.profession,
-        phone: formData.phone,
-        email: formData.email || undefined,
+      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       });
-      
-      console.log('[MemberRegister] Registration successful:', response);
-      
-      showModal(
-        'Inscription Réussie',
-        `Votre inscription a été enregistrée avec succès!\n\nNuméro de membre: ${response.membershipNumber}\n\nVous pouvez maintenant accéder à votre carte de membre.`,
-        'success'
-      );
-      
-      // Navigate to member card after success
-      setTimeout(() => {
-        router.push('/member/card');
-      }, 2000);
-      
-    } catch (error: any) {
-      console.error('[MemberRegister] Registration error:', error);
-      showModal(
-        'Erreur',
-        error?.message || 'Une erreur est survenue lors de l\'inscription. Veuillez réessayer.',
-        'error'
-      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.log('[Register] Erreur HTTP', response.status, text);
+
+        if (response.status === 409) {
+          let dupMemberNumber = '';
+          let dupFullName = '';
+          try {
+            const json = JSON.parse(text);
+            dupMemberNumber = json.member_number ?? '';
+            dupFullName = json.full_name ?? '';
+            console.log('[Register] 409 PHONE_EXISTS — membre existant:', dupMemberNumber, dupFullName);
+          } catch {
+            console.log('[Register] 409 — impossible de parser la réponse');
+          }
+          setDuplicateMemberNumber(dupMemberNumber);
+          setDuplicateFullName(dupFullName);
+          setDuplicateModal(true);
+          return;
+        }
+
+        let message = `Erreur ${response.status}. Veuillez réessayer.`;
+        try {
+          const json = JSON.parse(text);
+          message = json.message || json.error || message;
+        } catch {
+          message = text || message;
+        }
+        setErrorBanner(message);
+        return;
+      }
+
+      const data = await response.json();
+      console.log('[Register] Inscription réussie:', JSON.stringify(data));
+
+      router.push({
+        pathname: '/member/success',
+        params: {
+          membership_number: data.membership_number ?? data.member_number ?? '',
+          full_name: data.full_name ?? fullName.trim(),
+        },
+      });
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('[Register] Requête annulée (timeout 30s)');
+        setErrorBanner('La requête a expiré. Vérifiez votre connexion et réessayez.');
+      } else {
+        const message = err instanceof Error ? err.message : String(err);
+        console.log('[Register] Erreur réseau:', message);
+        setErrorBanner('Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const handleRecover = () => {
+    console.log('[Register] Lien "Déjà inscrit" appuyé');
+    router.push('/member/recover');
+  };
+
+  const genderLabel = gender === 'male' ? 'Homme' : gender === 'female' ? 'Femme' : '';
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <Stack.Screen
         options={{
-          title: 'Inscription Militant',
+          title: 'Adhésion ARM',
           headerShown: true,
           headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: C.primary },
+          headerTintColor: '#fff',
+          headerTitleStyle: { fontWeight: '700' },
         }}
       />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
+      {/* Duplicate member modal (409) */}
+      <Modal
+        visible={duplicateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDuplicateModal(false)}
       >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.header}>
-            <IconSymbol
-              ios_icon_name="person.badge.plus"
-              android_material_icon_name="person-add"
-              size={48}
-              color={colors.primary}
-            />
-            <Text style={styles.headerTitle}>Devenir Militant A.R.M</Text>
-            <Text style={styles.headerSubtitle}>
-              Rejoignez l&apos;Alliance pour le Rassemblement Malien
-            </Text>
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nom Complet *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Entrez votre nom complet"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.fullName}
-                onChangeText={(text) => setFormData({ ...formData, fullName: text })}
-                autoCapitalize="words"
-              />
+        <View style={styles.modalOverlay}>
+          <View style={styles.duplicateSheet}>
+            <View style={styles.duplicateIconRow}>
+              <Ionicons name="person-circle" size={48} color={C.primary} />
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>NINA (Optionnel)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Numéro d'identification national"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.nina}
-                onChangeText={(text) => setFormData({ ...formData, nina: text })}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Commune de Résidence *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Entrez votre commune"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.commune}
-                onChangeText={(text) => setFormData({ ...formData, commune: text })}
-                autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Profession *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Entrez votre profession"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.profession}
-                onChangeText={(text) => setFormData({ ...formData, profession: text })}
-                autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Téléphone *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="+223 XX XX XX XX"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.phone}
-                onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email (Optionnel)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="votre.email@exemple.com"
-                placeholderTextColor={colors.textSecondary}
-                value={formData.email}
-                onChangeText={(text) => setFormData({ ...formData, email: text })}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.infoBox}>
-              <IconSymbol
-                ios_icon_name="info.circle.fill"
-                android_material_icon_name="info"
-                size={20}
-                color={colors.primary}
-              />
-              <Text style={styles.infoText}>
-                Les champs marqués d&apos;un * sont obligatoires
-              </Text>
-            </View>
-
+            <Text style={styles.duplicateTitle}>Numéro déjà inscrit</Text>
+            <Text style={styles.duplicateBody}>Ce numéro de téléphone est déjà inscrit.</Text>
+            {duplicateFullName ? (
+              <View style={styles.duplicateInfoBox}>
+                <Text style={styles.duplicateInfoLabel}>NOM</Text>
+                <Text style={styles.duplicateInfoValue}>{duplicateFullName}</Text>
+                {duplicateMemberNumber ? (
+                  <>
+                    <View style={styles.duplicateInfoDivider} />
+                    <Text style={styles.duplicateInfoLabel}>NUMÉRO DE MEMBRE</Text>
+                    <Text style={styles.duplicateMemberNumber}>{duplicateMemberNumber}</Text>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
             <TouchableOpacity
-              style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={loading}
-              activeOpacity={0.8}
+              style={styles.duplicatePrimaryBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                console.log('[Register] Modal 409 — "Voir ma carte" appuyé, member_number:', duplicateMemberNumber);
+                setDuplicateModal(false);
+                router.push({
+                  pathname: '/member/card',
+                  params: {
+                    member_number: duplicateMemberNumber,
+                    full_name: duplicateFullName,
+                  },
+                });
+              }}
             >
-              {loading ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <>
-                  <Text style={styles.submitButtonText}>S&apos;inscrire</Text>
-                  <IconSymbol
-                    ios_icon_name="arrow.right"
-                    android_material_icon_name="arrow-forward"
-                    size={20}
-                    color={colors.background}
-                  />
-                </>
-              )}
+              <Ionicons name="card" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.duplicatePrimaryBtnText}>Voir ma carte</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.duplicateSecondaryBtn}
+              activeOpacity={0.7}
+              onPress={() => {
+                console.log('[Register] Modal 409 — "Fermer" appuyé');
+                setDuplicateModal(false);
+              }}
+            >
+              <Text style={styles.duplicateSecondaryBtnText}>Fermer</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      </Modal>
 
+      {/* Gender picker modal */}
       <Modal
-        visible={modalVisible}
-        title={modalTitle}
-        message={modalMessage}
-        type={modalType}
-        onClose={() => setModalVisible(false)}
-      />
-    </View>
+        visible={genderPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGenderPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setGenderPickerVisible(false)}
+        >
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Sélectionner le sexe</Text>
+            {GENDER_OPTIONS.map((opt) => {
+              const isSelected = gender === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.pickerOption, isSelected && styles.pickerOptionSelected]}
+                  onPress={() => {
+                    console.log('[Register] Sexe sélectionné:', opt.label);
+                    setGender(opt.value);
+                    setGenderPickerVisible(false);
+                  }}
+                >
+                  <Text style={[styles.pickerOptionText, isSelected && styles.pickerOptionTextSelected]}>
+                    {opt.label}
+                  </Text>
+                  {isSelected && (
+                    <Ionicons name="checkmark" size={18} color={C.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={styles.pickerCancel}
+              onPress={() => {
+                console.log('[Register] Picker sexe annulé');
+                setGenderPickerVisible(false);
+              }}
+            >
+              <Text style={styles.pickerCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.iconCircle}>
+            <Ionicons name="people" size={40} color="#fff" />
+          </View>
+          <Text style={styles.title}>Adhésion ARM</Text>
+          <Text style={styles.subtitle}>Rejoignez le mouvement</Text>
+        </View>
+
+        {/* Error Banner */}
+        {errorBanner ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.errorBannerText}>{errorBanner}</Text>
+          </View>
+        ) : null}
+
+        {/* Form Card */}
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Informations requises</Text>
+
+          {/* Nom complet */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Nom complet" required />
+            <TextInput
+              style={[styles.input, fullNameError ? styles.inputError : null]}
+              value={fullName}
+              onChangeText={(v) => { setFullName(v); if (v.trim()) setFullNameError(''); }}
+              placeholder="Prénom et nom de famille"
+              placeholderTextColor={C.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => phoneRef.current?.focus()}
+            />
+            <FieldError message={fullNameError} />
+          </View>
+
+          {/* Téléphone */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Téléphone" required />
+            <TextInput
+              ref={phoneRef}
+              style={[styles.input, phoneError ? styles.inputError : null]}
+              value={phone}
+              onChangeText={(v) => { setPhone(v); if (v.trim()) setPhoneError(''); }}
+              placeholder="+223 XX XX XX XX"
+              placeholderTextColor={C.textTertiary}
+              keyboardType="phone-pad"
+              returnKeyType="next"
+              onSubmitEditing={() => emailRef.current?.focus()}
+            />
+            <FieldError message={phoneError} />
+          </View>
+
+          <View style={styles.divider} />
+          <Text style={styles.sectionTitle}>Informations optionnelles</Text>
+
+          {/* Email */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Email" />
+            <TextInput
+              ref={emailRef}
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="votre@email.com"
+              placeholderTextColor={C.textTertiary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              returnKeyType="next"
+              onSubmitEditing={() => communeRef.current?.focus()}
+            />
+          </View>
+
+          {/* Commune */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Commune" />
+            <TextInput
+              ref={communeRef}
+              style={styles.input}
+              value={commune}
+              onChangeText={setCommune}
+              placeholder="Votre commune"
+              placeholderTextColor={C.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => regionRef.current?.focus()}
+            />
+          </View>
+
+          {/* Région */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Région" />
+            <TextInput
+              ref={regionRef}
+              style={styles.input}
+              value={region}
+              onChangeText={setRegion}
+              placeholder="Votre région"
+              placeholderTextColor={C.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => professionRef.current?.focus()}
+            />
+          </View>
+
+          {/* Profession */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Profession" />
+            <TextInput
+              ref={professionRef}
+              style={styles.input}
+              value={profession}
+              onChangeText={setProfession}
+              placeholder="Votre profession"
+              placeholderTextColor={C.textTertiary}
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => dateOfBirthRef.current?.focus()}
+            />
+          </View>
+
+          {/* Date de naissance */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Date de naissance" />
+            <TextInput
+              ref={dateOfBirthRef}
+              style={styles.input}
+              value={dateOfBirth}
+              onChangeText={setDateOfBirth}
+              placeholder="JJ/MM/AAAA"
+              placeholderTextColor={C.textTertiary}
+              keyboardType="numbers-and-punctuation"
+              returnKeyType="done"
+            />
+          </View>
+
+          {/* Sexe */}
+          <View style={styles.fieldGroup}>
+            <FieldLabel text="Sexe" />
+            <TouchableOpacity
+              style={styles.pickerTrigger}
+              onPress={() => {
+                console.log('[Register] Ouverture picker sexe');
+                setGenderPickerVisible(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.pickerTriggerText, !gender && styles.pickerTriggerPlaceholder]}>
+                {genderLabel || 'Sélectionner'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={C.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Info numéro auto */}
+          <View style={styles.infoRow}>
+            <Ionicons name="information-circle-outline" size={16} color={C.textSecondary} style={{ marginRight: 6 }} />
+            <Text style={styles.infoText}>Votre numéro d'adhérent sera généré automatiquement</Text>
+          </View>
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <>
+                <ActivityIndicator color="#fff" size="small" style={{ marginRight: 8 }} />
+                <Text style={styles.submitButtonText}>Inscription en cours...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" style={styles.btnIcon} />
+                <Text style={styles.submitButtonText}>Adhérer maintenant</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Recover link */}
+        <TouchableOpacity style={styles.recoverLink} onPress={handleRecover} activeOpacity={0.7}>
+          <Text style={styles.recoverLinkText}>Déjà inscrit ? Retrouver ma carte</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: C.background,
   },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
-    paddingBottom: 40,
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
   },
   header: {
+    backgroundColor: C.primary,
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 20,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingTop: 40,
+    paddingBottom: 48,
+    paddingHorizontal: 24,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 16,
-    textAlign: 'center',
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: C.accent,
   },
-  headerSubtitle: {
+  title: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.5,
+  },
+  subtitle: {
     fontSize: 15,
-    color: colors.textSecondary,
-    marginTop: 8,
-    textAlign: 'center',
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 6,
+    fontStyle: 'italic',
   },
-  form: {
-    padding: 20,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-  },
-  infoBox: {
+  errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundAlt,
-    padding: 12,
+    backgroundColor: C.danger,
+    marginHorizontal: 20,
+    marginTop: 16,
     borderRadius: 10,
-    marginBottom: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  formCard: {
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    marginHorizontal: 20,
+    marginTop: -24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: C.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: C.divider,
+    marginVertical: 20,
+  },
+  fieldGroup: {
+    marginBottom: 18,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.text,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  input: {
+    borderWidth: 1.5,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 52,
+    fontSize: 16,
+    color: C.text,
+    backgroundColor: C.surfaceSecondary,
+  },
+  inputError: {
+    borderColor: C.danger,
+    backgroundColor: '#FFF5F5',
+  },
+  fieldError: {
+    fontSize: 12,
+    color: C.danger,
+    marginTop: 6,
+    marginLeft: 4,
+  },
+  pickerTrigger: {
+    borderWidth: 1.5,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: C.surfaceSecondary,
+  },
+  pickerTriggerText: {
+    fontSize: 16,
+    color: C.text,
+  },
+  pickerTriggerPlaceholder: {
+    color: C.textTertiary,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.primaryMuted,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 20,
   },
   infoText: {
     flex: 1,
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginLeft: 10,
+    fontSize: 13,
+    color: C.textSecondary,
+    lineHeight: 18,
   },
   submitButton: {
+    backgroundColor: C.primary,
+    borderRadius: 14,
+    height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    shadowColor: colors.primary,
+    marginTop: 8,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
+  btnIcon: {
+    marginRight: 8,
+  },
+  submitButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  recoverLink: {
+    alignItems: 'center',
+    marginTop: 24,
+    paddingVertical: 12,
+  },
+  recoverLinkText: {
+    fontSize: 15,
+    color: C.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  // Duplicate modal
+  duplicateSheet: {
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    marginHorizontal: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  duplicateIconRow: {
+    marginBottom: 12,
+  },
+  duplicateTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: C.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  duplicateBody: {
+    fontSize: 15,
+    color: C.textSecondary,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  duplicateInfoBox: {
+    backgroundColor: C.primaryMuted,
+    borderRadius: 14,
+    padding: 16,
+    width: '100%',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: C.primary + '30',
+  },
+  duplicateInfoLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: C.primary,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  duplicateInfoValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.text,
+  },
+  duplicateInfoDivider: {
+    height: 1,
+    backgroundColor: C.divider,
+    marginVertical: 12,
+  },
+  duplicateMemberNumber: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: C.primary,
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  duplicatePrimaryBtn: {
+    backgroundColor: C.primary,
+    borderRadius: 14,
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    marginBottom: 10,
+    shadowColor: C.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  submitButtonDisabled: {
-    opacity: 0.6,
+  duplicatePrimaryBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
-  submitButtonText: {
+  duplicateSecondaryBtn: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    borderRadius: 14,
+    backgroundColor: C.surfaceSecondary,
+  },
+  duplicateSecondaryBtnText: {
+    fontSize: 15,
+    color: C.textSecondary,
+    fontWeight: '600',
+  },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+  },
+  pickerSheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  pickerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: C.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  pickerOptionSelected: {
+    backgroundColor: C.primaryMuted,
+  },
+  pickerOptionText: {
     fontSize: 17,
-    fontWeight: 'bold',
-    color: colors.background,
-    marginRight: 8,
+    color: C.text,
+    fontWeight: '500',
+  },
+  pickerOptionTextSelected: {
+    color: C.primary,
+    fontWeight: '700',
+  },
+  pickerCancel: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: C.surfaceSecondary,
+  },
+  pickerCancelText: {
+    fontSize: 16,
+    color: C.textSecondary,
+    fontWeight: '600',
   },
 });

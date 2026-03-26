@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
@@ -19,7 +19,6 @@ import { authenticatedPost } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 
 export default function ElectionResultsScreen() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
@@ -88,7 +87,7 @@ export default function ElectionResultsScreen() {
         votesNuls: parseInt(formData.votesNuls) || 0,
       };
 
-      const response = await authenticatedPost('/api/elections/submit-results', {
+      const response = await authenticatedPost<any>('/api/elections/submit-results', {
         electionType: formData.electionType,
         region: formData.region,
         cercle: formData.cercle,

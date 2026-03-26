@@ -206,6 +206,355 @@ export async function initializeData(app: App) {
       );
     }
 
+    // Check if extended programs already exist
+    const existingPrograms = await app.db
+      .select()
+      .from(schema.programs);
+
+    if (existingPrograms.length === 0) {
+      const programs = [
+        {
+          title: 'Éducation pour tous',
+          category: 'Éducation',
+          summary: 'Un système éducatif équitable et de qualité',
+          content: 'Nous nous engageons à assurer un accès équitable à une éducation de qualité pour tous les enfants maliens, avec des écoles bien équipées et des enseignants formés.',
+          icon: 'book',
+          color: '#2563EB',
+          order: 1,
+          published: true,
+        },
+        {
+          title: 'Santé universelle',
+          category: 'Santé',
+          summary: 'Une couverture sanitaire pour tous',
+          content: 'Établir un système de santé accessible et de qualité pour tous les Maliens, avec des centres de santé équipés dans chaque commune.',
+          icon: 'heart',
+          color: '#DC2626',
+          order: 1,
+          published: true,
+        },
+        {
+          title: 'Environnement durable',
+          category: 'Environnement',
+          summary: 'Protection de notre environnement',
+          content: 'Promouvoir une économie verte et durable, protéger nos ressources naturelles et combattre le changement climatique.',
+          icon: 'leaf',
+          color: '#16A34A',
+          order: 1,
+          published: true,
+        },
+        {
+          title: 'Infrastructures modernes',
+          category: 'Infrastructure',
+          summary: 'Routes et services publics pour tous',
+          content: 'Investir dans les routes rurales, l\'électricité et l\'eau potable pour atteindre les zones reculées du Mali.',
+          icon: 'building',
+          color: '#D97706',
+          order: 1,
+          published: true,
+        },
+        {
+          title: 'Gouvernance transparente',
+          category: 'Gouvernance',
+          summary: 'Gestion responsable des affaires publiques',
+          content: 'Établir une gouvernance transparente, combattre la corruption et renforcer l\'état de droit au Mali.',
+          icon: 'shield',
+          color: '#7C3AED',
+          order: 1,
+          published: true,
+        },
+        {
+          title: 'Économie inclusive',
+          category: 'Économie',
+          summary: 'Création d\'emplois et opportunités',
+          content: 'Créer des opportunités économiques pour tous, soutenir l\'entrepreneuriat local et les petites entreprises.',
+          icon: 'chart-bar',
+          color: '#0891B2',
+          order: 1,
+          published: true,
+        },
+      ];
+
+      await app.db.insert(schema.programs).values(programs as any);
+      app.logger.info({ count: programs.length }, 'Extended programs initialized');
+    }
+
+    // Check if app content already exists
+    const existingContent = await app.db
+      .select()
+      .from(schema.appContent);
+
+    if (existingContent.length === 0) {
+      const content = [
+        {
+          key: 'about_us',
+          title: 'À propos de nous',
+          content: 'L\'Alliance pour le Rassemblement Malien (ARM) est un parti politique dédié à l\'unité, la prospérité et la démocratie au Mali.',
+        },
+        {
+          key: 'ideology',
+          title: 'Notre Idéologie',
+          content: 'Nous croyons en la fraternité, la liberté, l\'égalité et la justice pour tous les Maliens. Notre mission est de construire un Mali fort, uni et prospère.',
+        },
+        {
+          key: 'manifesto',
+          title: 'Notre Manifeste',
+          content: 'ARM s\'engage à servir le peuple malien avec intégrité, transparence et dévouement. Nous travaillons pour un Mali de paix, de justice et de développement.',
+        },
+        {
+          key: 'history',
+          title: 'Notre Histoire',
+          content: 'Fondée avec une vision claire de transformation du Mali, ARM rassemble des militants dévoués de toutes les régions du pays.',
+        },
+      ];
+
+      await app.db.insert(schema.appContent).values(content as any);
+      app.logger.info({ count: content.length }, 'App content initialized');
+    }
+
+    // Check if app settings already exist
+    const existingSettings = await app.db
+      .select()
+      .from(schema.appSettings);
+
+    if (existingSettings.length === 0) {
+      const settings = [
+        {
+          key: 'donation_enabled',
+          value: 'true',
+        },
+        {
+          key: 'membership_fee',
+          value: '5000',
+        },
+        {
+          key: 'contact_email',
+          value: 'contact@alliance-arm.ml',
+        },
+      ];
+
+      await app.db.insert(schema.appSettings).values(settings as any);
+      app.logger.info({ count: settings.length }, 'App settings initialized');
+    }
+
+    // Check if member profiles already exist
+    const existingMembers = await app.db
+      .select()
+      .from(schema.memberProfiles);
+
+    if (existingMembers.length === 0) {
+      const members = [
+        {
+          fullName: 'Diadié Keita',
+          nina: 'M001234567890',
+          commune: 'Sebenikoro',
+          profession: 'Enseignant',
+          phone: '0022376000001',
+          email: 'diadie@alliance-arm.ml',
+          membershipNumber: 'ARM-2024-00001',
+          qrCode: 'ARM-2024-00001',
+          status: 'active',
+          role: 'member',
+        },
+        {
+          fullName: 'Aissatou Cissé',
+          nina: 'M001234567891',
+          commune: 'Kalabamako',
+          profession: 'Infirmière',
+          phone: '0022376000002',
+          email: 'aissatou@alliance-arm.ml',
+          membershipNumber: 'ARM-2024-00002',
+          qrCode: 'ARM-2024-00002',
+          status: 'active',
+          role: 'member',
+        },
+        {
+          fullName: 'Mamadou Traore',
+          nina: 'M001234567892',
+          commune: 'ACI 2000',
+          profession: 'Commerçant',
+          phone: '0022376000003',
+          membershipNumber: 'ARM-2024-00003',
+          qrCode: 'ARM-2024-00003',
+          status: 'pending',
+          role: 'member',
+        },
+      ];
+
+      await app.db.insert(schema.memberProfiles).values(members as any);
+      app.logger.info({ count: members.length }, 'Member profiles initialized');
+    }
+
+    // Check if donations already exist
+    const existingDonations = await app.db
+      .select()
+      .from(schema.donations);
+
+    if (existingDonations.length === 0) {
+      const donations = [
+        {
+          donorName: 'Ahmed Cissé',
+          donorEmail: 'ahmed@example.ml',
+          amount: '25000',
+          currency: 'XOF',
+          paymentMethod: 'mobile_money',
+          status: 'completed',
+          contributionType: 'donation',
+        },
+        {
+          donorName: 'Fatoumata Diallo',
+          donorEmail: 'fatoumata@example.ml',
+          amount: '50000',
+          currency: 'XOF',
+          paymentMethod: 'bank_transfer',
+          status: 'completed',
+          contributionType: 'donation',
+        },
+      ];
+
+      await app.db.insert(schema.donations).values(donations as any);
+      app.logger.info({ count: donations.length }, 'Donations initialized');
+    }
+
+    // Check if news already exists
+    const existingNews = await app.db
+      .select()
+      .from(schema.news);
+
+    if (existingNews.length === 0) {
+      const news = [
+        {
+          title: 'Congrès national d\'ARM 2024',
+          content: 'Le congrès national de l\'Alliance pour le Rassemblement Malien s\'est tenu à Bamako avec la participation de délégués de toutes les régions.',
+          imageUrl: 'https://picsum.photos/seed/news1/800/400',
+          publishedAt: new Date('2024-03-15'),
+          createdBy: 'admin',
+        },
+        {
+          title: 'Nouvelle initiative pour l\'emploi des jeunes',
+          content: 'ARM lance un programme d\'accompagnement pour l\'employabilité des jeunes dans les zones rurales.',
+          imageUrl: 'https://picsum.photos/seed/news2/800/400',
+          publishedAt: new Date('2024-03-10'),
+          createdBy: 'admin',
+        },
+      ];
+
+      await app.db.insert(schema.news).values(news as any);
+      app.logger.info({ count: news.length }, 'News items initialized');
+    }
+
+    // Check if events already exist
+    const existingEvents = await app.db
+      .select()
+      .from(schema.events);
+
+    if (existingEvents.length === 0) {
+      const events = [
+        {
+          title: 'Meeting régional de Kayes',
+          description: 'Rencontre avec les militants et discussions sur les priorités régionales',
+          date: new Date('2024-04-15'),
+          location: 'Kayes, Mali',
+          imageUrl: 'https://picsum.photos/seed/event1/800/400',
+          createdBy: 'admin',
+        },
+        {
+          title: 'Formation politique pour les collecteurs',
+          description: 'Formation des collecteurs de membres sur les principes et politiques d\'ARM',
+          date: new Date('2024-04-20'),
+          location: 'Bamako, Mali',
+          imageUrl: 'https://picsum.photos/seed/event2/800/400',
+          createdBy: 'admin',
+        },
+      ];
+
+      await app.db.insert(schema.events).values(events as any);
+      app.logger.info({ count: events.length }, 'Events initialized');
+    }
+
+    // Check if contacts already exist
+    const existingContacts = await app.db
+      .select()
+      .from(schema.contacts);
+
+    if (existingContacts.length === 0) {
+      const contacts = [
+        {
+          name: 'Siège National ARM',
+          role: 'Bureau National',
+          phone: '+223 20 22 00 00',
+          email: 'contact@alliance-arm.ml',
+          address: 'Bamako Sebenikoro, Rue 530, Porte 245',
+          type: 'siege',
+        },
+        {
+          name: 'Coordination Régionale Kayes',
+          role: 'Région de Kayes',
+          phone: '+223 21 22 00 00',
+          email: 'kayes@alliance-arm.ml',
+          address: 'Kayes, Mali',
+          type: 'regional',
+        },
+        {
+          name: 'Relations Médias',
+          role: 'Service Communication',
+          phone: '+223 20 22 00 01',
+          email: 'media@alliance-arm.ml',
+          address: 'Bamako, Mali',
+          type: 'media',
+        },
+      ];
+
+      await app.db.insert(schema.contacts).values(contacts as any);
+      app.logger.info({ count: contacts.length }, 'Contacts initialized');
+    }
+
+    // Check if public chat messages already exist
+    const existingChat = await app.db
+      .select()
+      .from(schema.publicChat);
+
+    if (existingChat.length === 0) {
+      const chatMessages = [
+        {
+          userName: 'Diadié Keita',
+          message: 'Bienvenue à tous les membres d\'ARM!',
+        },
+        {
+          userName: 'Aissatou Cissé',
+          message: 'Merci de votre engagement pour le Mali',
+        },
+      ];
+
+      await app.db.insert(schema.publicChat).values(chatMessages as any);
+      app.logger.info({ count: chatMessages.length }, 'Public chat initialized');
+    }
+
+    // Check if internal messages already exist
+    const existingInternalMessages = await app.db
+      .select()
+      .from(schema.internalMessages);
+
+    if (existingInternalMessages.length === 0) {
+      const internalMessages = [
+        {
+          title: 'Bienvenue dans ARM',
+          content: 'Nous vous souhaitons la bienvenue dans cette grande famille d\'engagement pour le Mali.',
+          senderId: 'system',
+          targetRole: null,
+        },
+        {
+          title: 'Prochaines réunions régionales',
+          content: 'Les réunions régionales auront lieu le mois prochain dans chaque région.',
+          senderId: 'system',
+          targetRole: null,
+        },
+      ];
+
+      await app.db.insert(schema.internalMessages).values(internalMessages as any);
+      app.logger.info({ count: internalMessages.length }, 'Internal messages initialized');
+    }
+
     app.logger.info('Database initialization completed successfully');
   } catch (error) {
     app.logger.error(

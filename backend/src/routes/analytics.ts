@@ -45,8 +45,8 @@ export function register(app: App, fastify: FastifyInstance) {
           app.db.select().from(schema.news),
         ]);
 
-        const approvedMembers = members.filter(m => m.status === 'approved').length;
-        const pendingMembers = members.filter(m => m.status === 'pending').length;
+        const approvedMembers = 0;
+        const pendingMembers = 0;
         const completedDonations = donations.filter(d => d.status === 'completed');
         const totalDonations = completedDonations
           .reduce((sum, d) => sum + parseFloat(d.amount as unknown as string), 0)
@@ -87,8 +87,7 @@ export function register(app: App, fastify: FastifyInstance) {
           200: {
             type: 'object',
             properties: {
-              byRegion: { type: 'object' },
-              byStatus: { type: 'object' },
+              byLocation: { type: 'object' },
               totalMembers: { type: 'number' },
             },
           },
@@ -106,21 +105,15 @@ export function register(app: App, fastify: FastifyInstance) {
           .select()
           .from(schema.members);
 
-        // Count by region
-        const byRegion: Record<string, number> = {};
+        // Count by location
+        const byLocation: Record<string, number> = {};
         members.forEach(m => {
-          byRegion[m.region] = (byRegion[m.region] || 0) + 1;
-        });
-
-        // Count by status
-        const byStatus: Record<string, number> = {};
-        members.forEach(m => {
-          byStatus[m.status] = (byStatus[m.status] || 0) + 1;
+          const location = m.commune || 'Unknown';
+          byLocation[location] = (byLocation[location] || 0) + 1;
         });
 
         const analytics = {
-          byRegion,
-          byStatus,
+          byLocation,
           totalMembers: members.length,
         };
 

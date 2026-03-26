@@ -1,19 +1,16 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Language } from '@/constants/translations';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { I18nManager } from 'react-native';
+import { Language, translations } from '@/constants/translations';
 import { Currency } from '@/utils/currency';
-import { 
-  loadLanguagePreference, 
-  saveLanguagePreference, 
-  getCurrentLanguage,
-  t,
-  isRTL
+import {
+  loadLanguagePreference,
+  saveLanguagePreference,
 } from '@/utils/i18n';
 import {
   loadCurrencyPreference,
   saveCurrencyPreference,
 } from '@/utils/currency';
-import { I18nManager } from 'react-native';
 
 interface LocalizationContextType {
   language: Language;
@@ -27,6 +24,27 @@ interface LocalizationContextType {
 
 const LocalizationContext = createContext<LocalizationContextType | undefined>(undefined);
 
+/**
+ * Translate a key using the given language, with optional interpolation.
+ * Falls back to French, then to the key itself.
+ */
+function translate(
+  lang: Language,
+  key: string,
+  params?: Record<string, string | number>
+): string {
+  const dict = translations[lang] as Record<string, string> | undefined;
+  const fallback = translations['fr'] as Record<string, string>;
+  let str: string = (dict && dict[key]) || fallback[key] || key;
+
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+    });
+  }
+  return str;
+}
+
 export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<Language>('fr');
   const [currency, setCurrencyState] = useState<Currency>('XOF');
@@ -34,19 +52,21 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const loadPreferences = async () => {
-      console.log('[Localization] Loading preferences...');
-      const savedLanguage = await loadLanguagePreference();
-      const savedCurrency = await loadCurrencyPreference();
-      
+      console.log('[Localization] Loading preferences from AsyncStorage...');
+      const [savedLanguage, savedCurrency] = await Promise.all([
+        loadLanguagePreference(),
+        loadCurrencyPreference(),
+      ]);
+
       setLanguageState(savedLanguage);
       setCurrencyState(savedCurrency);
-      
-      // Update RTL layout if needed
+
+      // Apply RTL layout if Arabic
       const shouldBeRTL = savedLanguage === 'ar';
       if (I18nManager.isRTL !== shouldBeRTL) {
         I18nManager.forceRTL(shouldBeRTL);
       }
-      
+
       setLoading(false);
       console.log('[Localization] Preferences loaded:', { language: savedLanguage, currency: savedCurrency });
     };
@@ -54,24 +74,33 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
     loadPreferences();
   }, []);
 
-  const setLanguage = async (lang: Language) => {
+  const setLanguage = useCallback(async (lang: Language) => {
     console.log('[Localization] Changing language to:', lang);
     await saveLanguagePreference(lang);
     setLanguageState(lang);
-    
-    // Update RTL layout if needed
+
+    // Apply RTL layout if Arabic
     const shouldBeRTL = lang === 'ar';
     if (I18nManager.isRTL !== shouldBeRTL) {
       I18nManager.forceRTL(shouldBeRTL);
-      // Note: App needs to restart for RTL changes to take effect
+      // Note: full RTL layout requires app restart, but text direction updates immediately
     }
-  };
+  }, []);
 
-  const setCurrency = async (curr: Currency) => {
+  const setCurrency = useCallback(async (curr: Currency) => {
     console.log('[Localization] Changing currency to:', curr);
     await saveCurrencyPreference(curr);
     setCurrencyState(curr);
-  };
+  }, []);
+
+  // Reactive translate function — re-created when language changes so all
+  // consumers that call t() automatically get the new strings on re-render.
+  const t = useCallback(
+    (key: string, params?: Record<string, string | number>) => {
+      return translate(language, key, params);
+    },
+    [language]
+  );
 
   const value: LocalizationContextType = {
     language,
@@ -79,7 +108,7 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
     setLanguage,
     setCurrency,
     t,
-    isRTL: isRTL(),
+    isRTL: language === 'ar',
     loading,
   };
 

@@ -1,81 +1,147 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, asc, and, max, count } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
-interface ProgramBody {
-  category: string;
+interface CreateSectionBody {
   title: string;
   description: string;
-  order?: number;
+  icon?: string;
+  orderIndex?: number;
+}
+
+interface UpdateSectionBody {
+  title?: string;
+  description?: string;
+  icon?: string;
+  orderIndex?: number;
+}
+
+const PROGRAM_SECTIONS_SEED = [
+  {
+    orderIndex: 1,
+    title: 'Démocratie & Gouvernance',
+    icon: 'building.columns',
+    description: 'Alliance ARM s\'engage pour une démocratie forte, des institutions transparentes et une gouvernance au service du peuple malien. Nous défendons l\'État de droit, la séparation des pouvoirs et la lutte contre la corruption à tous les niveaux de l\'État.',
+  },
+  {
+    orderIndex: 2,
+    title: 'Développement Économique',
+    icon: 'chart.line.uptrend.xyaxis',
+    description: 'Notre programme économique vise à créer des emplois durables, soutenir l\'agriculture, développer les PME et attirer les investissements étrangers. Nous croyons en une économie inclusive qui profite à tous les Maliens sans exception.',
+  },
+  {
+    orderIndex: 3,
+    title: 'Éducation & Formation',
+    icon: 'book.fill',
+    description: 'L\'éducation est notre priorité absolue. Nous nous engageons à améliorer la qualité de l\'enseignement, construire des écoles modernes, former des enseignants qualifiés et garantir l\'accès à l\'éducation pour tous les enfants maliens.',
+  },
+  {
+    orderIndex: 4,
+    title: 'Santé & Protection Sociale',
+    icon: 'heart.fill',
+    description: 'Nous voulons un système de santé accessible à tous les Maliens. Notre programme prévoit la construction d\'hôpitaux, le recrutement de personnel médical qualifié et la mise en place d\'une couverture santé universelle.',
+  },
+  {
+    orderIndex: 5,
+    title: 'Sécurité & Paix',
+    icon: 'shield.fill',
+    description: 'La sécurité du peuple malien est notre engagement premier. Nous travaillerons pour renforcer les forces de défense et de sécurité, promouvoir le dialogue inter-communautaire et restaurer la paix dans toutes les régions du Mali.',
+  },
+  {
+    orderIndex: 6,
+    title: 'Agriculture & Environnement',
+    icon: 'leaf.fill',
+    description: 'Le Mali est une terre agricole. Nous soutiendrons les agriculteurs avec des équipements modernes, des semences améliorées et des systèmes d\'irrigation performants. Nous protégerons aussi l\'environnement pour les générations futures.',
+  },
+];
+
+function formatSection(section: any) {
+  return {
+    id: section.id,
+    orderIndex: section.orderIndex,
+    title: section.title,
+    description: section.description,
+    icon: section.icon || null,
+    createdAt: section.createdAt instanceof Date ? section.createdAt.toISOString() : new Date(section.createdAt).toISOString(),
+  };
+}
+
+async function checkAdminRole(app: App, userId: string): Promise<boolean> {
+  const member = await app.db
+    .select()
+    .from(schema.memberProfiles)
+    .where(and(eq(schema.memberProfiles.userId, userId)));
+  return member.length > 0 && member[0].role === 'admin';
 }
 
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
 
-  // GET /api/program - Get all program items ordered by category and order
+  // GET /api/program - Get all program sections (public)
   fastify.get(
     '/api/program',
     {
       schema: {
-        description: 'Get all political program items',
+        description: 'Get all program sections ordered by order_index',
         tags: ['program'],
         response: {
-          200: { type: 'array' },
+          200: {
+            type: 'object',
+            properties: {
+              sections: { type: 'array' },
+            },
+          },
         },
       },
     },
     async (request, reply) => {
-      app.logger.info('Fetching political program items');
+      app.logger.info('Fetching program sections');
 
       try {
         const result = await app.db
           .select()
-          .from(schema.politicalProgram)
-          .orderBy(schema.politicalProgram.category);
+          .from(schema.programSections)
+          .orderBy(asc(schema.programSections.orderIndex));
 
-        // Sort by order within each category in memory
-        const sorted = result.sort((a, b) => {
-          if (a.category !== b.category) {
-            return a.category.localeCompare(b.category);
-          }
-          return (a.order || 0) - (b.order || 0);
-        });
-
-        app.logger.info(
-          { count: result.length },
-          'Program items fetched successfully'
-        );
-        return sorted;
+        app.logger.info({ count: result.length }, 'Program sections fetched');
+        return {
+          sections: result.map(formatSection),
+        };
       } catch (error) {
-        app.logger.error(
-          { err: error },
-          'Failed to fetch program items'
-        );
+        app.logger.error({ err: error }, 'Failed to fetch program sections');
         throw error;
       }
     }
   );
 
-  // POST /api/program - Create program item (admin)
-  fastify.post<{ Body: ProgramBody }>(
-    '/api/program',
+  // POST /api/admin/program - Create program section (authenticated, admin only)
+  fastify.post<{ Body: CreateSectionBody }>(
+    '/api/admin/program',
     {
       schema: {
-        description: 'Create a political program item (admin only)',
-        tags: ['program'],
+        description: 'Create a new program section (admin only)',
+        tags: ['admin', 'program'],
         body: {
           type: 'object',
           properties: {
-            category: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
-            order: { type: 'number' },
+            icon: { type: 'string' },
+            orderIndex: { type: 'number' },
           },
-          required: ['category', 'title', 'description'],
+          required: ['title', 'description'],
         },
         response: {
-          200: { type: 'object' },
+          201: {
+            type: 'object',
+            properties: {
+              section: { type: 'object' },
+            },
+          },
+          400: { type: 'object' },
+          401: { type: 'object' },
+          403: { type: 'object' },
         },
       },
     },
@@ -83,59 +149,81 @@ export function register(app: App, fastify: FastifyInstance) {
       const session = await requireAuth(request, reply);
       if (!session) return;
 
-      const { category, title, description, order } = request.body;
-      app.logger.info({ category, title }, 'Creating program item');
+      const { title, description, icon, orderIndex } = request.body;
+      const userId = session.user.id;
+
+      app.logger.info({ userId, title }, 'Creating program section');
 
       try {
+        const isAdmin = await checkAdminRole(app, userId);
+        if (!isAdmin) {
+          reply.status(403);
+          return { error: 'Accès refusé' };
+        }
+
+        let finalOrderIndex = orderIndex;
+        if (!orderIndex) {
+          const maxOrder = await app.db
+            .select({ maxIdx: max(schema.programSections.orderIndex) })
+            .from(schema.programSections);
+          finalOrderIndex = (maxOrder[0]?.maxIdx ?? 0) + 1;
+        }
+
         const result = await app.db
-          .insert(schema.politicalProgram)
+          .insert(schema.programSections)
           .values({
-            category,
             title,
             description,
-            order: order || 0,
+            icon: icon || null,
+            orderIndex: finalOrderIndex,
           })
           .returning();
 
-        app.logger.info(
-          { itemId: result[0].id, category },
-          'Program item created successfully'
-        );
-        return result[0];
+        reply.status(201);
+        app.logger.info({ sectionId: result[0].id, title }, 'Program section created');
+        return {
+          section: formatSection(result[0]),
+        };
       } catch (error) {
-        app.logger.error(
-          { err: error, category },
-          'Failed to create program item'
-        );
+        app.logger.error({ err: error, userId, title }, 'Failed to create program section');
         throw error;
       }
     }
   );
 
-  // PUT /api/program/:id - Update program item (admin)
-  fastify.put<{ Params: { id: string }; Body: Partial<ProgramBody> }>(
-    '/api/program/:id',
+  // PATCH /api/admin/program/:id - Update program section (authenticated, admin only)
+  fastify.patch<{ Params: { id: string }; Body: UpdateSectionBody }>(
+    '/api/admin/program/:id',
     {
       schema: {
-        description: 'Update a political program item (admin only)',
-        tags: ['program'],
+        description: 'Update a program section (admin only)',
+        tags: ['admin', 'program'],
         params: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
           },
         },
         body: {
           type: 'object',
           properties: {
-            category: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
-            order: { type: 'number' },
+            icon: { type: 'string' },
+            orderIndex: { type: 'number' },
           },
         },
         response: {
-          200: { type: 'object' },
+          200: {
+            type: 'object',
+            properties: {
+              section: { type: 'object' },
+            },
+          },
+          400: { type: 'object' },
+          401: { type: 'object' },
+          403: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
@@ -144,46 +232,70 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!session) return;
 
       const { id } = request.params;
-      const updates = request.body;
-      app.logger.info({ itemId: id }, 'Updating program item');
+      const { title, description, icon, orderIndex } = request.body;
+      const userId = session.user.id;
+
+      app.logger.info({ userId, sectionId: id }, 'Updating program section');
 
       try {
+        const isAdmin = await checkAdminRole(app, userId);
+        if (!isAdmin) {
+          reply.status(403);
+          return { error: 'Accès refusé' };
+        }
+
+        const updates: any = {};
+        if (title !== undefined) updates.title = title;
+        if (description !== undefined) updates.description = description;
+        if (icon !== undefined) updates.icon = icon;
+        if (orderIndex !== undefined) updates.orderIndex = orderIndex;
+        updates.updatedAt = new Date();
+
         const result = await app.db
-          .update(schema.politicalProgram)
+          .update(schema.programSections)
           .set(updates)
-          .where(eq(schema.politicalProgram.id, id))
+          .where(eq(schema.programSections.id, id as any))
           .returning();
 
-        app.logger.info(
-          { itemId: id },
-          'Program item updated successfully'
-        );
-        return result[0];
+        if (result.length === 0) {
+          reply.status(404);
+          return { error: 'Section non trouvée' };
+        }
+
+        app.logger.info({ sectionId: id }, 'Program section updated');
+        return {
+          section: formatSection(result[0]),
+        };
       } catch (error) {
-        app.logger.error(
-          { err: error, itemId: id },
-          'Failed to update program item'
-        );
+        app.logger.error({ err: error, userId, sectionId: id }, 'Failed to update program section');
         throw error;
       }
     }
   );
 
-  // DELETE /api/program/:id - Delete program item (admin)
+  // DELETE /api/admin/program/:id - Delete program section (authenticated, admin only)
   fastify.delete<{ Params: { id: string } }>(
-    '/api/program/:id',
+    '/api/admin/program/:id',
     {
       schema: {
-        description: 'Delete a political program item (admin only)',
-        tags: ['program'],
+        description: 'Delete a program section (admin only)',
+        tags: ['admin', 'program'],
         params: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: 'string', format: 'uuid' },
           },
         },
         response: {
-          200: { type: 'object' },
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+            },
+          },
+          401: { type: 'object' },
+          403: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
@@ -192,26 +304,51 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!session) return;
 
       const { id } = request.params;
-      app.logger.info({ itemId: id }, 'Deleting program item');
+      const userId = session.user.id;
+
+      app.logger.info({ userId, sectionId: id }, 'Deleting program section');
 
       try {
+        const isAdmin = await checkAdminRole(app, userId);
+        if (!isAdmin) {
+          reply.status(403);
+          return { error: 'Accès refusé' };
+        }
+
         const result = await app.db
-          .delete(schema.politicalProgram)
-          .where(eq(schema.politicalProgram.id, id))
+          .delete(schema.programSections)
+          .where(eq(schema.programSections.id, id as any))
           .returning();
 
-        app.logger.info(
-          { itemId: id },
-          'Program item deleted successfully'
-        );
-        return result[0];
+        if (result.length === 0) {
+          reply.status(404);
+          return { error: 'Section non trouvée' };
+        }
+
+        app.logger.info({ sectionId: id }, 'Program section deleted');
+        return { success: true };
       } catch (error) {
-        app.logger.error(
-          { err: error, itemId: id },
-          'Failed to delete program item'
-        );
+        app.logger.error({ err: error, userId, sectionId: id }, 'Failed to delete program section');
         throw error;
       }
     }
   );
+}
+
+export async function seedProgramSections(app: App) {
+  try {
+    const existing = await app.db
+      .select({ count: count() })
+      .from(schema.programSections);
+
+    if (existing[0]?.count === 0) {
+      app.logger.info('Seeding program sections');
+      await app.db
+        .insert(schema.programSections)
+        .values(PROGRAM_SECTIONS_SEED);
+      app.logger.info({ count: PROGRAM_SECTIONS_SEED.length }, 'Program sections seeded');
+    }
+  } catch (error) {
+    app.logger.error({ err: error }, 'Failed to seed program sections');
+  }
 }

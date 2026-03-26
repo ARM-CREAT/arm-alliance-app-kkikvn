@@ -6,30 +6,43 @@ import {
   integer,
   decimal,
   jsonb,
+  boolean,
 } from 'drizzle-orm/pg-core';
 
-// Members table - Party membership applications and approvals
+// Members table - Member registry with sequential member numbers
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  phone: text('phone').notNull(),
-  region: text('region').notNull(),
-  cercle: text('cercle'),
+  memberNumber: text('member_number').notNull().unique(), // ARM-YYYY-NNNNN format (sequential)
+  fullName: text('full_name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  phone: text('phone').notNull().unique(),
+  email: text('email'),
   commune: text('commune'),
-  membershipDate: timestamp('membership_date').notNull().defaultNow(),
+  region: text('region'),
+  profession: text('profession'),
+  dateOfBirth: text('date_of_birth'),
+  gender: text('gender'),
   status: text('status').notNull().default('pending'), // pending, approved, rejected
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // Leadership table - Party leadership positions
 export const leadership = pgTable('leadership', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
   position: text('position').notNull(), // président, vice-président, secrétaire général, etc.
   phone: text('phone'),
+  email: text('email'),
   address: text('address'),
   location: text('location'),
+  photoUrl: text('photo_url'),
+  bio: text('bio'),
   order: integer('order').notNull().default(0),
+  orderIndex: integer('order_index'),
   createdBy: text('created_by'),
 });
 
@@ -96,6 +109,7 @@ export const politicalProgram = pgTable('political_program', {
   description: text('description').notNull(),
   order: integer('order').default(0),
   createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // Regions table - Mali regions with cercles and communes
@@ -110,8 +124,13 @@ export const media = pgTable('media', {
   id: uuid('id').primaryKey().defaultRandom(),
   key: text('key').notNull().unique(), // Storage key from file upload
   fileName: text('file_name').notNull(),
+  title: text('title'),
+  type: text('type'), // image, video, document, etc.
+  category: text('category'),
   mimeType: text('mime_type').notNull(),
   size: integer('size').notNull(),
+  url: text('url'),
+  uploadedBy: text('uploaded_by'),
   uploadedAt: timestamp('uploaded_at').notNull().defaultNow(),
 });
 
@@ -132,13 +151,18 @@ export const memberProfiles = pgTable('member_profiles', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id'), // Foreign key to users table (for authenticated members)
   fullName: text('full_name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
   nina: text('nina'), // National ID number
   commune: text('commune').notNull(),
+  region: text('region'),
+  cercle: text('cercle'),
   profession: text('profession').notNull(),
   phone: text('phone').notNull(),
   email: text('email'),
+  motivation: text('motivation'),
   membershipNumber: text('membership_number').notNull().unique(), // ARM-YYYY-XXXXX
-  qrCode: text('qr_code').notNull().unique(), // QR code data
+  qrCode: text('qr_code').notNull(), // QR code data (no unique constraint - visual representation only)
   status: text('status').notNull().default('pending'), // pending, active, suspended
   role: text('role').notNull().default('militant'), // militant, collecteur, superviseur, administrateur
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -201,6 +225,14 @@ export const internalMessages = pgTable('internal_messages', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Message Reads - Track which members have read messages
+export const messageReads = pgTable('message_reads', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  messageId: uuid('message_id').notNull().references(() => internalMessages.id, { onDelete: 'cascade' }),
+  memberProfileId: uuid('member_profile_id').notNull().references(() => memberProfiles.id, { onDelete: 'cascade' }),
+  readAt: timestamp('read_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Election Results - Module Sentinelle
 export const electionResults = pgTable('election_results', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -216,4 +248,212 @@ export const electionResults = pgTable('election_results', {
   verifiedBy: text('verified_by'),
   verifiedAt: timestamp('verified_at'),
   status: text('status').notNull().default('pending'), // pending, verified, rejected
+});
+
+// Conferences table - Virtual meeting rooms with Jit.si integration
+export const conferences = pgTable('conferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description'),
+  scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+  duration: integer('duration').notNull().default(60),
+  hostName: text('host_name').notNull(),
+  roomCode: text('room_code').notNull().unique(),
+  joinUrl: text('join_url').notNull(),
+  status: text('status').notNull().default('scheduled'),
+  participantCount: integer('participant_count').notNull().default(0),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Calls table - Voice and video call signaling
+export const calls = pgTable('calls', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  initiatorId: text('initiator_id').notNull(),
+  targetMemberId: text('target_member_id').notNull(),
+  callType: text('call_type').notNull(), // audio or video
+  roomCode: text('room_code').notNull().unique(),
+  joinUrl: text('join_url').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+});
+
+// App Content table - Ideology and content management
+export const appContent = pgTable('app_content', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: text('key').notNull().unique(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Contacts table - Organization contacts
+export const contacts = pgTable('contacts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  role: text('role').notNull(),
+  phone: text('phone'),
+  email: text('email'),
+  address: text('address'),
+  type: text('type').notNull().default('general'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// App Settings table - Application configuration
+export const appSettings = pgTable('app_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  key: text('key').notNull().unique(),
+  value: text('value').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Conversations table - Private chat between members
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  participantIds: text('participant_ids').array().notNull(), // Array of user IDs
+  lastMessage: text('last_message'),
+  lastMessageAt: timestamp('last_message_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Chat messages table - Private messages in conversations
+export const chatMessages = pgTable('chat_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+  senderId: text('sender_id').notNull(),
+  senderName: text('sender_name').notNull(),
+  content: text('content').notNull(),
+  readBy: text('read_by').array().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Programs table - Extended political program with richer fields
+export const programs = pgTable('programs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  category: text('category').notNull(),
+  summary: text('summary').notNull(),
+  content: text('content').notNull(),
+  icon: text('icon'),
+  color: text('color'),
+  order: integer('order').default(0),
+  published: boolean('published').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// AI Conversations table - AI chat history
+export const aiConversations = pgTable('ai_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  messages: jsonb('messages').notNull().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Contact Messages table - Contact form submissions (distinct from contacts party contacts)
+export const contactMessages = pgTable('contact_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  subject: text('subject').notNull(),
+  message: text('message').notNull(),
+  status: text('status').notNull().default('unread'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Notifications table - Push notifications and announcements
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  body: text('body'), // Alias for content
+  type: text('type').notNull(), // 'public', 'militants', 'all'
+  category: text('category').notNull(), // 'actualite', 'evenement', 'annonce', 'urgent'
+  imageUrl: text('image_url'),
+  isPublished: boolean('is_published').notNull().default(true),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Program Sections table - Party program sections with order and icon
+export const programSections = pgTable('program_sections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orderIndex: integer('order_index').notNull(),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  icon: text('icon'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// CMS News table - Publishable news content (separate from legacy news table)
+export const cmsNews = pgTable('cms_news', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  imageUrl: text('image_url'),
+  published: boolean('published').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Announcements table - Urgent and regular announcements
+export const announcements = pgTable('announcements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  priority: text('priority').notNull().default('normal'), // normal, urgent
+  published: boolean('published').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Political Messages table - Official party messages and statements
+export const politicalMessages = pgTable('political_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  author: text('author').notNull(),
+  published: boolean('published').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// News Articles table - Full-featured news articles with categories
+export const newsArticles = pgTable('news_articles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  summary: text('summary').notNull().default(''),
+  category: text('category').notNull(),
+  imageUrl: text('image_url').notNull().default(''),
+  published: boolean('published').notNull().default(true),
+  publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Memberships table - Party memberships with status tracking
+export const memberships = pgTable('memberships', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  membershipNumber: text('membership_number').notNull().unique(),
+  userId: text('user_id'),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name').notNull(),
+  email: text('email').notNull().unique(),
+  phone: text('phone'),
+  address: text('address'),
+  city: text('city'),
+  country: text('country').notNull().default('France'),
+  birthDate: text('birth_date'),
+  status: text('status').notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

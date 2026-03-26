@@ -1,395 +1,431 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Platform,
   ActivityIndicator,
   TextInput,
+  RefreshControl,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedPost } from '@/utils/api';
-import { useLocalization } from '@/contexts/LocalizationContext';
-import { convertCurrency, formatCurrency } from '@/utils/currency';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { authenticatedPost, authenticatedGet } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 
-type PaymentMethod = 'sama_money' | 'orange_money' | 'moov_money';
-type CotisationType = 'monthly' | 'annual' | 'one-time';
+const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+
+type PaymentMethod = 'orange_money' | 'moov_money' | 'virement';
+type CotisationType = 'mensuelle' | 'trimestrielle' | 'annuelle';
+
+interface Cotisation {
+  id: string;
+  amount: number;
+  type: string;
+  paymentMethod: string;
+  transactionId?: string;
+  status: string;
+  paidAt?: string;
+  createdAt: string;
+}
+
+function formatDate(dateString?: string) {
+  if (!dateString) return '—';
+  try {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+  } catch { return dateString; }
+}
+
+function getStatusColor(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'paid' || s === 'payé' || s === 'completed') return colors.success;
+  if (s === 'pending' || s === 'en attente') return colors.warning;
+  return colors.textSecondary;
+}
+
+function getStatusLabel(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'paid' || s === 'completed') return 'Payé';
+  if (s === 'pending') return 'En attente';
+  return status;
+}
 
 export default function CotisationScreen() {
-  const router = useRouter();
-  const { t, currency } = useLocalization();
-  
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
+  const [modalType, setModalType] = useState<'info' | 'success' | 'error'>('info');
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
 
-  const [selectedType, setSelectedType] = useState<CotisationType>('monthly');
+  const [selectedType, setSelectedType] = useState<CotisationType>('mensuelle');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('orange_money');
-  const [customAmount, setCustomAmount] = useState('');
+  const [amountInput, setAmountInput] = useState('5000');
 
-  // Base amounts in XOF (local currency)
-  const cotisationAmountsXOF = {
-    monthly: 5000,
-    annual: 50000,
-  };
+  const [cotisationId, setCotisationId] = useState<string | null>(null);
+  const [paymentInstructions, setPaymentInstructions] = useState<string | null>(null);
+  const [transactionId, setTransactionId] = useState('');
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
-  // Convert to selected currency
-  const cotisationAmounts = {
-    monthly: Math.round(convertCurrency(cotisationAmountsXOF.monthly, 'XOF', currency)),
-    annual: Math.round(convertCurrency(cotisationAmountsXOF.annual, 'XOF', currency)),
-  };
+  const [history, setHistory] = useState<Cotisation[]>([]);
 
-  const minAmountXOF = 1000;
-  const minAmount = Math.round(convertCurrency(minAmountXOF, 'XOF', currency));
-
-  const showModal = (title: string, message: string) => {
-    console.log('[Cotisation] Showing modal:', title, message);
+  const showModal = (title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setModalTitle(title);
     setModalMessage(message);
+    setModalType(type);
     setModalVisible(true);
   };
 
-  const handlePayment = async () => {
-    console.log('[Cotisation] User tapped Pay button');
-    
-    const amountValue = selectedType === 'one-time' 
-      ? parseInt(customAmount) 
-      : cotisationAmounts[selectedType];
+  const loadHistory = useCallback(async () => {
+    console.log('[Cotisation] GET /api/cotisations/my-history');
+    try {
+      const response = await authenticatedGet<{ cotisations: Cotisation[] }>('/api/cotisations/my-history');
+      const list = response?.cotisations ?? [];
+      console.log('[Cotisation] Historique chargé:', list.length, 'éléments');
+      setHistory(list);
+      setIsAuthenticated(true);
+    } catch (error: any) {
+      console.error('[Cotisation] Erreur historique:', error.message);
+      if (error.message?.includes('token') || error.message?.includes('Authentication') || error.message?.includes('401')) {
+        setIsAuthenticated(false);
+      }
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-    if (selectedType === 'one-time' && (!customAmount || amountValue < minAmount)) {
-      showModal(
-        t('error'), 
-        t('errorMinAmount', { min: formatCurrency(minAmount, currency) })
-      );
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const onRefresh = useCallback(() => {
+    console.log('[Cotisation] Pull-to-refresh');
+    setRefreshing(true);
+    loadHistory();
+  }, [loadHistory]);
+
+  const handleInitiate = async () => {
+    console.log('[Cotisation] Bouton Initier le paiement appuyé');
+
+    const amount = parseInt(amountInput, 10);
+    if (!amountInput || isNaN(amount) || amount <= 0) {
+      showModal('Erreur', 'Veuillez entrer un montant valide', 'error');
       return;
     }
 
-    if (isNaN(amountValue) || amountValue <= 0) {
-      showModal(t('error'), t('errorAmountValid'));
-      return;
-    }
-
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     setLoading(true);
+    const payload = { amount, type: selectedType, paymentMethod: selectedPaymentMethod };
+    console.log('[Cotisation] POST /api/cotisations/initiate', JSON.stringify(payload));
 
     try {
-      console.log('[Cotisation] Initiating payment:', {
-        amount: amountValue,
-        currency,
-        type: selectedType,
-        paymentMethod: selectedPaymentMethod,
-      });
+      const response = await authenticatedPost<{
+        cotisationId: string;
+        membershipNumber: string;
+        paymentInstructions: string;
+      }>('/api/cotisations/initiate', payload);
 
-      // Convert amount to XOF for backend
-      const amountInXOF = Math.round(convertCurrency(amountValue, currency, 'XOF'));
-
-      const response = await authenticatedPost('/api/cotisations/initiate', {
-        amount: amountInXOF,
-        type: selectedType,
-        paymentMethod: selectedPaymentMethod,
-        displayCurrency: currency,
-        displayAmount: amountValue,
-      });
-
-      console.log('[Cotisation] Payment initiated:', response);
-
-      // Format payment instructions from backend
-      let instructions = '';
-      if (response.paymentInstructions) {
-        if (typeof response.paymentInstructions === 'string') {
-          instructions = response.paymentInstructions;
-        } else if (response.paymentInstructions.instructions) {
-          instructions = response.paymentInstructions.instructions;
-        } else {
-          instructions = `ID de cotisation: ${response.cotisationId}\n\n${getPaymentInstructions(selectedPaymentMethod, amountInXOF)}`;
-        }
-      } else {
-        instructions = getPaymentInstructions(selectedPaymentMethod, amountInXOF);
-      }
-      
-      showModal(t('paymentInstructions'), instructions);
-      
-      // Clear custom amount after successful initiation
-      if (selectedType === 'one-time') {
-        setTimeout(() => {
-          setCustomAmount('');
-        }, 2000);
-      }
-      
+      console.log('[Cotisation] Initiation réussie:', JSON.stringify(response));
+      setCotisationId(response.cotisationId);
+      const instructions = typeof response.paymentInstructions === 'string'
+        ? response.paymentInstructions
+        : `ID de cotisation: ${response.cotisationId}\n\nEffectuez votre paiement et entrez l'ID de transaction ci-dessous.`;
+      setPaymentInstructions(instructions);
     } catch (error: any) {
-      console.error('[Cotisation] Payment initiation error:', error);
-      const errorMessage = error?.message || 'Une erreur est survenue. Veuillez réessayer.';
-      showModal(t('error'), errorMessage);
+      console.error('[Cotisation] Erreur initiation:', error.message);
+      showModal('Erreur', error?.message || 'Une erreur est survenue. Veuillez réessayer.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const getPaymentInstructions = (method: PaymentMethod, amount: number): string => {
-    const instructions = {
-      sama_money: `Pour payer ${amount} FCFA via Sama Money:\n\n1. Composez *123#\n2. Sélectionnez "Transfert d'argent"\n3. Entrez le numéro: 70 00 00 00\n4. Montant: ${amount} FCFA\n5. Confirmez avec votre code PIN`,
-      orange_money: `Pour payer ${amount} FCFA via Orange Money:\n\n1. Composez #144#\n2. Sélectionnez "Transfert d'argent"\n3. Entrez le numéro: 70 00 00 00\n4. Montant: ${amount} FCFA\n5. Confirmez avec votre code PIN`,
-      moov_money: `Pour payer ${amount} FCFA via Moov Money:\n\n1. Composez *555#\n2. Sélectionnez "Transfert d'argent"\n3. Entrez le numéro: 70 00 00 00\n4. Montant: ${amount} FCFA\n5. Confirmez avec votre code PIN`,
-    };
-    return instructions[method];
+  const handleConfirm = async () => {
+    console.log('[Cotisation] Bouton Confirmer le paiement appuyé');
+
+    if (!transactionId.trim()) {
+      showModal('Erreur', "Veuillez entrer l'ID de transaction", 'error');
+      return;
+    }
+    if (!cotisationId) return;
+
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    setConfirmLoading(true);
+    const payload = { cotisationId, transactionId: transactionId.trim() };
+    console.log('[Cotisation] POST /api/cotisations/confirm', JSON.stringify(payload));
+
+    try {
+      const response = await authenticatedPost<{ success: boolean; message: string }>(
+        '/api/cotisations/confirm', payload
+      );
+      console.log('[Cotisation] Confirmation réussie:', JSON.stringify(response));
+      showModal('Paiement confirmé', response.message || 'Votre cotisation a été confirmée !', 'success');
+      setCotisationId(null);
+      setPaymentInstructions(null);
+      setTransactionId('');
+      setAmountInput('5000');
+      loadHistory();
+    } catch (error: any) {
+      console.error('[Cotisation] Erreur confirmation:', error.message);
+      showModal('Erreur', error?.message || 'Impossible de confirmer le paiement.', 'error');
+    } finally {
+      setConfirmLoading(false);
+    }
   };
 
-  const monthlyAmount = formatCurrency(cotisationAmounts.monthly, currency);
-  const annualAmount = formatCurrency(cotisationAmounts.annual, currency);
-  const savingsAmount = formatCurrency(
-    (cotisationAmounts.monthly * 12) - cotisationAmounts.annual,
-    currency
-  );
+  const typeOptions: { value: CotisationType; label: string; amount: string; desc: string }[] = [
+    { value: 'mensuelle', label: 'Mensuelle', amount: '5 000 FCFA', desc: 'Par mois' },
+    { value: 'trimestrielle', label: 'Trimestrielle', amount: '14 000 FCFA', desc: 'Par trimestre' },
+    { value: 'annuelle', label: 'Annuelle', amount: '50 000 FCFA', desc: 'Par an' },
+  ];
+
+  const paymentOptions: { value: PaymentMethod; label: string; color: string; abbr: string }[] = [
+    { value: 'orange_money', label: 'Orange Money', color: '#FF6600', abbr: 'OM' },
+    { value: 'moov_money', label: 'Moov Money', color: '#0066CC', abbr: 'MM' },
+    { value: 'virement', label: 'Virement', color: colors.primary, abbr: '🏦' },
+  ];
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: t('payCotisation'),
+          title: 'Cotisation',
           headerShown: true,
-          headerBackTitle: t('back'),
+          headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: colors.primary },
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: { fontWeight: 'bold' },
         }}
       />
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />
+        }
       >
+        {/* Header */}
         <View style={styles.header}>
-          <IconSymbol
-            ios_icon_name="creditcard.fill"
-            android_material_icon_name="payment"
-            size={48}
-            color={colors.primary}
-          />
-          <Text style={styles.headerTitle}>{t('militantCotisation')}</Text>
-          <Text style={styles.headerSubtitle}>
-            {t('cotisationDescription')}
-          </Text>
+          <View style={styles.headerIcon}>
+            <Text style={styles.headerIconText}>💳</Text>
+          </View>
+          <Text style={styles.headerTitle}>Cotisation Militant</Text>
+          <Text style={styles.headerSubtitle}>Contribuez au financement du parti</Text>
         </View>
 
-        {/* Cotisation Type Selection */}
+        {/* Non authentifié */}
+        {!isAuthenticated && (
+          <View style={styles.authWarning}>
+            <Text style={styles.authWarningIcon}>🔒</Text>
+            <Text style={styles.authWarningText}>
+              Connectez-vous pour accéder aux cotisations et consulter votre historique.
+            </Text>
+          </View>
+        )}
+
+        {/* Étape confirmation */}
+        {paymentInstructions ? (
+          <View style={styles.section}>
+            <View style={styles.instructionsBox}>
+              <Text style={styles.instructionsTitle}>Instructions de paiement</Text>
+              <Text style={styles.instructionsText}>{paymentInstructions}</Text>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>ID de Transaction *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Entrez l'ID de transaction reçu"
+                placeholderTextColor={colors.textTertiary}
+                value={transactionId}
+                onChangeText={setTransactionId}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <AnimatedPressable
+              style={[styles.primaryButton, confirmLoading && styles.buttonDisabled]}
+              onPress={handleConfirm}
+              disabled={confirmLoading}
+            >
+              {confirmLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Confirmer le paiement</Text>
+              )}
+            </AnimatedPressable>
+
+            <AnimatedPressable
+              style={styles.cancelButton}
+              onPress={() => {
+                console.log('[Cotisation] Annulation confirmation paiement');
+                setCotisationId(null);
+                setPaymentInstructions(null);
+                setTransactionId('');
+              }}
+            >
+              <Text style={styles.cancelButtonText}>Annuler</Text>
+            </AnimatedPressable>
+          </View>
+        ) : (
+          <>
+            {/* Type de cotisation */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Type de cotisation</Text>
+              {typeOptions.map((opt) => {
+                const isSelected = selectedType === opt.value;
+                return (
+                  <AnimatedPressable
+                    key={opt.value}
+                    style={[styles.optionCard, isSelected && styles.optionCardSelected]}
+                    onPress={() => {
+                      console.log('[Cotisation] Type sélectionné:', opt.value);
+                      setSelectedType(opt.value);
+                    }}
+                  >
+                    <View style={styles.optionRow}>
+                      <View style={styles.optionTextBlock}>
+                        <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
+                          {opt.label}
+                        </Text>
+                        <Text style={styles.optionDesc}>{opt.desc}</Text>
+                      </View>
+                      <Text style={[styles.optionAmount, isSelected && { color: colors.primary }]}>
+                        {opt.amount}
+                      </Text>
+                      {isSelected && (
+                        <View style={styles.checkCircle}>
+                          <Text style={styles.checkMark}>✓</Text>
+                        </View>
+                      )}
+                    </View>
+                  </AnimatedPressable>
+                );
+              })}
+            </View>
+
+            {/* Montant */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Montant (FCFA)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: 5000"
+                placeholderTextColor={colors.textTertiary}
+                value={amountInput}
+                onChangeText={setAmountInput}
+                keyboardType="numeric"
+              />
+            </View>
+
+            {/* Mode de paiement */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Mode de paiement</Text>
+              {paymentOptions.map((opt) => {
+                const isSelected = selectedPaymentMethod === opt.value;
+                return (
+                  <AnimatedPressable
+                    key={opt.value}
+                    style={[styles.paymentCard, isSelected && styles.paymentCardSelected]}
+                    onPress={() => {
+                      console.log('[Cotisation] Mode de paiement sélectionné:', opt.value);
+                      setSelectedPaymentMethod(opt.value);
+                    }}
+                  >
+                    <View style={[styles.paymentIcon, { backgroundColor: opt.color }]}>
+                      <Text style={styles.paymentIconText}>{opt.abbr}</Text>
+                    </View>
+                    <Text style={[styles.paymentName, isSelected && { color: colors.primary }]}>
+                      {opt.label}
+                    </Text>
+                    {isSelected && (
+                      <View style={styles.checkCircle}>
+                        <Text style={styles.checkMark}>✓</Text>
+                      </View>
+                    )}
+                  </AnimatedPressable>
+                );
+              })}
+            </View>
+
+            <AnimatedPressable
+              style={[styles.primaryButton, styles.primaryButtonMargin, loading && styles.buttonDisabled]}
+              onPress={handleInitiate}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.primaryButtonText}>Initier le paiement</Text>
+                  <IconSymbol
+                    ios_icon_name="arrow.right"
+                    android_material_icon_name="arrow-forward"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                </>
+              )}
+            </AnimatedPressable>
+          </>
+        )}
+
+        {/* Historique */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('contributionType')}</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.optionCard,
-              selectedType === 'monthly' && styles.optionCardSelected,
-            ]}
-            onPress={() => setSelectedType('monthly')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.optionHeader}>
-              <View style={styles.optionIcon}>
-                <IconSymbol
-                  ios_icon_name="calendar"
-                  android_material_icon_name="event"
-                  size={24}
-                  color={selectedType === 'monthly' ? colors.primary : colors.textSecondary}
-                />
-              </View>
-              <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>{t('monthly')}</Text>
-                <Text style={styles.optionAmount}>{monthlyAmount} / {t('monthly').toLowerCase()}</Text>
-              </View>
-              {selectedType === 'monthly' && (
-                <IconSymbol
-                  ios_icon_name="checkmark.circle.fill"
-                  android_material_icon_name="check-circle"
-                  size={24}
-                  color={colors.primary}
-                />
-              )}
+          <Text style={styles.sectionTitle}>Historique des cotisations</Text>
+          {historyLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+          ) : !isAuthenticated ? (
+            <View style={styles.emptyHistory}>
+              <Text style={styles.emptyHistoryText}>Connectez-vous pour voir votre historique</Text>
             </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.optionCard,
-              selectedType === 'annual' && styles.optionCardSelected,
-            ]}
-            onPress={() => setSelectedType('annual')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.optionHeader}>
-              <View style={styles.optionIcon}>
-                <IconSymbol
-                  ios_icon_name="calendar.badge.clock"
-                  android_material_icon_name="date-range"
-                  size={24}
-                  color={selectedType === 'annual' ? colors.primary : colors.textSecondary}
-                />
-              </View>
-              <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>{t('annual')}</Text>
-                <Text style={styles.optionAmount}>{annualAmount} / {t('annual').toLowerCase()}</Text>
-                <Text style={styles.optionSavings}>Économisez {savingsAmount}</Text>
-              </View>
-              {selectedType === 'annual' && (
-                <IconSymbol
-                  ios_icon_name="checkmark.circle.fill"
-                  android_material_icon_name="check-circle"
-                  size={24}
-                  color={colors.primary}
-                />
-              )}
+          ) : history.length === 0 ? (
+            <View style={styles.emptyHistory}>
+              <Text style={styles.emptyHistoryText}>Aucune cotisation enregistrée</Text>
             </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.optionCard,
-              selectedType === 'one-time' && styles.optionCardSelected,
-            ]}
-            onPress={() => setSelectedType('one-time')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.optionHeader}>
-              <View style={styles.optionIcon}>
-                <IconSymbol
-                  ios_icon_name="gift.fill"
-                  android_material_icon_name="card-giftcard"
-                  size={24}
-                  color={selectedType === 'one-time' ? colors.primary : colors.textSecondary}
-                />
-              </View>
-              <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>{t('freeAmount')}</Text>
-                <Text style={styles.optionDescription}>{t('oneTimeContribution')}</Text>
-              </View>
-              {selectedType === 'one-time' && (
-                <IconSymbol
-                  ios_icon_name="checkmark.circle.fill"
-                  android_material_icon_name="check-circle"
-                  size={24}
-                  color={colors.primary}
-                />
-              )}
-            </View>
-            {selectedType === 'one-time' && (
-              <View style={styles.customAmountContainer}>
-                <TextInput
-                  style={styles.customAmountInput}
-                  placeholder={`${t('enterAmount')} (min. ${formatCurrency(minAmount, currency)})`}
-                  placeholderTextColor={colors.textSecondary}
-                  value={customAmount}
-                  onChangeText={setCustomAmount}
-                  keyboardType="numeric"
-                />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Payment Method Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('paymentMethod')}</Text>
-
-          <TouchableOpacity
-            style={[
-              styles.paymentCard,
-              selectedPaymentMethod === 'orange_money' && styles.paymentCardSelected,
-            ]}
-            onPress={() => setSelectedPaymentMethod('orange_money')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.paymentIcon, { backgroundColor: '#FF6600' }]}>
-              <Text style={styles.paymentIconText}>OM</Text>
-            </View>
-            <Text style={styles.paymentName}>Orange Money</Text>
-            {selectedPaymentMethod === 'orange_money' && (
-              <IconSymbol
-                ios_icon_name="checkmark.circle.fill"
-                android_material_icon_name="check-circle"
-                size={20}
-                color={colors.primary}
-              />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.paymentCard,
-              selectedPaymentMethod === 'moov_money' && styles.paymentCardSelected,
-            ]}
-            onPress={() => setSelectedPaymentMethod('moov_money')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.paymentIcon, { backgroundColor: '#0066CC' }]}>
-              <Text style={styles.paymentIconText}>MM</Text>
-            </View>
-            <Text style={styles.paymentName}>Moov Money</Text>
-            {selectedPaymentMethod === 'moov_money' && (
-              <IconSymbol
-                ios_icon_name="checkmark.circle.fill"
-                android_material_icon_name="check-circle"
-                size={20}
-                color={colors.primary}
-              />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.paymentCard,
-              selectedPaymentMethod === 'sama_money' && styles.paymentCardSelected,
-            ]}
-            onPress={() => setSelectedPaymentMethod('sama_money')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.paymentIcon, { backgroundColor: '#00AA55' }]}>
-              <Text style={styles.paymentIconText}>SM</Text>
-            </View>
-            <Text style={styles.paymentName}>Sama Money</Text>
-            {selectedPaymentMethod === 'sama_money' && (
-              <IconSymbol
-                ios_icon_name="checkmark.circle.fill"
-                android_material_icon_name="check-circle"
-                size={20}
-                color={colors.primary}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.payButton, loading && styles.payButtonDisabled]}
-          onPress={handlePayment}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.background} />
           ) : (
-            <>
-              <Text style={styles.payButtonText}>{t('proceedPayment')}</Text>
-              <IconSymbol
-                ios_icon_name="arrow.right"
-                android_material_icon_name="arrow-forward"
-                size={20}
-                color={colors.background}
-              />
-            </>
+            history.map((item) => {
+              const statusColor = getStatusColor(item.status);
+              const statusLabel = getStatusLabel(item.status);
+              const dateStr = formatDate(item.paidAt || item.createdAt);
+              const amountStr = Number(item.amount).toLocaleString('fr-FR');
+              return (
+                <View key={item.id} style={styles.historyCard}>
+                  <View style={styles.historyRow}>
+                    <View style={styles.historyLeft}>
+                      <Text style={styles.historyAmount}>{amountStr} FCFA</Text>
+                      <Text style={styles.historyType}>{item.type}</Text>
+                      <Text style={styles.historyDate}>{dateStr}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + '18' }]}>
+                      <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
           )}
-        </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <Modal
         visible={modalVisible}
         title={modalTitle}
         message={modalMessage}
+        type={modalType}
         onClose={() => setModalVisible(false)}
       />
     </View>
@@ -405,126 +441,163 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
     paddingBottom: 40,
   },
   header: {
     alignItems: 'center',
     paddingVertical: 32,
     paddingHorizontal: 20,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    backgroundColor: colors.primary,
+  },
+  headerIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerIconText: {
+    fontSize: 28,
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
   headerSubtitle: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    marginTop: 8,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  authWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    margin: 20,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.warning + '40',
+  },
+  authWarningIcon: {
+    fontSize: 20,
+  },
+  authWarningText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#92400E',
+    lineHeight: 20,
   },
   section: {
     padding: 20,
+    paddingBottom: 0,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: colors.text,
+    marginBottom: 14,
+    letterSpacing: -0.2,
+  },
+  inputGroup: {
     marginBottom: 16,
   },
-  optionCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: colors.border,
-  },
-  optionCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.backgroundAlt,
-  },
-  optionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  optionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.backgroundAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  optionContent: {
-    flex: 1,
-  },
-  optionTitle: {
-    fontSize: 17,
+  label: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+    marginBottom: 8,
   },
-  optionAmount: {
-    fontSize: 15,
-    color: colors.primary,
-    fontWeight: 'bold',
-    marginTop: 4,
-  },
-  optionSavings: {
-    fontSize: 13,
-    color: '#10B981',
-    marginTop: 2,
-  },
-  optionDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  customAmountContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  customAmountInput: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
+  input: {
+    backgroundColor: colors.surfaceSecondary,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
+    marginBottom: 4,
+  },
+  optionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  optionCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryMuted,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  optionTextBlock: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  optionLabelSelected: {
+    color: colors.primary,
+  },
+  optionDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  optionAmount: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkMark: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   paymentCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 2,
     borderColor: colors.border,
+    gap: 12,
   },
   paymentCardSelected: {
     borderColor: colors.primary,
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: colors.primaryMuted,
   },
   paymentIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
   paymentIconText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
@@ -534,28 +607,109 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
-  payButton: {
+  primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
-    marginHorizontal: 20,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
-    minHeight: 52,
+    gap: 8,
+    marginTop: 20,
   },
-  payButtonDisabled: {
+  primaryButtonMargin: {
+    marginHorizontal: 20,
+  },
+  primaryButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  buttonDisabled: {
     opacity: 0.6,
   },
-  payButtonText: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: colors.background,
-    marginRight: 8,
+  cancelButton: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    marginTop: 12,
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  instructionsBox: {
+    backgroundColor: colors.primaryMuted,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  instructionsTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 8,
+  },
+  instructionsText: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  emptyHistory: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    backgroundColor: colors.surfaceSecondary,
+    borderRadius: 12,
+  },
+  emptyHistoryText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  historyCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  historyLeft: {
+    flex: 1,
+  },
+  historyAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  historyType: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  historyDate: {
+    fontSize: 12,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

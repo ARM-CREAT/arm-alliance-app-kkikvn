@@ -12,62 +12,63 @@ interface UpdateStatusBody {
   status: 'active' | 'suspended';
 }
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+function formatAdminMember(member: any) {
+  return {
+    id: member.id,
+    fullName: member.fullName,
+    nina: member.nina || null,
+    commune: member.commune,
+    profession: member.profession,
+    phone: member.phone,
+    email: member.email || null,
+    membershipNumber: member.membershipNumber,
+    status: member.status,
+    role: member.role,
+    createdAt: member.createdAt instanceof Date ? member.createdAt.toISOString() : new Date(member.createdAt).toISOString(),
+  };
+}
+
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/admin/members - Get all members (admin only)
-  fastify.get<{ Querystring: { status?: string; role?: string; region?: string } }>(
+  // GET /api/admin/members - Get all members (requires admin password)
+  fastify.get(
     '/api/admin/members',
     {
       schema: {
-        description: 'Get all members with filters (admin only)',
+        description: 'Get all members (admin only)',
         tags: ['admin', 'members'],
-        querystring: {
-          type: 'object',
-          properties: {
-            status: { type: 'string' },
-            role: { type: 'string' },
-            region: { type: 'string' },
-          },
-        },
         response: {
-          200: { type: 'array' },
+          200: {
+            type: 'object',
+            properties: {
+              members: { type: 'array' },
+            },
+          },
+          401: { type: 'object' },
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Querystring: { status?: string; role?: string; region?: string } }>,
-      reply: FastifyReply
-    ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const adminPassword = request.headers['x-admin-password'];
+      if (!adminPassword || adminPassword !== ADMIN_PASSWORD) {
+        reply.status(401).send({ error: 'Unauthorized' });
+        return;
+      }
 
-      const { status, role, region } = request.query;
-      app.logger.info(
-        { adminId: admin.userId, filters: { status, role, region } },
-        'Admin fetching members'
-      );
+      app.logger.info('Admin fetching all members');
 
       try {
-        let members = await app.db.select().from(schema.memberProfiles);
-
-        // Apply filters
-        if (status) {
-          members = members.filter(m => m.status === status);
-        }
-        if (role) {
-          members = members.filter(m => m.role === role);
-        }
-        if (region) {
-          members = members.filter(m => m.commune === region);
-        }
+        const members = await app.db.select().from(schema.memberProfiles);
 
         app.logger.info(
-          { adminId: admin.userId, count: members.length },
+          { count: members.length },
           'Members fetched successfully'
         );
-        return members;
+        return { members: members.map(formatAdminMember) };
       } catch (error) {
         app.logger.error(
-          { err: error, adminId: admin.userId },
+          { err: error },
           'Failed to fetch members'
         );
         throw error;
@@ -75,12 +76,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PUT /api/admin/members/:id/role - Update member role (admin only)
+  // PUT /api/admin/members/:id/role - Update member role (public)
   fastify.put<{ Params: { id: string }; Body: UpdateRoleBody }>(
     '/api/admin/members/:id/role',
     {
       schema: {
-        description: 'Update member role (admin only)',
+        description: 'Update member role',
         tags: ['admin', 'members'],
         params: {
           type: 'object',
@@ -107,14 +108,11 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: UpdateRoleBody }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
       const { role } = request.body;
       app.logger.info(
-        { adminId: admin.userId, memberId: id, newRole: role },
-        'Admin updating member role'
+        { memberId: id, newRole: role },
+        'Updating member role'
       );
 
       try {
@@ -132,13 +130,13 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info(
-          { adminId: admin.userId, memberId: id, newRole: role },
-          'Member role updated'
+          { memberId: id, newRole: role },
+          'Member role updated successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, adminId: admin.userId, memberId: id },
+          { err: error, memberId: id },
           'Failed to update member role'
         );
         throw error;
@@ -146,12 +144,12 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PUT /api/admin/members/:id/status - Update member status (admin only)
+  // PUT /api/admin/members/:id/status - Update member status (public)
   fastify.put<{ Params: { id: string }; Body: UpdateStatusBody }>(
     '/api/admin/members/:id/status',
     {
       schema: {
-        description: 'Update member status (admin only)',
+        description: 'Update member status',
         tags: ['admin', 'members'],
         params: {
           type: 'object',
@@ -175,14 +173,11 @@ export function register(app: App, fastify: FastifyInstance) {
       request: FastifyRequest<{ Params: { id: string }; Body: UpdateStatusBody }>,
       reply: FastifyReply
     ) => {
-      const admin = await verifyAdminAuth(request, reply, app);
-      if (!admin) return;
-
       const { id } = request.params;
       const { status } = request.body;
       app.logger.info(
-        { adminId: admin.userId, memberId: id, newStatus: status },
-        'Admin updating member status'
+        { memberId: id, newStatus: status },
+        'Updating member status'
       );
 
       try {
@@ -200,13 +195,13 @@ export function register(app: App, fastify: FastifyInstance) {
         }
 
         app.logger.info(
-          { adminId: admin.userId, memberId: id, newStatus: status },
-          'Member status updated'
+          { memberId: id, newStatus: status },
+          'Member status updated successfully'
         );
         return result[0];
       } catch (error) {
         app.logger.error(
-          { err: error, adminId: admin.userId, memberId: id },
+          { err: error, memberId: id },
           'Failed to update member status'
         );
         throw error;

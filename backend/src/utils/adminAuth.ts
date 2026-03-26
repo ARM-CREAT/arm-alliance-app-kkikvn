@@ -2,20 +2,27 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { App } from '../index.js';
 
 /**
- * Admin authentication with 3-factor security:
- * 1. Better Auth session (via requireAuth)
- * 2. Admin password verification
- * 3. Secret code verification
+ * Admin authentication:
+ * Supports multiple authentication methods:
+ * 1. Headers: x-admin-password and x-admin-secret (both optional, either works)
+ * 2. Single password header: x-admin-password only
+ * Both must match ADMIN_PASSWORD for successful authentication
  */
 
-interface AdminCredentials {
-  password: string;
-  secretCode: string;
-}
-
-// In-memory admin store - in production, this would come from environment/secure storage
+// Admin password from environment
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-const ADMIN_SECRET_CODE = process.env.ADMIN_SECRET_CODE || 'arm2024secure';
+
+/**
+ * Create a masked password hint showing first 3 and last 3 characters with *** in between
+ */
+function getMaskedPasswordHint(password: string): string {
+  if (password.length <= 6) {
+    return password.replace(/./g, '*');
+  }
+  const first3 = password.substring(0, 3);
+  const last3 = password.substring(password.length - 3);
+  return `${first3}***${last3}`;
+}
 
 export async function verifyAdminAuth(
   request: FastifyRequest,
@@ -23,54 +30,133 @@ export async function verifyAdminAuth(
   app: App
 ): Promise<{ userId: string; username: string } | null> {
   try {
-    // First, verify the user has a valid Better Auth session
-    const session = await app.requireAuth()(request, reply);
-    if (!session) {
-      app.logger.warn({}, 'Admin auth failed: No valid session');
-      return null;
-    }
+    // Get admin credentials from request headers (handle both string and array headers)
+    const passwordHeaderRaw = request.headers['x-admin-password'];
+    const secretHeaderRaw = request.headers['x-admin-secret'];
 
-    // Get admin credentials from request headers or body
-    const authHeader = request.headers['x-admin-password'];
-    const secretHeader = request.headers['x-admin-secret'];
+    // Normalize headers (Fastify may return arrays for duplicate headers)
+    const passwordHeader = Array.isArray(passwordHeaderRaw)
+      ? passwordHeaderRaw[0]
+      : (passwordHeaderRaw as string | undefined);
+    const secretHeader = Array.isArray(secretHeaderRaw)
+      ? secretHeaderRaw[0]
+      : (secretHeaderRaw as string | undefined);
 
-    if (!authHeader || !secretHeader) {
-      app.logger.warn(
-        { userId: session.user.id },
-        'Admin auth failed: Missing admin credentials'
-      );
-      reply.status(403).send({ error: 'Missing admin credentials' });
-      return null;
-    }
-
-    // Verify admin password
-    if (authHeader !== ADMIN_PASSWORD) {
-      app.logger.warn(
-        { userId: session.user.id },
-        'Admin auth failed: Invalid admin password'
-      );
-      reply.status(403).send({ error: 'Invalid admin password' });
-      return null;
-    }
-
-    // Verify secret code
-    if (secretHeader !== ADMIN_SECRET_CODE) {
-      app.logger.warn(
-        { userId: session.user.id },
-        'Admin auth failed: Invalid secret code'
-      );
-      reply.status(403).send({ error: 'Invalid secret code' });
-      return null;
-    }
-
+    // Log the authentication attempt with detailed context
     app.logger.info(
-      { userId: session.user.id, email: session.user.email },
-      'Admin authentication successful'
+      {
+        hasPasswordHeader: !!passwordHeader,
+        hasSecretHeader: !!secretHeader,
+        method: request.method,
+        path: request.url,
+        passwordLength: passwordHeader?.length,
+        secretLength: secretHeader?.length,
+      },
+      'Admin header authentication attempt'
     );
 
+    // Check if at least one credential header is present
+    if (!passwordHeader && !secretHeader) {
+      app.logger.warn(
+        {
+          hasPasswordHeader: !!passwordHeader,
+          hasSecretHeader: !!secretHeader,
+          method: request.method,
+          path: request.url,
+        },
+        'Header auth failed: No credentials provided'
+      );
+      reply.status(403).send({
+        error: 'Missing admin credentials. Please provide x-admin-password header.',
+      });
+      return null;
+    }
+
+    // Verify admin password header (primary authentication)
+    if (passwordHeader) {
+      if (passwordHeader.length !== ADMIN_PASSWORD.length) {
+        app.logger.warn(
+          {
+            step: 'password_length_check',
+            receivedLength: passwordHeader.length,
+            expectedLength: ADMIN_PASSWORD.length,
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
+            headerType: 'x-admin-password'
+          },
+          'Header auth failed: Password length mismatch'
+        );
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: `Invalid x-admin-password: length mismatch (expected ${ADMIN_PASSWORD.length} chars)`
+        });
+        return null;
+      }
+
+      if (passwordHeader !== ADMIN_PASSWORD) {
+        app.logger.warn(
+          {
+            step: 'password_value_check',
+            receivedHint: getMaskedPasswordHint(passwordHeader),
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
+            headerType: 'x-admin-password'
+          },
+          'Header auth failed: Password value mismatch'
+        );
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: 'Invalid x-admin-password header'
+        });
+        return null;
+      }
+
+      app.logger.debug({}, 'Header auth step: Password header validated');
+    }
+
+    // Verify admin secret header (secondary, optional)
+    if (secretHeader) {
+      if (secretHeader.length !== ADMIN_PASSWORD.length) {
+        app.logger.warn(
+          {
+            step: 'secret_length_check',
+            receivedLength: secretHeader.length,
+            expectedLength: ADMIN_PASSWORD.length,
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
+            headerType: 'x-admin-secret'
+          },
+          'Header auth failed: Secret length mismatch'
+        );
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: `Invalid x-admin-secret: length mismatch (expected ${ADMIN_PASSWORD.length} chars)`
+        });
+        return null;
+      }
+
+      if (secretHeader !== ADMIN_PASSWORD) {
+        app.logger.warn(
+          {
+            step: 'secret_value_check',
+            receivedHint: getMaskedPasswordHint(secretHeader),
+            expectedHint: getMaskedPasswordHint(ADMIN_PASSWORD),
+            headerType: 'x-admin-secret'
+          },
+          'Header auth failed: Secret value mismatch'
+        );
+        reply.status(403).send({
+          error: 'Unauthorized',
+          message: 'Invalid x-admin-secret header'
+        });
+        return null;
+      }
+
+      app.logger.debug({}, 'Header auth step: Secret header validated');
+    }
+
+    app.logger.info({}, 'Header authentication successful - all credentials validated');
+
     return {
-      userId: session.user.id,
-      username: session.user.email || 'admin',
+      userId: 'admin',
+      username: 'administrator',
     };
   } catch (error) {
     app.logger.error(
@@ -83,12 +169,28 @@ export async function verifyAdminAuth(
 }
 
 /**
- * Alternative admin auth that checks credentials from request body
- * Useful for login endpoints
+ * Validate admin credentials
+ * Can validate password only, or both password and secret
  */
 export async function validateAdminCredentials(
-  password: string,
-  secretCode: string
+  password?: string,
+  secret?: string
 ): Promise<boolean> {
-  return password === ADMIN_PASSWORD && secretCode === ADMIN_SECRET_CODE;
+  // If both provided, both must match
+  if (password && secret) {
+    return password === ADMIN_PASSWORD && secret === ADMIN_PASSWORD;
+  }
+
+  // If only password provided, validate it
+  if (password) {
+    return password === ADMIN_PASSWORD;
+  }
+
+  // If only secret provided, validate it as password
+  if (secret) {
+    return secret === ADMIN_PASSWORD;
+  }
+
+  // Neither provided
+  return false;
 }
