@@ -106,7 +106,7 @@ export default function RegisterScreen() {
     if (dateOfBirth.trim()) payload.date_of_birth = dateOfBirth.trim();
     if (gender) payload.gender = gender;
 
-    console.log('[Register] POST /api/members', JSON.stringify(payload));
+    console.log('[Register] POST /api/members/register', JSON.stringify(payload));
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -115,7 +115,7 @@ export default function RegisterScreen() {
     }, 30000);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/members`, {
+      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -129,11 +129,11 @@ export default function RegisterScreen() {
         console.log('[Register] Erreur HTTP', response.status, text);
 
         if (response.status === 409) {
-          setErrorBanner('Ce numéro de téléphone est déjà enregistré.');
+          setErrorBanner('Un membre avec ce numéro de téléphone existe déjà.');
           return;
         }
 
-        let message = `Erreur ${response.status}`;
+        let message = `Erreur ${response.status}. Veuillez réessayer.`;
         try {
           const json = JSON.parse(text);
           message = json.message || json.error || message;
@@ -150,7 +150,7 @@ export default function RegisterScreen() {
       router.push({
         pathname: '/member/success',
         params: {
-          member_number: data.member_number ?? '',
+          membership_number: data.membership_number ?? data.member_number ?? '',
           full_name: data.full_name ?? fullName.trim(),
         },
       });

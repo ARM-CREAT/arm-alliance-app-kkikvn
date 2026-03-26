@@ -18,8 +18,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 interface Stats {
   total: number;
   pending: number;
-  approved: number;
-  rejected: number;
+  active: number;
+  suspended: number;
   byRegion: { region: string; count: number }[];
   recentCount: number;
   thisMonth: number;
@@ -60,7 +60,7 @@ export default function MembershipStatsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, approved: 0, rejected: 0, byRegion: [], recentCount: 0, thisMonth: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, active: 0, suspended: 0, byRegion: [], recentCount: 0, thisMonth: 0 });
   const [monthly, setMonthly] = useState<MonthlyEntry[]>([]);
 
   const loadStats = useCallback(async () => {
@@ -78,8 +78,8 @@ export default function MembershipStatsScreen() {
       setStats({
         total: Number(data.total) || 0,
         pending: Number(data.pending) || 0,
-        approved: Number(data.approved) || 0,
-        rejected: Number(data.rejected) || 0,
+        active: Number(data.active) || 0,
+        suspended: Number(data.suspended) || 0,
         byRegion: Array.isArray(data.byRegion) ? data.byRegion : [],
         recentCount: Number(data.recentCount) || 0,
         thisMonth: Number(data.thisMonth) || 0,
@@ -184,15 +184,15 @@ export default function MembershipStatsScreen() {
                 <StatCard
                   icon_ios="checkmark.circle.fill"
                   icon_android="check-circle"
-                  label="Approuvés"
-                  value={stats.approved}
+                  label="Actifs"
+                  value={stats.active}
                   iconColor="#34C759"
                 />
                 <StatCard
                   icon_ios="xmark.circle.fill"
                   icon_android="cancel"
-                  label="Rejetés"
-                  value={stats.rejected}
+                  label="Suspendus"
+                  value={stats.suspended}
                   iconColor="#FF3B30"
                 />
                 <StatCard
@@ -240,9 +240,9 @@ export default function MembershipStatsScreen() {
                 <View style={styles.listRow}>
                   <View style={styles.listRowLeft}>
                     <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={20} color="#34C759" />
-                    <Text style={styles.listRowLabel}>Approuvés</Text>
+                    <Text style={styles.listRowLabel}>Actifs</Text>
                   </View>
-                  <Text style={[styles.listRowValue, { color: '#34C759' }]}>{String(stats.approved)}</Text>
+                  <Text style={[styles.listRowValue, { color: '#34C759' }]}>{String(stats.active)}</Text>
                 </View>
                 <View style={styles.listRow}>
                   <View style={styles.listRowLeft}>
@@ -254,9 +254,9 @@ export default function MembershipStatsScreen() {
                 <View style={[styles.listRow, styles.listRowLast]}>
                   <View style={styles.listRowLeft}>
                     <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={20} color="#FF3B30" />
-                    <Text style={styles.listRowLabel}>Rejetés</Text>
+                    <Text style={styles.listRowLabel}>Suspendus</Text>
                   </View>
-                  <Text style={[styles.listRowValue, { color: '#FF3B30' }]}>{String(stats.rejected)}</Text>
+                  <Text style={[styles.listRowValue, { color: '#FF3B30' }]}>{String(stats.suspended)}</Text>
                 </View>
               </View>
             </>

@@ -1,42 +1,43 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext';
 import { colors } from '@/styles/commonStyles';
 
-const ADMIN_AUTH_KEY = 'admin_authenticated';
-
-export default function AdminLayout() {
+function AdminGuard() {
+  const { isAdminAuthenticated, isChecking, logout } = useAdminAuth();
   const router = useRouter();
   const segments = useSegments();
-  const [checking, setChecking] = useState(true);
+  const didMountRef = useRef(false);
 
+  // On every render, check if we are still inside the admin section.
+  // If the user navigated outside /admin/* while the layout is still mounted,
+  // auto-logout so they must re-authenticate next time.
   useEffect(() => {
-    const checkAuth = async () => {
-      console.log('[AdminLayout] Vérification authentification admin...');
-      try {
-        const flag = await AsyncStorage.getItem(ADMIN_AUTH_KEY);
-        console.log('[AdminLayout] admin_authenticated:', flag);
-        const isOnLoginScreen = segments.includes('login' as never);
+    const isInAdmin = segments[0] === 'admin';
 
-        if (flag !== 'true' && !isOnLoginScreen) {
-          console.log('[AdminLayout] Non authentifié, redirection vers login');
-          router.replace('/admin/login');
-        } else {
-          console.log('[AdminLayout] Authentifié ou déjà sur login, accès autorisé');
-        }
-      } catch (err) {
-        console.error('[AdminLayout] Erreur lecture AsyncStorage:', err);
+    if (!isInAdmin && didMountRef.current) {
+      console.log('[AdminGuard] Utilisateur a quitté la section admin — déconnexion automatique');
+      logout();
+      return;
+    }
+
+    if (!isChecking) {
+      const isOnLoginScreen = segments.includes('login' as never);
+
+      if (!isAdminAuthenticated && !isOnLoginScreen) {
+        console.log('[AdminGuard] Non authentifié, redirection vers login');
         router.replace('/admin/login');
-      } finally {
-        setChecking(false);
+      } else if (isAdminAuthenticated && isOnLoginScreen) {
+        console.log('[AdminGuard] Déjà authentifié, redirection vers dashboard');
+        router.replace('/admin');
       }
-    };
+    }
 
-    checkAuth();
-  }, []);
+    didMountRef.current = true;
+  }, [isAdminAuthenticated, isChecking, segments, logout, router]);
 
-  if (checking) {
+  if (isChecking) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator color={colors.primary} size="large" />
@@ -50,5 +51,13 @@ export default function AdminLayout() {
         headerShown: false,
       }}
     />
+  );
+}
+
+export default function AdminLayout() {
+  return (
+    <AdminAuthProvider>
+      <AdminGuard />
+    </AdminAuthProvider>
   );
 }

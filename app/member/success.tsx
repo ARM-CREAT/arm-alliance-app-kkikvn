@@ -16,11 +16,12 @@ const C = Colors.light;
 export default function MemberSuccessScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
+    membership_number: string;
     member_number: string;
     full_name: string;
   }>();
 
-  const memberNumber = params.member_number ?? '';
+  const memberNumber = params.membership_number ?? params.member_number ?? '';
   const fullName = params.full_name ?? '';
   const welcomeText = fullName ? `Bienvenue, ${fullName} !` : 'Bienvenue !';
 

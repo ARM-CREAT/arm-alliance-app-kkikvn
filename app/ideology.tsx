@@ -203,12 +203,13 @@ const TRANSVERSALES: TransversaleItem[] = [
 
 // ─── Tab types ────────────────────────────────────────────────────────────────
 
-type TabKey = "familles" | "partis" | "transversales";
+type TabKey = "familles" | "partis" | "transversales" | "aes";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "familles", label: "Familles" },
   { key: "partis", label: "Partis" },
   { key: "transversales", label: "Transversales" },
+  { key: "aes", label: "AES" },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -265,6 +266,58 @@ function TransversaleCard({ item }: { item: TransversaleItem }) {
   );
 }
 
+// ─── AES Section ─────────────────────────────────────────────────────────────
+
+function AESSection() {
+  return (
+    <View>
+      {/* Section header */}
+      <View style={aesStyles.sectionHeader}>
+        <Text style={aesStyles.sectionHeaderIcon}>📣</Text>
+        <Text style={aesStyles.sectionHeaderTitle}>Discours Officiel du Président</Text>
+      </View>
+
+      {/* Card with red left border */}
+      <View style={aesStyles.redBorderCard}>
+        {/* Red left border */}
+        <View style={aesStyles.redLeftBorder} />
+        <View style={aesStyles.redBorderCardBody}>
+          {/* Red bold title */}
+          <Text style={aesStyles.cardRedTitle}>Sur l'Alliance des États du Sahel (AES)</Text>
+
+          {/* Green filled box */}
+          <View style={aesStyles.greenBox}>
+            <Text style={aesStyles.greenBoxText}>L'AES n'est pas un slogan.</Text>
+            <Text style={aesStyles.greenBoxText}>L'AES n'est pas une simple organisation de plus.</Text>
+            <Text style={aesStyles.greenBoxText}>L'AES est une réponse historique à des décennies de dépendance, d'insécurité imposée et de modèles de développement inadaptés à nos réalités.</Text>
+          </View>
+
+          {/* Section 1 */}
+          <Text style={aesStyles.subHeading}>1.  La vision de l'ARM sur l'AES</Text>
+          <Text style={aesStyles.bodyText}>L'Alliance pour le Rassemblement Malien salue la création et la consolidation de l'AES comme un acte de souveraineté collective. Notre rôle, en tant que parti politique responsable, n'est pas de réinventer l'AES, mais de l'accompagner, de l'enraciner et de l'intégrer intelligemment dans les politiques nationales du Mali.</Text>
+
+          {/* Section 2 */}
+          <Text style={aesStyles.subHeading}>2.  AES et gouvernance intègre</Text>
+          <Text style={aesStyles.bodyText}>Aucune intégration régionale ne peut réussir sans une gouvernance exemplaire. C'est pourquoi l'ARM lie indissociablement l'accompagnement de l'AES à une lutte ferme contre la corruption.</Text>
+
+          {/* Red filled box */}
+          <View style={aesStyles.redBox}>
+            <Text style={aesStyles.redBoxText}>Notre destin est lié.</Text>
+            <Text style={aesStyles.redBoxText}>Nos combats sont communs.</Text>
+            <Text style={aesStyles.redBoxText}>Nos victoires seront partagées.</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Final green box */}
+      <View style={aesStyles.greenBoxFinal}>
+        <Text style={aesStyles.greenBoxFinalText}>L'Alliance pour le Rassemblement Malien est née d'un cri du cœur : celui de tout un peuple qui aspire à être entendu, respecté et servi.</Text>
+        <Text style={aesStyles.greenBoxGoldText}>A.R.M n'est pas seulement un nom. C'est une vision, une force, une mission.</Text>
+      </View>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function IdeologyGuideScreen() {
@@ -280,7 +333,9 @@ export default function IdeologyGuideScreen() {
       ? FAMILLES.length
       : activeTab === "partis"
       ? PARTIS.length
-      : TRANSVERSALES.length;
+      : activeTab === "transversales"
+      ? TRANSVERSALES.length
+      : 0;
 
   const sectionCountText = String(sectionCount);
 
@@ -365,6 +420,8 @@ export default function IdeologyGuideScreen() {
               ))}
             </>
           )}
+
+          {activeTab === "aes" && <AESSection />}
 
           <View style={styles.bottomSpacer} />
         </ScrollView>
@@ -553,5 +610,133 @@ const styles = StyleSheet.create({
 
   bottomSpacer: {
     height: 20,
+  },
+});
+
+// ─── AES Styles ───────────────────────────────────────────────────────────────
+
+const AES_GREEN = "#2E7D32";
+const AES_RED = "#C62828";
+const AES_GOLD = "#FFD700";
+
+const aesStyles = StyleSheet.create({
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    marginTop: 4,
+  },
+  sectionHeaderIcon: {
+    fontSize: 22,
+    marginRight: 8,
+  },
+  sectionHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1A1A1A",
+    flex: 1,
+  },
+
+  // Card with red left border
+  redBorderCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    overflow: "hidden",
+  },
+  redLeftBorder: {
+    width: 4,
+    backgroundColor: AES_RED,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
+  redBorderCardBody: {
+    flex: 1,
+    padding: 16,
+  },
+  cardRedTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: AES_RED,
+    textAlign: "center",
+    marginBottom: 16,
+    lineHeight: 26,
+  },
+
+  // Green filled box
+  greenBox: {
+    backgroundColor: AES_GREEN,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    gap: 10,
+  },
+  greenBoxText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    lineHeight: 22,
+  },
+
+  // Sub-headings (green bold)
+  subHeading: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: AES_GREEN,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+
+  // Body text (justified)
+  bodyText: {
+    fontSize: 15,
+    color: "#212121",
+    lineHeight: 24,
+    textAlign: "justify",
+    marginBottom: 20,
+  },
+
+  // Red filled box
+  redBox: {
+    backgroundColor: AES_RED,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    gap: 6,
+  },
+  redBoxText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    lineHeight: 24,
+  },
+
+  // Final green box
+  greenBoxFinal: {
+    backgroundColor: AES_GREEN,
+    borderRadius: 14,
+    padding: 20,
+    marginBottom: 8,
+    gap: 12,
+  },
+  greenBoxFinalText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#FFFFFF",
+    lineHeight: 24,
+  },
+  greenBoxGoldText: {
+    fontSize: 15,
+    fontWeight: "700",
+    fontStyle: "italic",
+    color: AES_GOLD,
+    lineHeight: 24,
   },
 });

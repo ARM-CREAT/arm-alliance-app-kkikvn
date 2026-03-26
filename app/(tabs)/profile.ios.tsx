@@ -6,52 +6,52 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { AnimatedPressable } from "@/components/AnimatedPressable";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 
 const BACKEND_URL = "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev";
+const REGISTER_URL = `${BACKEND_URL}/api/members/register`;
 
 interface FormErrors {
-  firstName?: string;
-  lastName?: string;
+  fullName?: string;
   phone?: string;
-  commune?: string;
-  profession?: string;
 }
 
 export default function MembershipScreen() {
   const router = useRouter();
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+
+  // Required fields
+  const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+
+  // Optional fields
   const [email, setEmail] = useState("");
   const [region, setRegion] = useState("");
   const [commune, setCommune] = useState("");
   const [profession, setProfession] = useState("");
-  const [nina, setNina] = useState("");
-  const [motivation, setMotivation] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [errorBanner, setErrorBanner] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
-    if (!firstName.trim()) newErrors.firstName = "Le prénom est requis";
-    if (!lastName.trim()) newErrors.lastName = "Le nom est requis";
-    if (!phone.trim()) newErrors.phone = "Le téléphone est requis";
-    if (!commune.trim()) newErrors.commune = "La commune est requise";
-    if (!profession.trim()) newErrors.profession = "La profession est requise";
+    if (!fullName.trim()) newErrors.fullName = "Le nom complet est requis";
+    if (!phone.trim()) newErrors.phone = "Le numéro de téléphone est requis";
+    else if (phone.trim().length < 8) newErrors.phone = "Le numéro doit contenir au moins 8 caractères";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
-    console.log("[Profile iOS] Bouton 'Envoyer ma demande' appuyé");
+    console.log("[Profile iOS] Bouton 'Adhérer maintenant' appuyé");
+    setErrorBanner("");
 
     if (!validate()) {
       console.log("[Profile iOS] Validation échouée", errors);
@@ -59,73 +59,64 @@ export default function MembershipScreen() {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
     setLoading(true);
-    const payload = {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
+
+    const payload: Record<string, string> = {
+      full_name: fullName.trim(),
       phone: phone.trim(),
-      email: email.trim() || undefined,
-      region: region.trim() || undefined,
-      commune: commune.trim() || "Non spécifiée",
-      profession: profession.trim() || "Non spécifiée",
-      nina: nina.trim() || undefined,
-      motivation: motivation.trim() || undefined,
     };
-    console.log("[Profile iOS] POST /api/members/register", payload);
+    if (email.trim()) payload.email = email.trim();
+    if (region.trim()) payload.region = region.trim();
+    if (commune.trim()) payload.commune = commune.trim();
+    if (profession.trim()) payload.profession = profession.trim();
+
+    console.log("[Profile iOS] POST /api/members/register", JSON.stringify(payload));
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
+      const response = await fetch(REGISTER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        const text = await response.text();
+        console.log("[Profile iOS] Erreur HTTP", response.status, text);
 
-      if (response.status === 409) {
-        console.log("[Profile iOS] Déjà inscrit, numéro:", data.membershipNumber);
-        Alert.alert(
-          "Déjà inscrit",
-          `Vous êtes déjà enregistré.\nNuméro: ${data.membershipNumber}`,
-          [
-            {
-              text: "Voir ma carte",
-              onPress: () =>
-                router.push({
-                  pathname: "/member/card",
-                  params: { membershipNumber: data.membershipNumber },
-                }),
-            },
-            { text: "OK", style: "cancel" },
-          ]
-        );
+        if (response.status === 409) {
+          setErrorBanner("Un membre avec ce numéro de téléphone existe déjà.");
+          return;
+        }
+
+        let message = `Erreur ${response.status}. Veuillez réessayer.`;
+        try {
+          const json = JSON.parse(text);
+          message = json.error || json.message || message;
+        } catch {
+          message = text || message;
+        }
+        setErrorBanner(message);
         return;
       }
 
-      if (!response.ok) {
-        throw new Error(data.error || data.message || `Erreur ${response.status}`);
-      }
+      const data = await response.json();
+      const membershipNumber = data.membership_number ?? data.membershipNumber ?? "";
+      const returnedName = data.full_name ?? fullName.trim();
+      console.log("[Profile iOS] Inscription réussie:", membershipNumber);
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      console.log("[Profile iOS] Inscription réussie:", data.membershipNumber);
-      Alert.alert(
-        "Inscription réussie !",
-        `Bienvenue ! Numéro: ${data.membershipNumber}`,
-        [
-          {
-            text: "Voir ma carte",
-            onPress: () =>
-              router.push({
-                pathname: "/member/card",
-                params: { membershipNumber: data.membershipNumber },
-              }),
-          },
-        ]
-      );
-    } catch (error: any) {
-      console.error("[Profile iOS] Erreur inscription:", error.message);
-      Alert.alert("Erreur", error.message || "Une erreur est survenue. Veuillez réessayer.");
+
+      router.push({
+        pathname: "/member/success",
+        params: {
+          membership_number: membershipNumber,
+          full_name: returnedName,
+        },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[Profile iOS] Erreur réseau:", message);
+      setErrorBanner("Erreur réseau. Vérifiez votre connexion.");
     } finally {
       setLoading(false);
     }
@@ -156,49 +147,37 @@ export default function MembershipScreen() {
           </Text>
         </View>
 
-        <View style={styles.form}>
-          {/* Prénom */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Prénom <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={inputStyle("firstName", !!errors.firstName)}
-              value={firstName}
-              onChangeText={(t) => {
-                setFirstName(t);
-                if (errors.firstName) setErrors((e) => ({ ...e, firstName: undefined }));
-              }}
-              placeholder="Votre prénom"
-              placeholderTextColor={colors.textTertiary}
-              autoCapitalize="words"
-              editable={!loading}
-              onFocus={() => setFocusedField("firstName")}
-              onBlur={() => setFocusedField(null)}
-            />
-            {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
+        {/* Error Banner */}
+        {errorBanner ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="alert-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.errorBannerText}>{errorBanner}</Text>
           </View>
+        ) : null}
 
-          {/* Nom */}
+        <View style={styles.form}>
+          <Text style={styles.sectionLabel}>Informations requises</Text>
+
+          {/* Nom complet */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>
-              Nom <Text style={styles.required}>*</Text>
+              Nom complet <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
-              style={inputStyle("lastName", !!errors.lastName)}
-              value={lastName}
+              style={inputStyle("fullName", !!errors.fullName)}
+              value={fullName}
               onChangeText={(t) => {
-                setLastName(t);
-                if (errors.lastName) setErrors((e) => ({ ...e, lastName: undefined }));
+                setFullName(t);
+                if (errors.fullName) setErrors((e) => ({ ...e, fullName: undefined }));
               }}
-              placeholder="Votre nom de famille"
+              placeholder="Prénom et nom de famille"
               placeholderTextColor={colors.textTertiary}
               autoCapitalize="words"
               editable={!loading}
-              onFocus={() => setFocusedField("lastName")}
+              onFocus={() => setFocusedField("fullName")}
               onBlur={() => setFocusedField(null)}
             />
-            {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
+            {errors.fullName ? <Text style={styles.errorText}>{errors.fullName}</Text> : null}
           </View>
 
           {/* Téléphone */}
@@ -223,6 +202,9 @@ export default function MembershipScreen() {
             {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
           </View>
 
+          <View style={styles.divider} />
+          <Text style={styles.sectionLabel}>Informations optionnelles</Text>
+
           {/* Email */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
@@ -230,7 +212,7 @@ export default function MembershipScreen() {
               style={inputStyle("email")}
               value={email}
               onChangeText={setEmail}
-              placeholder="votre@email.com (optionnel)"
+              placeholder="votre@email.com"
               placeholderTextColor={colors.textTertiary}
               keyboardType="email-address"
               autoCapitalize="none"
@@ -247,7 +229,7 @@ export default function MembershipScreen() {
               style={inputStyle("region")}
               value={region}
               onChangeText={setRegion}
-              placeholder="Votre région (optionnel)"
+              placeholder="Votre région"
               placeholderTextColor={colors.textTertiary}
               autoCapitalize="words"
               editable={!loading}
@@ -258,16 +240,11 @@ export default function MembershipScreen() {
 
           {/* Commune */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Commune <Text style={styles.required}>*</Text>
-            </Text>
+            <Text style={styles.label}>Commune</Text>
             <TextInput
-              style={inputStyle("commune", !!errors.commune)}
+              style={inputStyle("commune")}
               value={commune}
-              onChangeText={(t) => {
-                setCommune(t);
-                if (errors.commune) setErrors((e) => ({ ...e, commune: undefined }));
-              }}
+              onChangeText={setCommune}
               placeholder="Votre commune"
               placeholderTextColor={colors.textTertiary}
               autoCapitalize="words"
@@ -275,21 +252,15 @@ export default function MembershipScreen() {
               onFocus={() => setFocusedField("commune")}
               onBlur={() => setFocusedField(null)}
             />
-            {errors.commune ? <Text style={styles.errorText}>{errors.commune}</Text> : null}
           </View>
 
           {/* Profession */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Profession <Text style={styles.required}>*</Text>
-            </Text>
+            <Text style={styles.label}>Profession</Text>
             <TextInput
-              style={inputStyle("profession", !!errors.profession)}
+              style={inputStyle("profession")}
               value={profession}
-              onChangeText={(t) => {
-                setProfession(t);
-                if (errors.profession) setErrors((e) => ({ ...e, profession: undefined }));
-              }}
+              onChangeText={setProfession}
               placeholder="Votre profession"
               placeholderTextColor={colors.textTertiary}
               autoCapitalize="words"
@@ -297,40 +268,14 @@ export default function MembershipScreen() {
               onFocus={() => setFocusedField("profession")}
               onBlur={() => setFocusedField(null)}
             />
-            {errors.profession ? <Text style={styles.errorText}>{errors.profession}</Text> : null}
           </View>
 
-          {/* NINA */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>NINA</Text>
-            <TextInput
-              style={inputStyle("nina")}
-              value={nina}
-              onChangeText={setNina}
-              placeholder="Numéro d'identification (optionnel)"
-              placeholderTextColor={colors.textTertiary}
-              autoCapitalize="characters"
-              editable={!loading}
-              onFocus={() => setFocusedField("nina")}
-              onBlur={() => setFocusedField(null)}
-            />
-          </View>
-
-          {/* Motivation */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Motivation</Text>
-            <TextInput
-              style={[inputStyle("motivation"), styles.textArea]}
-              value={motivation}
-              onChangeText={setMotivation}
-              placeholder="Pourquoi souhaitez-vous adhérer ? (optionnel)"
-              placeholderTextColor={colors.textTertiary}
-              multiline
-              numberOfLines={4}
-              editable={!loading}
-              onFocus={() => setFocusedField("motivation")}
-              onBlur={() => setFocusedField(null)}
-            />
+          {/* Info */}
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} style={{ marginRight: 10, marginTop: 1 }} />
+            <Text style={styles.infoText}>
+              Votre numéro d'adhérent sera généré automatiquement après soumission.
+            </Text>
           </View>
 
           <AnimatedPressable
@@ -339,18 +284,17 @@ export default function MembershipScreen() {
             style={[styles.submitButton, loading && styles.submitButtonDisabled]}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <>
+                <ActivityIndicator color="#FFFFFF" size="small" style={{ marginRight: 8 }} />
+                <Text style={styles.submitButtonText}>Inscription en cours...</Text>
+              </>
             ) : (
-              <Text style={styles.submitButtonText}>Envoyer ma demande</Text>
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.submitButtonText}>Adhérer maintenant</Text>
+              </>
             )}
           </AnimatedPressable>
-
-          <View style={styles.infoBox}>
-            <Text style={styles.infoIcon}>ℹ️</Text>
-            <Text style={styles.infoText}>
-              Votre demande sera examinée par notre équipe. Vous recevrez une confirmation.
-            </Text>
-          </View>
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -403,9 +347,39 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
   },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.danger,
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
   form: {
     paddingHorizontal: 20,
     paddingTop: 24,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.textTertiary,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 16,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginVertical: 20,
   },
   inputGroup: {
     marginBottom: 20,
@@ -435,10 +409,7 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: colors.danger,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: "top",
+    backgroundColor: "#FFF5F5",
   },
   errorText: {
     fontSize: 12,
@@ -446,11 +417,29 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: "500",
   },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: colors.primaryMuted,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
   submitButton: {
+    flexDirection: "row",
     backgroundColor: colors.primary,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
@@ -465,25 +454,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "700",
     color: "#FFFFFF",
-  },
-  infoBox: {
-    flexDirection: "row",
-    backgroundColor: colors.primaryMuted,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  infoIcon: {
-    fontSize: 18,
-    marginRight: 10,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.textSecondary,
-    lineHeight: 20,
   },
   bottomSpacer: {
     height: 20,
