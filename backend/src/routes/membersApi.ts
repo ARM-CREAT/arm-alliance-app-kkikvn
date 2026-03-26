@@ -1,170 +1,46 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, ilike, and, or, desc, count, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
+import { randomBytes } from 'crypto';
 
-interface CreateMemberBody {
+interface RegisterMemberBody {
   full_name: string;
   phone: string;
   email?: string;
-  region?: string;
   commune?: string;
-  profession?: string;
-  role?: string;
-  motivation?: string;
-  nina?: string;
-  cercle?: string;
-  first_name?: string;
-  last_name?: string;
-}
-
-interface UpdateMemberBody {
-  full_name?: string;
-  phone?: string;
-  email?: string;
   region?: string;
-  commune?: string;
   profession?: string;
-  role?: string;
-  status?: string;
-  motivation?: string;
-  nina?: string;
-  cercle?: string;
-  first_name?: string;
-  last_name?: string;
+  date_of_birth?: string;
+  gender?: string;
 }
 
 /**
- * Generate membership number in format ARM-YYYY-XXXX
- * YYYY = current year, XXXX = zero-padded count (count + 1)
+ * Generate a unique member_number in format ARM-XXXXXX (ARM- followed by 6 random digits)
+ * Checks database for uniqueness and regenerates if collision occurs
  */
-function generateMembershipNumber(count: number): string {
-  const year = new Date().getFullYear();
-  const sequence = String(count + 1).padStart(4, '0');
-  return `ARM-${year}-${sequence}`;
-}
+async function generateUniqueMemberNumber(app: App, maxAttempts: number = 10): Promise<string> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const randomDigits = randomBytes(3).readUIntBE(0, 3) % 1000000;
+    const memberNumber = `ARM-${String(randomDigits).padStart(6, '0')}`;
 
-/**
- * Format member_profiles row to API response
- */
-function formatMemberResponse(m: any) {
-  return {
-    id: m.id,
-    user_id: m.userId,
-    full_name: m.fullName,
-    first_name: m.firstName,
-    last_name: m.lastName,
-    phone: m.phone,
-    email: m.email,
-    nina: m.nina,
-    commune: m.commune,
-    region: m.region,
-    cercle: m.cercle,
-    profession: m.profession,
-    motivation: m.motivation,
-    membership_number: m.membershipNumber,
-    qr_code: m.qrCode,
-    status: m.status,
-    role: m.role,
-    created_at: m.createdAt.toISOString(),
-    updated_at: m.updatedAt.toISOString(),
-  };
-}
-
-/**
- * Shared member creation logic used by both POST endpoints
- */
-async function createMember(app: App, body: CreateMemberBody): Promise<{
-  success: boolean;
-  statusCode: number;
-  data?: any;
-  error?: string;
-}> {
-  const { full_name, phone, email, region, commune, profession, role, motivation, nina, cercle, first_name, last_name } = body;
-
-  app.logger.info({ full_name, phone }, 'Starting member creation');
-
-  try {
-    // Validate required fields
-    if (!full_name || !phone) {
-      app.logger.warn('Missing required fields: full_name or phone');
-      return {
-        success: false,
-        statusCode: 400,
-        error: 'full_name and phone are required',
-      };
-    }
-
-    // Check for duplicate phone
+    // Check if this member_number already exists
     const existing = await app.db
       .select()
-      .from(schema.memberProfiles)
-      .where(eq(schema.memberProfiles.phone, phone));
+      .from(schema.members)
+      .where(eq(schema.members.memberNumber, memberNumber));
 
-    if (existing.length > 0) {
-      app.logger.warn({ phone }, 'Phone number already exists');
-      return {
-        success: false,
-        statusCode: 409,
-        error: 'Un membre avec ce numéro de téléphone existe déjà.',
-      };
+    if (existing.length === 0) {
+      return memberNumber;
     }
-
-    // Count existing members to generate membership number
-    const countResult = await app.db
-      .select({ count: count() })
-      .from(schema.memberProfiles);
-    const memberCount = countResult[0]?.count || 0;
-    const membershipNumber = generateMembershipNumber(memberCount);
-    const qrCode = membershipNumber; // QR code = membership number
-
-    app.logger.debug({ membershipNumber }, 'Generated membership number');
-
-    // Insert member into member_profiles
-    const result = await app.db
-      .insert(schema.memberProfiles)
-      .values({
-        fullName: full_name,
-        firstName: first_name,
-        lastName: last_name,
-        phone,
-        email,
-        nina,
-        commune: commune || 'Non renseigné',
-        region,
-        cercle,
-        profession: profession || 'Non renseigné',
-        motivation,
-        membershipNumber,
-        qrCode,
-        status: 'pending',
-        role: role || 'member',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    const member = result[0];
-    app.logger.info({ memberId: member.id, membershipNumber }, 'Member created successfully');
-
-    return {
-      success: true,
-      statusCode: 201,
-      data: formatMemberResponse(member),
-    };
-  } catch (error) {
-    app.logger.error({ err: error, full_name, phone }, 'Failed to create member');
-    return {
-      success: false,
-      statusCode: 500,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
   }
+
+  throw new Error('Failed to generate unique member_number after max attempts');
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // POST /api/members/register - Create new member (PUBLIC)
-  fastify.post<{ Body: CreateMemberBody }>(
+  // POST /api/members/register - Register a new member (PUBLIC)
+  fastify.post<{ Body: RegisterMemberBody }>(
     '/api/members/register',
     {
       schema: {
@@ -174,438 +50,245 @@ export function register(app: App, fastify: FastifyInstance) {
           type: 'object',
           required: ['full_name', 'phone'],
           properties: {
-            full_name: { type: 'string' },
-            phone: { type: 'string' },
-            email: { type: 'string', format: 'email' },
-            region: { type: 'string' },
-            commune: { type: 'string' },
-            profession: { type: 'string' },
-            role: { type: 'string' },
-            motivation: { type: 'string' },
-            nina: { type: 'string' },
-            cercle: { type: 'string' },
-            first_name: { type: 'string' },
-            last_name: { type: 'string' },
+            full_name: { type: 'string', description: 'Full name (required)' },
+            phone: { type: 'string', description: 'Phone number (required, must be unique)' },
+            email: { type: 'string', format: 'email', description: 'Email address (optional)' },
+            commune: { type: 'string', description: 'Commune (optional)' },
+            region: { type: 'string', description: 'Region (optional)' },
+            profession: { type: 'string', description: 'Profession (optional)' },
+            date_of_birth: { type: 'string', description: 'Date of birth (optional)' },
+            gender: { type: 'string', description: 'Gender (optional)' },
           },
         },
         response: {
           201: {
-            type: 'object',
-            properties: { id: { type: 'string' }, membership_number: { type: 'string' } },
-          },
-          400: { type: 'object', properties: { error: { type: 'string' } } },
-          409: { type: 'object', properties: { error: { type: 'string' } } },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Body: CreateMemberBody }>, reply: FastifyReply) => {
-      const result = await createMember(app, request.body);
-      reply.status(result.statusCode);
-      return result.data || { error: result.error };
-    }
-  );
-
-  // GET /api/members/stats - Get statistics (MUST be before GET /:id)
-  fastify.get(
-    '/api/members/stats',
-    {
-      schema: {
-        description: 'Get members statistics',
-        tags: ['members'],
-        response: {
-          200: {
+            description: 'Member registered successfully',
             type: 'object',
             properties: {
-              total: { type: 'number' },
-              pending: { type: 'number' },
-              active: { type: 'number' },
-              suspended: { type: 'number' },
-              byRegion: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    region: { type: 'string' },
-                    count: { type: 'number' },
-                  },
-                },
-              },
+              success: { type: 'boolean' },
+              member_number: { type: 'string' },
+              full_name: { type: 'string' },
+              status: { type: 'string' },
             },
           },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
+          400: {
+            description: 'Missing required fields',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          409: {
+            description: 'Phone number already registered',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+              member_number: { type: 'string' },
+              full_name: { type: 'string' },
+              status: { type: 'string' },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      app.logger.info('Fetching members statistics');
+    async (request: FastifyRequest<{ Body: RegisterMemberBody }>, reply: FastifyReply) => {
+      const { full_name, phone, email, commune, region, profession, date_of_birth, gender } = request.body;
+
+      app.logger.info({ full_name, phone }, 'Member registration attempt');
 
       try {
-        // Count by status
-        const countResult = await app.db
-          .select({ count: count() })
-          .from(schema.memberProfiles);
-        const total = countResult[0]?.count || 0;
+        // Step 1: Validate required fields
+        if (!full_name || !phone) {
+          app.logger.warn({ full_name, phone }, 'Missing required fields');
+          reply.status(400);
+          return {
+            error: 'MISSING_FIELDS',
+            message: 'full_name et phone sont requis',
+          };
+        }
 
-        const pendingResult = await app.db
-          .select({ count: count() })
-          .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.status, 'pending'));
-        const pending = pendingResult[0]?.count || 0;
+        // Step 2: Check for duplicate phone
+        const existing = await app.db
+          .select()
+          .from(schema.members)
+          .where(eq(schema.members.phone, phone));
 
-        const activeResult = await app.db
-          .select({ count: count() })
-          .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.status, 'active'));
-        const active = activeResult[0]?.count || 0;
+        if (existing.length > 0) {
+          app.logger.warn({ phone, memberNumber: existing[0].memberNumber }, 'Phone number already registered');
+          reply.status(409);
+          return {
+            error: 'PHONE_EXISTS',
+            message: 'Ce numéro est déjà inscrit',
+            member_number: existing[0].memberNumber,
+            full_name: existing[0].fullName,
+            status: existing[0].status,
+          };
+        }
 
-        const suspendedResult = await app.db
-          .select({ count: count() })
-          .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.status, 'suspended'));
-        const suspended = suspendedResult[0]?.count || 0;
+        // Step 3: Generate unique member_number
+        const memberNumber = await generateUniqueMemberNumber(app);
+        app.logger.debug({ memberNumber }, 'Generated member number');
 
-        // Count by region (exclude null regions)
-        const regionResults = await app.db
-          .select({
-            region: schema.memberProfiles.region,
-            count: count(),
+        // Step 4: Insert new member
+        const now = new Date();
+        const result = await app.db
+          .insert(schema.members)
+          .values({
+            memberNumber,
+            fullName: full_name,
+            phone,
+            email,
+            commune,
+            region,
+            profession,
+            dateOfBirth: date_of_birth,
+            gender,
+            status: 'pending',
+            createdAt: now,
+            updatedAt: now,
           })
-          .from(schema.memberProfiles)
-          .where(isNotNull(schema.memberProfiles.region))
-          .groupBy(schema.memberProfiles.region)
-          .orderBy(desc(count()));
+          .returning();
 
-        const byRegion = regionResults.map(r => ({
-          region: r.region || 'Unknown',
-          count: r.count,
-        }));
+        const member = result[0];
+        app.logger.info(
+          { memberId: member.id, memberNumber, phone },
+          'Member registered successfully'
+        );
 
-        app.logger.info({ total, pending, active, suspended }, 'Statistics retrieved');
-
+        reply.status(201);
         return {
-          total,
-          pending,
-          active,
-          suspended,
-          byRegion,
+          success: true,
+          member_number: member.memberNumber,
+          full_name: member.fullName,
+          status: member.status,
         };
       } catch (error) {
-        app.logger.error({ err: error }, 'Failed to fetch statistics');
+        app.logger.error(
+          { err: error, full_name, phone },
+          'Failed to register member'
+        );
         reply.status(500);
-        return { error: error instanceof Error ? error.message : 'Unknown error' };
+        return {
+          error: 'INTERNAL_ERROR',
+          message: error instanceof Error ? error.message : 'Une erreur est survenue lors de l\'enregistrement',
+        };
       }
     }
   );
 
-  // GET /api/members - List members
-  fastify.get<{ Querystring: { page?: string; limit?: string; status?: string; region?: string; search?: string } }>(
-    '/api/members',
+  // GET /api/members/lookup - Look up a member by phone (PUBLIC)
+  fastify.get<{ Querystring: { phone?: string } }>(
+    '/api/members/lookup',
     {
       schema: {
-        description: 'Get members list',
+        description: 'Look up a member by phone number (public, no authentication required)',
         tags: ['members'],
         querystring: {
           type: 'object',
           properties: {
-            page: { type: 'string', default: '1' },
-            limit: { type: 'string', default: '20' },
-            status: { type: 'string', description: 'Filter by status' },
-            region: { type: 'string', description: 'Filter by region' },
-            search: { type: 'string', description: 'Search by full_name or phone' },
+            phone: { type: 'string', description: 'Phone number to look up (required)' },
           },
         },
         response: {
           200: {
+            description: 'Member found',
             type: 'object',
             properties: {
-              members: { type: 'array', items: { type: 'object' } },
-              total: { type: 'number' },
-              page: { type: 'number' },
-              limit: { type: 'number' },
+              member_number: { type: 'string' },
+              full_name: { type: 'string' },
+              status: { type: 'string' },
+              created_at: { type: 'string', format: 'date-time' },
             },
           },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
+          400: {
+            description: 'Missing phone parameter',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          404: {
+            description: 'Member not found',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              error: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const query = request.query as { page?: string; limit?: string; status?: string; region?: string; search?: string };
-      const page = Math.max(1, parseInt(query.page || '1', 10));
-      const limit = Math.max(1, parseInt(query.limit || '20', 10));
-      const offset = (page - 1) * limit;
+    async (request: FastifyRequest<{ Querystring: { phone?: string } }>, reply: FastifyReply) => {
+      const { phone } = request.query;
 
-      app.logger.info({ page, limit, status: query.status, region: query.region, search: query.search }, 'Fetching members list');
+      app.logger.info({ phone }, 'Member lookup attempt');
 
       try {
-        // Build WHERE clause
-        const conditions: any[] = [];
-
-        if (query.status) {
-          conditions.push(eq(schema.memberProfiles.status, query.status));
+        // Step 1: Validate phone parameter
+        if (!phone) {
+          app.logger.warn('Phone parameter missing');
+          reply.status(400);
+          return {
+            error: 'MISSING_PHONE',
+            message: 'Le paramètre phone est requis',
+          };
         }
 
-        if (query.region) {
-          conditions.push(eq(schema.memberProfiles.region, query.region));
-        }
-
-        if (query.search) {
-          conditions.push(
-            or(
-              ilike(schema.memberProfiles.fullName, `%${query.search}%`),
-              ilike(schema.memberProfiles.phone, `%${query.search}%`)
-            )
-          );
-        }
-
-        const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-
-        // Get total count
-        const countResult = await app.db
-          .select({ count: count() })
-          .from(schema.memberProfiles)
-          .where(whereClause);
-        const total = countResult[0]?.count || 0;
-
-        // Get paginated results
-        const members = await app.db
+        // Step 2: Look up member by phone
+        const result = await app.db
           .select()
-          .from(schema.memberProfiles)
-          .where(whereClause)
-          .orderBy(desc(schema.memberProfiles.createdAt))
-          .limit(limit)
-          .offset(offset);
+          .from(schema.members)
+          .where(eq(schema.members.phone, phone));
 
-        app.logger.info({ count: members.length, total }, 'Members list retrieved');
+        // Step 3: Handle found/not found
+        if (result.length === 0) {
+          app.logger.info({ phone }, 'Member not found');
+          reply.status(404);
+          return {
+            error: 'NOT_FOUND',
+            message: 'Aucun membre trouvé avec ce numéro',
+          };
+        }
 
+        const member = result[0];
+        app.logger.info(
+          { phone, memberNumber: member.memberNumber },
+          'Member lookup successful'
+        );
+
+        reply.status(200);
         return {
-          members: members.map(formatMemberResponse),
-          total,
-          page,
-          limit,
+          member_number: member.memberNumber,
+          full_name: member.fullName,
+          status: member.status,
+          created_at: member.createdAt.toISOString(),
         };
       } catch (error) {
-        app.logger.error({ err: error }, 'Failed to fetch members list');
+        app.logger.error({ err: error, phone }, 'Failed to look up member');
         reply.status(500);
-        return { error: error instanceof Error ? error.message : 'Unknown error' };
-      }
-    }
-  );
-
-  // POST /api/members - Create new member (PUBLIC)
-  fastify.post<{ Body: CreateMemberBody }>(
-    '/api/members',
-    {
-      schema: {
-        description: 'Register a new member (public, no authentication required)',
-        tags: ['members'],
-        body: {
-          type: 'object',
-          required: ['full_name', 'phone'],
-          properties: {
-            full_name: { type: 'string' },
-            phone: { type: 'string' },
-            email: { type: 'string', format: 'email' },
-            region: { type: 'string' },
-            commune: { type: 'string' },
-            profession: { type: 'string' },
-            role: { type: 'string' },
-            motivation: { type: 'string' },
-            nina: { type: 'string' },
-            cercle: { type: 'string' },
-            first_name: { type: 'string' },
-            last_name: { type: 'string' },
-          },
-        },
-        response: {
-          201: {
-            type: 'object',
-            properties: { id: { type: 'string' }, membership_number: { type: 'string' } },
-          },
-          400: { type: 'object', properties: { error: { type: 'string' } } },
-          409: { type: 'object', properties: { error: { type: 'string' } } },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Body: CreateMemberBody }>, reply: FastifyReply) => {
-      const result = await createMember(app, request.body);
-      reply.status(result.statusCode);
-      return result.data || { error: result.error };
-    }
-  );
-
-  // GET /api/members/:id - Get member by ID (MUST be after /stats and /)
-  fastify.get<{ Params: { id: string } }>(
-    '/api/members/:id',
-    {
-      schema: {
-        description: 'Get member by ID',
-        tags: ['members'],
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: { id: { type: 'string', format: 'uuid' } },
-        },
-        response: {
-          200: { type: 'object' },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const { id } = request.params;
-
-      app.logger.info({ memberId: id }, 'Fetching member');
-
-      try {
-        const result = await app.db
-          .select()
-          .from(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.id, id));
-
-        if (result.length === 0) {
-          app.logger.info({ memberId: id }, 'Member not found');
-          reply.status(404);
-          return { error: 'Member not found' };
-        }
-
-        app.logger.info({ memberId: id }, 'Member retrieved');
-        return formatMemberResponse(result[0]);
-      } catch (error) {
-        app.logger.error({ err: error, memberId: id }, 'Failed to fetch member');
-        reply.status(500);
-        return { error: error instanceof Error ? error.message : 'Unknown error' };
-      }
-    }
-  );
-
-  // PUT /api/members/:id - Update member
-  fastify.put<{ Params: { id: string }; Body: UpdateMemberBody }>(
-    '/api/members/:id',
-    {
-      schema: {
-        description: 'Update member',
-        tags: ['members'],
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: { id: { type: 'string', format: 'uuid' } },
-        },
-        body: {
-          type: 'object',
-          properties: {
-            full_name: { type: 'string' },
-            phone: { type: 'string' },
-            email: { type: 'string' },
-            region: { type: 'string' },
-            commune: { type: 'string' },
-            profession: { type: 'string' },
-            role: { type: 'string' },
-            status: { type: 'string' },
-            motivation: { type: 'string' },
-            nina: { type: 'string' },
-            cercle: { type: 'string' },
-            first_name: { type: 'string' },
-            last_name: { type: 'string' },
-          },
-        },
-        response: {
-          200: { type: 'object' },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Params: { id: string }; Body: UpdateMemberBody }>, reply: FastifyReply) => {
-      const { id } = request.params;
-      const body = request.body;
-
-      app.logger.info({ memberId: id }, 'Updating member');
-
-      try {
-        // Build updates object dynamically
-        const updates: any = {};
-        if (body.full_name !== undefined) updates.fullName = body.full_name;
-        if (body.first_name !== undefined) updates.firstName = body.first_name;
-        if (body.last_name !== undefined) updates.lastName = body.last_name;
-        if (body.phone !== undefined) updates.phone = body.phone;
-        if (body.email !== undefined) updates.email = body.email;
-        if (body.nina !== undefined) updates.nina = body.nina;
-        if (body.commune !== undefined) updates.commune = body.commune;
-        if (body.region !== undefined) updates.region = body.region;
-        if (body.cercle !== undefined) updates.cercle = body.cercle;
-        if (body.profession !== undefined) updates.profession = body.profession;
-        if (body.motivation !== undefined) updates.motivation = body.motivation;
-        if (body.role !== undefined) updates.role = body.role;
-        if (body.status !== undefined) updates.status = body.status;
-        updates.updatedAt = new Date();
-
-        const result = await app.db
-          .update(schema.memberProfiles)
-          .set(updates)
-          .where(eq(schema.memberProfiles.id, id))
-          .returning();
-
-        if (result.length === 0) {
-          app.logger.info({ memberId: id }, 'Member not found for update');
-          reply.status(404);
-          return { error: 'Member not found' };
-        }
-
-        app.logger.info({ memberId: id }, 'Member updated');
-        return formatMemberResponse(result[0]);
-      } catch (error) {
-        app.logger.error({ err: error, memberId: id }, 'Failed to update member');
-        reply.status(500);
-        return { error: error instanceof Error ? error.message : 'Unknown error' };
-      }
-    }
-  );
-
-  // DELETE /api/members/:id - Delete member
-  fastify.delete<{ Params: { id: string } }>(
-    '/api/members/:id',
-    {
-      schema: {
-        description: 'Delete member',
-        tags: ['members'],
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: { id: { type: 'string', format: 'uuid' } },
-        },
-        response: {
-          200: { type: 'object', properties: { success: { type: 'boolean' } } },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
-          500: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const { id } = request.params;
-
-      app.logger.info({ memberId: id }, 'Deleting member');
-
-      try {
-        const result = await app.db
-          .delete(schema.memberProfiles)
-          .where(eq(schema.memberProfiles.id, id))
-          .returning();
-
-        if (result.length === 0) {
-          app.logger.info({ memberId: id }, 'Member not found for deletion');
-          reply.status(404);
-          return { error: 'Member not found' };
-        }
-
-        app.logger.info({ memberId: id }, 'Member deleted successfully');
-        return { success: true };
-      } catch (error) {
-        app.logger.error({ err: error, memberId: id }, 'Failed to delete member');
-        reply.status(500);
-        return { error: error instanceof Error ? error.message : 'Unknown error' };
+        return {
+          error: 'INTERNAL_ERROR',
+          message: error instanceof Error ? error.message : 'Une erreur est survenue lors de la recherche',
+        };
       }
     }
   );
@@ -613,65 +296,56 @@ export function register(app: App, fastify: FastifyInstance) {
 
 export async function seedMembers(app: App) {
   try {
-    const existing = await app.db.select().from(schema.memberProfiles);
+    const existing = await app.db.select().from(schema.members);
 
     if (existing.length === 0) {
-      app.logger.info('Seeding member_profiles table');
+      app.logger.info('Seeding members table');
 
-      const currentYear = new Date().getFullYear();
+      const now = new Date();
       const seedData = [
         {
+          memberNumber: 'ARM-123456',
           fullName: 'Amadou Coulibaly',
-          firstName: 'Amadou',
-          lastName: 'Coulibaly',
           phone: '+22376543210',
+          email: 'amadou@example.com',
           commune: 'Bamako',
           region: 'Bamako',
           profession: 'Ingénieur',
-          membershipNumber: generateMembershipNumber(0),
-          qrCode: generateMembershipNumber(0),
           status: 'active',
-          role: 'member',
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: now,
+          updatedAt: now,
         },
         {
+          memberNumber: 'ARM-234567',
           fullName: 'Fatoumata Diallo',
-          firstName: 'Fatoumata',
-          lastName: 'Diallo',
           phone: '+22365432109',
+          email: 'fatoumata@example.com',
           commune: 'Sikasso',
           region: 'Sikasso',
           profession: 'Médecin',
-          membershipNumber: generateMembershipNumber(1),
-          qrCode: generateMembershipNumber(1),
           status: 'active',
-          role: 'member',
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: now,
+          updatedAt: now,
         },
         {
+          memberNumber: 'ARM-345678',
           fullName: 'Ibrahim Traoré',
-          firstName: 'Ibrahim',
-          lastName: 'Traoré',
           phone: '+22354321098',
+          email: 'ibrahim@example.com',
           commune: 'Mopti',
           region: 'Mopti',
           profession: 'Professeur',
-          membershipNumber: generateMembershipNumber(2),
-          qrCode: generateMembershipNumber(2),
           status: 'pending',
-          role: 'member',
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: now,
+          updatedAt: now,
         },
       ];
 
       for (const member of seedData) {
-        await app.db.insert(schema.memberProfiles).values(member);
+        await app.db.insert(schema.members).values(member);
       }
 
-      app.logger.info({ count: seedData.length }, 'Members seeded');
+      app.logger.info({ count: seedData.length }, 'Members table seeded');
     }
   } catch (error) {
     app.logger.error({ err: error }, 'Failed to seed members');
