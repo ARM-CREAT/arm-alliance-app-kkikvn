@@ -48,6 +48,13 @@ const NAV_CARDS: NavCard[] = [
     path: '/admin/memberships',
     color: colors.primary,
   },
+  {
+    icon: '📊',
+    label: 'Statistiques',
+    description: 'Statistiques des militants',
+    path: '/admin/stats',
+    color: '#0369A1',
+  },
 ];
 
 export default function AdminIndexScreen() {

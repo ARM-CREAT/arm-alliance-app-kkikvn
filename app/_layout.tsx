@@ -278,6 +278,49 @@ export default function RootLayout() {
                         headerShown: false,
                       }}
                     />
+                    <Stack.Screen
+                      name="media"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="media-viewer"
+                      options={{
+                        presentation: 'fullScreenModal',
+                        headerShown: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="video-player"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="messaging"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="chat/[member_id]"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="conference-videos"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
+                    <Stack.Screen
+                      name="admin/stats"
+                      options={{
+                        headerShown: false,
+                      }}
+                    />
                   </Stack>
                   <StatusBar style="auto" />
 

@@ -470,6 +470,60 @@ export default function HomeScreen() {
                 <Text style={styles.actionTitle}>Guide des Partis</Text>
                 <Text style={[styles.actionSubtitle, { color: '#2E7D32' }]}>Outil pédagogique</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardMedia]}
+                onPress={() => {
+                  console.log('[HomeScreen] Bouton Médiathèque appuyé');
+                  router.push('/media');
+                }}
+                activeOpacity={0.8}
+              >
+                <IconSymbol
+                  ios_icon_name="photo.on.rectangle"
+                  android_material_icon_name="perm-media"
+                  size={32}
+                  color="#7C3AED"
+                />
+                <Text style={styles.actionTitle}>Médiathèque</Text>
+                <Text style={[styles.actionSubtitle, { color: '#7C3AED' }]}>Photos & Vidéos</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardMessaging]}
+                onPress={() => {
+                  console.log('[HomeScreen] Bouton Messagerie appuyé');
+                  router.push('/messaging');
+                }}
+                activeOpacity={0.8}
+              >
+                <IconSymbol
+                  ios_icon_name="message.fill"
+                  android_material_icon_name="chat"
+                  size={32}
+                  color="#0369A1"
+                />
+                <Text style={styles.actionTitle}>Messagerie</Text>
+                <Text style={[styles.actionSubtitle, { color: '#0369A1' }]}>Messages directs</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionCard, styles.actionCardConference]}
+                onPress={() => {
+                  console.log('[HomeScreen] Bouton Conférences appuyé');
+                  router.push('/conference-videos');
+                }}
+                activeOpacity={0.8}
+              >
+                <IconSymbol
+                  ios_icon_name="play.rectangle.fill"
+                  android_material_icon_name="video-library"
+                  size={32}
+                  color="#B45309"
+                />
+                <Text style={styles.actionTitle}>Conférences</Text>
+                <Text style={[styles.actionSubtitle, { color: '#B45309' }]}>Vidéos officielles</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -807,6 +861,21 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#2E7D3220',
     backgroundColor: '#F1F8F1',
+  },
+  actionCardMedia: {
+    borderWidth: 1.5,
+    borderColor: '#7C3AED20',
+    backgroundColor: '#F5F3FF',
+  },
+  actionCardMessaging: {
+    borderWidth: 1.5,
+    borderColor: '#0369A120',
+    backgroundColor: '#F0F9FF',
+  },
+  actionCardConference: {
+    borderWidth: 1.5,
+    borderColor: '#B4530920',
+    backgroundColor: '#FFFBEB',
   },
   actionTitle: {
     fontSize: 14,

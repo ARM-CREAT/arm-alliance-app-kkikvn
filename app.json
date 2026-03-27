@@ -43,7 +43,8 @@
             "enforceNavigationBarContrast": false
           }
         }
-      ]
+      ],
+      "expo-video"
     ],
     "scheme": "alliancearm",
     "experiments": {
