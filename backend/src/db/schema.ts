@@ -457,3 +457,50 @@ export const memberships = pgTable('memberships', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Media Items table - Photos and videos for the party
+export const mediaItems = pgTable('media_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description'),
+  type: text('type').notNull(), // 'photo' or 'video'
+  url: text('url').notNull(),
+  thumbnailUrl: text('thumbnail_url'),
+  createdBy: text('created_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Direct Message Conversations table
+export const dmConversations = pgTable('dm_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  memberId: text('member_id').notNull(), // member_number
+  memberName: text('member_name').notNull(),
+  lastMessage: text('last_message'),
+  lastMessageAt: timestamp('last_message_at', { withTimezone: true }).notNull().defaultNow(),
+  unreadCount: integer('unread_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Direct Messages table
+export const dmMessages = pgTable('dm_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  senderId: text('sender_id').notNull(), // member_number or 'admin'
+  senderName: text('sender_name').notNull(),
+  recipientId: text('recipient_id').notNull(), // member_number or 'admin'
+  content: text('content').notNull(),
+  isRead: boolean('is_read').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Conference Videos table
+export const conferenceVideos = pgTable('conference_videos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description'),
+  videoUrl: text('video_url').notNull(),
+  thumbnailUrl: text('thumbnail_url'),
+  speaker: text('speaker'),
+  duration: text('duration'),
+  eventDate: text('event_date'), // Using text for date to match schema
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
