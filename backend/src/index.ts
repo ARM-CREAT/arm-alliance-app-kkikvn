@@ -43,6 +43,10 @@ import * as politicalMessagesRoutes from './routes/political-messages.js';
 import * as newsArticlesRoutes from './routes/newsArticles.js';
 import * as adminAuthRoutes from './routes/adminAuth.js';
 import * as memberLoginRoutes from './routes/memberLogin.js';
+import * as mediaItemsRoutes from './routes/mediaItems.js';
+import * as directMessagesRoutes from './routes/directMessages.js';
+import * as conferenceVideosRoutes from './routes/conferenceVideos.js';
+import * as memberStatsRoutes from './routes/memberStats.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -156,6 +160,10 @@ cmsNewsRoutes.register(app, app.fastify);
 announcementsRoutes.register(app, app.fastify);
 politicalMessagesRoutes.register(app, app.fastify);
 newsArticlesRoutes.register(app, app.fastify);
+mediaItemsRoutes.register(app, app.fastify);
+directMessagesRoutes.register(app, app.fastify);
+conferenceVideosRoutes.register(app, app.fastify);
+memberStatsRoutes.register(app, app.fastify);
 
 // Seed data
 await adminAuthRoutes.seedAdminUser(app);
@@ -174,6 +182,8 @@ await announcementsRoutes.seedAnnouncements(app);
 await politicalMessagesRoutes.seedPoliticalMessages(app);
 await newsArticlesRoutes.seedNewsArticles(app);
 await membershipsRoutes.seedMemberships(app);
+await mediaItemsRoutes.seedMediaItems(app);
+await conferenceVideosRoutes.seedConferenceVideos(app);
 
 // Setup WebSocket signaling for conferences
 import {
