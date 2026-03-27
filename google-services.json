@@ -1,26 +1,44 @@
 {
   "project_info": {
-    "project_number": "378929993694",
-    "project_id": "arm-71e1b",
-    "storage_bucket": "arm-71e1b.firebasestorage.app"
+    "project_number": "548156441155",
+    "project_id": "alliance-arm",
+    "storage_bucket": "alliance-arm.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:378929993694:android:f540a206baa3d16b67ef4f",
+        "mobilesdk_app_id": "1:548156441155:android:811a945aba191cbc47caf6",
         "android_client_info": {
           "package_name": "com.armmali.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "548156441155-tcf8r2c6flt0l4h3u085geoge4n6rfmp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.armmali.app",
+            "certificate_hash": "80d141068df13a938bf820a64572090e5192d5d6"
+          }
+        },
+        {
+          "client_id": "548156441155-6q357eho1los8cmpe3rs6qjid5q1njn0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCQxeOihyAjOGi6uPw9bQqIkuN5UCOvfFo"
+          "current_key": "AIzaSyC0pUrM1l__YczMPtJU7wiJ352knEOWR58"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "548156441155-6q357eho1los8cmpe3rs6qjid5q1njn0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
