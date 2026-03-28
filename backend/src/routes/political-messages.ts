@@ -6,14 +6,14 @@ import type { App } from '../index.js';
 interface CreatePoliticalMessageBody {
   title: string;
   content: string;
-  author: string;
+  author?: string | null;
   published?: boolean;
 }
 
 interface UpdatePoliticalMessageBody {
   title?: string;
   content?: string;
-  author?: string;
+  author?: string | null;
   published?: boolean;
 }
 
@@ -27,31 +27,26 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/political-messages - Public endpoint (only published)
+  // GET /api/political-messages - Get all political messages ordered by created_at DESC
   fastify.get(
     '/api/political-messages',
     {
       schema: {
-        description: 'Get political messages',
+        description: 'Get all political messages',
         tags: ['political-messages'],
         response: {
           200: {
-            type: 'object',
-            properties: {
-              messages: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string', format: 'uuid' },
-                    title: { type: 'string' },
-                    content: { type: 'string' },
-                    author: { type: 'string' },
-                    published: { type: 'boolean' },
-                    created_at: { type: 'string', format: 'date-time' },
-                    updated_at: { type: 'string', format: 'date-time' },
-                  },
-                },
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                title: { type: 'string' },
+                content: { type: 'string' },
+                author: { type: ['string', 'null'] },
+                published: { type: 'boolean' },
+                created_at: { type: 'string', format: 'date-time' },
+                updated_at: { type: 'string', format: 'date-time' },
               },
             },
           },
@@ -59,17 +54,25 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      app.logger.info('Fetching political messages');
+      app.logger.info('Fetching all political messages');
 
       try {
         const messages = await app.db
           .select()
           .from(schema.politicalMessages)
-          .where(eq(schema.politicalMessages.published, true))
           .orderBy(desc(schema.politicalMessages.createdAt));
 
         app.logger.info({ count: messages.length }, 'Political messages retrieved');
-        return { messages };
+
+        return messages.map(m => ({
+          id: m.id,
+          title: m.title,
+          content: m.content,
+          author: m.author,
+          published: m.published,
+          created_at: m.createdAt.toISOString(),
+          updated_at: m.updatedAt.toISOString(),
+        }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch political messages');
         throw error;
@@ -77,7 +80,58 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/political-messages - Admin only
+  // GET /api/political-messages/:id - Get single political message
+  fastify.get<{ Params: { id: string } }>(
+    '/api/political-messages/:id',
+    {
+      schema: {
+        description: 'Get a political message by ID',
+        tags: ['political-messages'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      app.logger.info({ messageId: id }, 'Fetching political message');
+
+      try {
+        const messages = await app.db
+          .select()
+          .from(schema.politicalMessages)
+          .where(eq(schema.politicalMessages.id, id));
+
+        if (messages.length === 0) {
+          app.logger.info({ messageId: id }, 'Political message not found');
+          reply.status(404);
+          return { error: 'Not found' };
+        }
+
+        const m = messages[0];
+        return {
+          id: m.id,
+          title: m.title,
+          content: m.content,
+          author: m.author,
+          published: m.published,
+          created_at: m.createdAt.toISOString(),
+          updated_at: m.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, messageId: id }, 'Failed to fetch political message');
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/political-messages - Create political message (admin only)
   fastify.post<{ Body: CreatePoliticalMessageBody }>(
     '/api/political-messages',
     {
@@ -86,49 +140,45 @@ export function register(app: App, fastify: FastifyInstance) {
         tags: ['political-messages'],
         body: {
           type: 'object',
-          required: ['title', 'content', 'author'],
+          required: ['title', 'content'],
           properties: {
             title: { type: 'string' },
             content: { type: 'string' },
-            author: { type: 'string' },
+            author: { type: ['string', 'null'] },
             published: { type: 'boolean' },
           },
         },
         response: {
-          201: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              title: { type: 'string' },
-              content: { type: 'string' },
-              author: { type: 'string' },
-              published: { type: 'boolean' },
-              created_at: { type: 'string', format: 'date-time' },
-              updated_at: { type: 'string', format: 'date-time' },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
+          201: { type: 'object' },
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: CreatePoliticalMessageBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const body = request.body as CreatePoliticalMessageBody;
-      const { title, content, author, published } = body;
+      const { title, content, author, published } = request.body;
+
+      if (!title || !content) {
+        app.logger.warn({ title, content }, 'Missing required fields');
+        reply.status(400);
+        return { error: 'title and content are required' };
+      }
+
       app.logger.info({ title }, 'Creating political message');
 
       try {
+        const now = new Date();
         const result = await app.db
           .insert(schema.politicalMessages)
           .values({
             title,
             content,
-            author,
-            published: published ?? true,
+            author: author ?? null,
+            published: published ?? false,
+            createdAt: now,
+            updatedAt: now,
           })
           .returning();
 
@@ -142,8 +192,8 @@ export function register(app: App, fastify: FastifyInstance) {
           content: message.content,
           author: message.author,
           published: message.published,
-          created_at: message.createdAt,
-          updated_at: message.updatedAt,
+          created_at: message.createdAt.toISOString(),
+          updated_at: message.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create political message');
@@ -152,7 +202,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PUT /api/political-messages/:id - Admin only
+  // PUT /api/political-messages/:id - Update political message (admin only)
   fastify.put<{ Params: { id: string }; Body: UpdatePoliticalMessageBody }>(
     '/api/political-messages/:id',
     {
@@ -169,48 +219,31 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: {
             title: { type: 'string' },
             content: { type: 'string' },
-            author: { type: 'string' },
+            author: { type: ['string', 'null'] },
             published: { type: 'boolean' },
           },
         },
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              title: { type: 'string' },
-              content: { type: 'string' },
-              author: { type: 'string' },
-              published: { type: 'boolean' },
-              created_at: { type: 'string', format: 'date-time' },
-              updated_at: { type: 'string', format: 'date-time' },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
-          404: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
+          200: { type: 'object' },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { id: string }; Body: UpdatePoliticalMessageBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { id } = request.params as { id: string };
-      const updateBody = request.body as UpdatePoliticalMessageBody;
+      const { id } = request.params;
+      const body = request.body;
 
       app.logger.info({ messageId: id }, 'Updating political message');
 
       try {
         const updates: any = {};
-        if (updateBody.title !== undefined) updates.title = updateBody.title;
-        if (updateBody.content !== undefined) updates.content = updateBody.content;
-        if (updateBody.author !== undefined) updates.author = updateBody.author;
-        if (updateBody.published !== undefined) updates.published = updateBody.published;
+        if (body.title !== undefined) updates.title = body.title;
+        if (body.content !== undefined) updates.content = body.content;
+        if (body.author !== undefined) updates.author = body.author;
+        if (body.published !== undefined) updates.published = body.published;
         updates.updatedAt = new Date();
 
         const result = await app.db
@@ -220,8 +253,9 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         if (result.length === 0) {
+          app.logger.info({ messageId: id }, 'Political message not found');
           reply.status(404);
-          return { error: 'Political message not found' };
+          return { error: 'Not found' };
         }
 
         const message = result[0];
@@ -233,8 +267,8 @@ export function register(app: App, fastify: FastifyInstance) {
           content: message.content,
           author: message.author,
           published: message.published,
-          created_at: message.createdAt,
-          updated_at: message.updatedAt,
+          created_at: message.createdAt.toISOString(),
+          updated_at: message.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, messageId: id }, 'Failed to update political message');
@@ -243,7 +277,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/political-messages/:id - Admin only
+  // DELETE /api/political-messages/:id - Delete political message (admin only)
   fastify.delete<{ Params: { id: string } }>(
     '/api/political-messages/:id',
     {
@@ -256,25 +290,16 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: { id: { type: 'string', format: 'uuid' } },
         },
         response: {
-          200: {
-            type: 'object',
-            properties: { success: { type: 'boolean' } },
-          },
-          401: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
-          404: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
+          200: { type: 'object', properties: { success: { type: 'boolean' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { id } = request.params as { id: string };
+      const { id } = request.params;
 
       app.logger.info({ messageId: id }, 'Deleting political message');
 
@@ -285,8 +310,9 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         if (result.length === 0) {
+          app.logger.info({ messageId: id }, 'Political message not found');
           reply.status(404);
-          return { error: 'Political message not found' };
+          return { error: 'Not found' };
         }
 
         app.logger.info({ messageId: id }, 'Political message deleted');
@@ -306,24 +332,31 @@ export async function seedPoliticalMessages(app: App) {
     if (count.length === 0) {
       app.logger.info('Seeding political messages');
 
+      const now = new Date();
       const seedData = [
         {
-          title: 'Notre vision pour un Mali souverain et prospère',
-          content: 'Le Mali traverse une période charnière de son histoire. L\'Alliance ARM s\'engage à défendre la souveraineté nationale, à promouvoir une gouvernance transparente et à mettre en place des politiques économiques qui profitent à l\'ensemble de la population malienne. Ensemble, nous bâtirons un Mali fort, uni et prospère.',
-          author: 'Dr. Moussa Coulibaly, Président de l\'Alliance ARM',
+          title: 'Notre Vision pour le Mali',
+          content: "L'Alliance pour la Refondation du Mali s'engage à construire un État fort, démocratique et au service de tous les citoyens maliens. Notre programme repose sur trois piliers fondamentaux: la sécurité, le développement économique et la justice sociale.",
+          author: 'Direction Nationale ARM',
           published: true,
+          createdAt: now,
+          updatedAt: now,
         },
         {
-          title: 'Message aux jeunes militants',
-          content: 'La jeunesse malienne est l\'avenir de notre nation. C\'est pourquoi l\'Alliance ARM place la formation et l\'encadrement des jeunes au cœur de son programme. Nous vous invitons à rejoindre notre mouvement et à contribuer activement à la construction d\'un Mali meilleur pour les générations futures.',
-          author: 'Aminata Diallo, Secrétaire Générale',
+          title: 'Message aux Militants',
+          content: 'Chers militants et sympathisants, votre engagement quotidien est la force de notre mouvement. Ensemble, nous bâtissons le Mali de demain. Continuez à mobiliser vos communautés et à porter les valeurs de l\'ARM.',
+          author: 'Secrétariat Général',
           published: true,
+          createdAt: now,
+          updatedAt: now,
         },
         {
-          title: 'Appel à l\'unité nationale',
-          content: 'Face aux défis sécuritaires et économiques qui menacent notre pays, l\'heure est à l\'unité et à la solidarité. L\'Alliance ARM appelle tous les Maliens, sans distinction d\'ethnie, de région ou de religion, à se rassembler autour des valeurs communes de paix, de justice et de développement durable.',
-          author: 'Ibrahim Traoré, Vice-Président',
+          title: 'Appel à l\'Unité Nationale',
+          content: 'Face aux défis qui se posent à notre nation, l\'ARM appelle à l\'unité de tous les Maliens. La division ne profite qu\'à nos adversaires. Unissons-nous autour de valeurs communes pour un Mali prospère et en paix.',
+          author: null,
           published: true,
+          createdAt: now,
+          updatedAt: now,
         },
       ];
 

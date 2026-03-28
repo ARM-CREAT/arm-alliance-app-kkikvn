@@ -7,8 +7,7 @@ import * as membershipRoutes from './routes/membership.js';
 import * as leadershipRoutes from './routes/leadership.js';
 import * as donationRoutes from './routes/donations.js';
 // Disabled: import * as eventRoutes from './routes/events.js';
-// News system replaced with newsArticlesRoutes - see newsArticles.ts for the new implementation
-// import * as newsRoutes from './routes/news.js';
+import * as newsRoutes from './routes/news.js'; // API news using api_news table
 // Disabled: import * as messageRoutes from './routes/messages.js';
 // Disabled: import * as chatRoutes from './routes/chat.js';
 import * as programRoutes from './routes/program.js';
@@ -129,7 +128,7 @@ membershipRoutes.register(app, app.fastify);
 leadershipRoutes.register(app, app.fastify);
 donationRoutes.register(app, app.fastify);
 // eventRoutes.register(app, app.fastify); // Disabled
-// newsRoutes.register(app, app.fastify); // Replaced with newsArticlesRoutes
+newsRoutes.register(app, app.fastify); // API news using api_news table
 // messageRoutes.register(app, app.fastify); // Disabled
 // chatRoutes.register(app, app.fastify); // Disabled
 programRoutes.register(app, app.fastify);
@@ -160,7 +159,7 @@ directionRoutes.register(app, app.fastify);
 cmsNewsRoutes.register(app, app.fastify);
 announcementsRoutes.register(app, app.fastify);
 politicalMessagesRoutes.register(app, app.fastify);
-newsArticlesRoutes.register(app, app.fastify);
+// newsArticlesRoutes.register(app, app.fastify); // Disabled: conflicts with newsRoutes (api_news table)
 mediaItemsRoutes.register(app, app.fastify);
 directMessagesRoutes.register(app, app.fastify);
 conferenceVideosRoutes.register(app, app.fastify);
@@ -170,6 +169,7 @@ await adminAuthRoutes.seedAdminUser(app);
 await conferenceRoutes.seedDefaultConference(app);
 await settingsRoutes.seedSettings(app);
 // await eventRoutes.seedEvents(app); // Disabled
+await newsRoutes.seedApiNews(app); // Seed api_news table
 await leadershipRoutes.seedLeadership(app);
 await extendedProgramRoutes.seedPrograms(app);
 // await notificationsRoutes.seedNotifications(app); // Disabled
@@ -180,7 +180,7 @@ await directionRoutes.seedDirection(app);
 await cmsNewsRoutes.seedCmsNews(app);
 await announcementsRoutes.seedAnnouncements(app);
 await politicalMessagesRoutes.seedPoliticalMessages(app);
-await newsArticlesRoutes.seedNewsArticles(app);
+// await newsArticlesRoutes.seedNewsArticles(app); // Disabled: using newsRoutes for api_news instead
 await membershipsRoutes.seedMemberships(app);
 await mediaItemsRoutes.seedMediaItems(app);
 await conferenceVideosRoutes.seedConferenceVideos(app);
