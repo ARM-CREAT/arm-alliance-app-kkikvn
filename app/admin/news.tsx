@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  Image,
 } from 'react-native';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -153,6 +154,9 @@ export default function AdminNewsScreen() {
           <Text style={styles.cardDate}>{dateStr}</Text>
         </View>
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.cardImage} resizeMode="cover" />
+        ) : null}
         <Text style={styles.cardContent} numberOfLines={2}>{item.content}</Text>
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)}>
@@ -205,7 +209,7 @@ export default function AdminNewsScreen() {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Ionicons name="newspaper-outline" size={56} color={colors.textTertiary} />
-                <Text style={styles.emptyText}>Aucun article</Text>
+                <Text style={styles.emptyText}>Aucune actualité</Text>
                 <Text style={styles.emptySubtext}>Appuyez sur + pour créer le premier article</Text>
               </View>
             }
@@ -308,6 +312,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 6,
     lineHeight: 22,
+  },
+  cardImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 8,
   },
   cardContent: {
     fontSize: 13,

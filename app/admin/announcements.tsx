@@ -139,7 +139,7 @@ export default function AdminAnnouncementsScreen() {
     const dateStr = formatDate(item.created_at);
     const isUrgent = item.priority === 'urgent';
     const priorityLabel = isUrgent ? 'URGENT' : 'NORMAL';
-    const priorityColor = isUrgent ? colors.danger : colors.textTertiary;
+    const priorityColor = isUrgent ? colors.danger : colors.primary;
     const publishedLabel = item.published ? 'Publié' : 'Brouillon';
     const publishedColor = item.published ? colors.success : colors.textTertiary;
 

@@ -27,7 +27,6 @@ interface PoliticalMessage {
   id: string;
   title: string;
   content: string;
-  author: string;
   published: boolean;
   created_at: string;
   updated_at: string;
@@ -109,6 +108,7 @@ export default function PoliticalMessageFormScreen() {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[PoliticalMessageForm] Erreur enregistrement:', msg);
       setError(msg);
+      Alert.alert('Erreur', msg);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSaving(false);
@@ -144,6 +144,7 @@ export default function PoliticalMessageFormScreen() {
               const msg = err instanceof Error ? err.message : String(err);
               console.error('[PoliticalMessageForm] Erreur suppression:', msg);
               setError(msg);
+              Alert.alert('Erreur', msg);
             } finally {
               setDeleting(false);
             }

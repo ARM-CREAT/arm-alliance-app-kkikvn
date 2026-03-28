@@ -275,10 +275,18 @@ const FILTER_TABS: { value: FilterStatus; label: string }[] = [
   { value: 'suspended', label: 'Suspendus' },
 ];
 
+interface MemberStats {
+  total: number;
+  active: number;
+  pending: number;
+  suspended: number;
+}
+
 export default function AdminMembershipsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
+  const [stats, setStats] = useState<MemberStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterStatus>('all');
@@ -287,7 +295,7 @@ export default function AdminMembershipsScreen() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const loadMembers = useCallback(async (isRefresh = false) => {
-    console.log('[AdminMemberships] GET /api/members?limit=200');
+    console.log('[AdminMemberships] GET /api/members?limit=200 + GET /api/members/stats');
     if (!isRefresh) setLoading(true);
     setError(null);
 
@@ -295,44 +303,43 @@ export default function AdminMembershipsScreen() {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members?limit=200`, {
-        headers: ADMIN_HEADERS,
-        signal: controller.signal,
-      });
+      const [membersRes, statsRes] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/members?limit=200`, { headers: ADMIN_HEADERS, signal: controller.signal }),
+        fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS }),
+      ]);
       clearTimeout(timeoutId);
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('[AdminMemberships] Erreur HTTP', res.status, text.slice(0, 200));
-        throw new Error(`Erreur ${res.status}: impossible de charger les adhérents`);
+      if (!membersRes.ok) {
+        const text = await membersRes.text();
+        console.error('[AdminMemberships] Erreur HTTP membres', membersRes.status, text.slice(0, 200));
+        throw new Error(`Erreur ${membersRes.status}: impossible de charger les adhérents`);
       }
 
-      const data = await res.json();
+      const data = await membersRes.json();
       console.log('[AdminMemberships] Réponse brute:', JSON.stringify(data).slice(0, 300));
-      const rawList: any[] = Array.isArray(data)
-        ? data
-        : (data.members ?? data.memberships ?? data.data ?? []);
-      // Normalise field names: some API versions return `name` instead of `full_name`
-      const list: Member[] = rawList.map((m: any) => ({
-        ...m,
-        full_name: m.full_name || m.name || m.fullName || '',
-        member_number: m.member_number || m.memberNumber || m.membership_number || '',
-        phone: m.phone || m.telephone || '',
-        commune: m.commune || m.city || '',
-        status: m.status || 'pending',
-      }));
-
+      const list: Member[] = Array.isArray(data) ? data : (data.members ?? data.data ?? []);
       console.log('[AdminMemberships] Adhérents chargés:', list.length);
       setMembers(list);
+
+      if (statsRes.ok) {
+        const statsData: MemberStats = await statsRes.json();
+        console.log('[AdminMemberships] Stats chargées:', JSON.stringify(statsData));
+        setStats(statsData);
+      } else {
+        console.warn('[AdminMemberships] Stats non disponibles:', statsRes.status);
+      }
     } catch (err: unknown) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === 'AbortError') {
         console.error('[AdminMemberships] Timeout 30s');
-        setError('La requête a expiré. Vérifiez votre connexion et réessayez.');
+        const msg = 'La requête a expiré. Vérifiez votre connexion et réessayez.';
+        setError(msg);
+        Alert.alert('Erreur', msg);
       } else {
         const message = err instanceof Error ? err.message : String(err);
         console.error('[AdminMemberships] Erreur:', message);
         setError(message);
+        Alert.alert('Erreur', message);
       }
     } finally {
       setLoading(false);
@@ -376,11 +383,11 @@ export default function AdminMembershipsScreen() {
     return list;
   }, [members, activeFilter, searchQuery]);
 
-  // Stats derived from full list
-  const totalAll = members.length;
-  const totalPending = members.filter((m) => (m.status || '').toLowerCase() === 'pending').length;
-  const totalApproved = members.filter((m) => (m.status || '').toLowerCase() === 'active').length;
-  const totalRejected = members.filter((m) => (m.status || '').toLowerCase() === 'suspended').length;
+  // Stats: prefer API stats, fall back to derived counts
+  const totalAll = stats?.total ?? members.length;
+  const totalPending = stats?.pending ?? members.filter((m) => (m.status || '').toLowerCase() === 'pending').length;
+  const totalApproved = stats?.active ?? members.filter((m) => (m.status || '').toLowerCase() === 'active').length;
+  const totalRejected = stats?.suspended ?? members.filter((m) => (m.status || '').toLowerCase() === 'suspended').length;
 
   const handleOpenDetail = (member: Member) => {
     setSelectedMember(member);
@@ -622,7 +629,7 @@ export default function AdminMembershipsScreen() {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Ionicons name="people-outline" size={56} color={C.textTertiary} />
-                <Text style={styles.emptyTitle}>Aucun adhérent enregistré</Text>
+                <Text style={styles.emptyTitle}>Aucun membre trouvé</Text>
                 <Text style={styles.emptySubtitle}>
                   {searchQuery.trim()
                     ? 'Aucun résultat pour cette recherche.'

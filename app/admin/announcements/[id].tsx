@@ -113,6 +113,7 @@ export default function AnnouncementFormScreen() {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[AnnouncementForm] Erreur enregistrement:', msg);
       setError(msg);
+      Alert.alert('Erreur', msg);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSaving(false);
@@ -148,6 +149,7 @@ export default function AnnouncementFormScreen() {
               const msg = err instanceof Error ? err.message : String(err);
               console.error('[AnnouncementForm] Erreur suppression:', msg);
               setError(msg);
+              Alert.alert('Erreur', msg);
             } finally {
               setDeleting(false);
             }

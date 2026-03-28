@@ -205,7 +205,7 @@ export default function AdminPoliticalMessagesScreen() {
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Ionicons name="chatbubble-ellipses-outline" size={56} color={colors.textTertiary} />
-                <Text style={styles.emptyText}>Aucun message</Text>
+                <Text style={styles.emptyText}>Aucun message politique</Text>
                 <Text style={styles.emptySubtext}>Appuyez sur + pour créer un message</Text>
               </View>
             }
