@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-// No auth import needed — uses direct fetch with admin password header
+import { BACKEND_URL } from '@/utils/api-helpers';
 
 interface Stats {
   total: number;
@@ -64,11 +64,12 @@ export default function MembershipStatsScreen() {
   const [monthly, setMonthly] = useState<MonthlyEntry[]>([]);
 
   const loadStats = useCallback(async () => {
-    const url = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev/api/members/stats';
-    console.log('[MembershipStats] GET', url);
+    console.log('[MembershipStats] GET /api/members/stats');
     setError(null);
     try {
-      const response = await fetch(url);
+      const response = await fetch(`${BACKEND_URL}/api/members/stats`, {
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': 'admin123' },
+      });
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);

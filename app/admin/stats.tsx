@@ -5,17 +5,16 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { RefreshCw, Search, Users, UserCheck, Clock, UserX } from 'lucide-react-native';
-
-const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+import { Ionicons } from '@expo/vector-icons';
+import { apiGet } from '@/utils/api';
 
 interface RegionStat {
   region: string;
@@ -30,9 +29,11 @@ interface GenderStat {
 interface MemberRow {
   id: string;
   member_number: string;
+  membership_number?: string;
   full_name: string;
   region: string;
   commune: string;
+  phone?: string;
   status: 'active' | 'pending' | 'suspended';
   created_at: string;
 }
@@ -55,16 +56,31 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  active: '#16A34A',
-  pending: '#D97706',
-  suspended: '#DC2626',
+  active: '#22c55e',
+  pending: '#f59e0b',
+  suspended: '#ef4444',
 };
+
+const AVATAR_COLORS = ['#2d6a4f', '#1e6091', '#7b2d8b', '#b5451b', '#1a6b4a', '#5c4a1e'];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string): string {
+  const parts = (name || '').trim().split(' ');
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return (name || '?')[0].toUpperCase();
+}
 
 function StatusBadge({ status }: { status: string }) {
   const label = STATUS_LABELS[status] ?? status;
-  const bg = STATUS_COLORS[status] ?? colors.textTertiary;
+  const bg = STATUS_COLORS[status] ?? '#888';
   return (
-    <View style={[styles.statusBadge, { backgroundColor: bg + '20' }]}>
+    <View style={[styles.statusBadge, { backgroundColor: bg + '25' }]}>
+      <View style={[styles.statusDot, { backgroundColor: bg }]} />
       <Text style={[styles.statusBadgeText, { color: bg }]}>{label}</Text>
     </View>
   );
@@ -79,16 +95,11 @@ export default function StatsScreen() {
   const [search, setSearch] = useState('');
 
   const fetchStats = useCallback(async () => {
-    console.log('[Stats] Chargement des statistiques des militants');
+    console.log('[Stats] GET /api/stats/members');
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/stats/members`);
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`${res.status} — ${txt.slice(0, 100)}`);
-      }
-      const json: StatsData = await res.json();
-      console.log('[Stats] Données chargées — total:', json.total);
+      const json = await apiGet<StatsData>('/api/stats/members');
+      console.log('[Stats] Données chargées — total:', json.total, 'membres_list:', json.members_list?.length ?? 0);
       setData(json);
     } catch (err: any) {
       console.error('[Stats] Erreur:', err.message);
@@ -110,40 +121,69 @@ export default function StatsScreen() {
   }, [fetchStats]);
 
   const handleMemberPress = (member: MemberRow) => {
+    const memberNum = member.member_number || member.membership_number || '';
     console.log('[Stats] Membre appuyé:', member.id, member.full_name);
-    router.push({ pathname: '/admin/member-detail/[id]' as any, params: { id: member.id } });
+    router.push({
+      pathname: '/admin/member-detail/[id]' as any,
+      params: {
+        id: member.id,
+        full_name: member.full_name,
+        member_number: memberNum,
+        region: member.region || '',
+        commune: member.commune || '',
+        phone: member.phone || '',
+        status: member.status,
+        created_at: member.created_at,
+      },
+    });
   };
 
-  const filteredMembers = data?.members_list.filter((m) => {
+  const filteredMembers = (data?.members_list ?? []).filter((m) => {
     const q = search.toLowerCase();
+    const num = (m.member_number || m.membership_number || '').toLowerCase();
     return (
-      m.full_name.toLowerCase().includes(q) ||
-      m.member_number.toLowerCase().includes(q)
+      (m.full_name || '').toLowerCase().includes(q) ||
+      num.includes(q) ||
+      (m.region || '').toLowerCase().includes(q)
     );
-  }) ?? [];
+  });
 
-  const maxRegionCount = data?.by_region.reduce((max, r) => Math.max(max, r.count), 1) ?? 1;
+  const maxRegionCount = (data?.by_region ?? []).reduce((max, r) => Math.max(max, r.count), 1);
 
-  const maleCount = data?.by_gender.find((g) => g.gender === 'M')?.count ?? 0;
-  const femaleCount = data?.by_gender.find((g) => g.gender === 'F')?.count ?? 0;
+  const maleCount = (data?.by_gender ?? []).find((g) => g.gender === 'M' || g.gender === 'male')?.count ?? 0;
+  const femaleCount = (data?.by_gender ?? []).find((g) => g.gender === 'F' || g.gender === 'female')?.count ?? 0;
   const genderTotal = maleCount + femaleCount || 1;
   const malePct = Math.round((maleCount / genderTotal) * 100);
   const femalePct = Math.round((femaleCount / genderTotal) * 100);
+  const malePctStr = `${malePct}%`;
+  const femalePctStr = `${femalePct}%`;
+
+  const totalStr = String(data?.total ?? 0);
+  const activeStr = String(data?.active ?? 0);
+  const pendingStr = String(data?.pending ?? 0);
+  const suspendedStr = String(data?.suspended ?? 0);
+  const recentStr = String(data?.recent_registrations ?? 0);
+  const memberCountLabel = `${filteredMembers.length} adhérent${filteredMembers.length !== 1 ? 's' : ''}`;
+
+  const screenOptions = {
+    title: 'Statistiques des Militants',
+    headerShown: true,
+    headerStyle: { backgroundColor: '#0f1f14' as any },
+    headerTintColor: '#FFFFFF',
+    headerTitleStyle: { fontWeight: 'bold' as const },
+    headerRight: () => (
+      <TouchableOpacity onPress={() => { console.log('[Stats] Bouton refresh appuyé'); onRefresh(); }} style={{ marginRight: 16 }}>
+        <Ionicons name="refresh" size={22} color="#FFFFFF" />
+      </TouchableOpacity>
+    ),
+  };
 
   if (loading) {
     return (
       <>
-        <Stack.Screen
-          options={{
-            title: 'Statistiques des Militants',
-            headerShown: true,
-            headerStyle: { backgroundColor: colors.primary },
-            headerTintColor: '#FFFFFF',
-            headerTitleStyle: { fontWeight: 'bold' },
-          }}
-        />
+        <Stack.Screen options={screenOptions} />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <ActivityIndicator size="large" color="#2d6a4f" />
           <Text style={styles.loadingText}>Chargement des statistiques...</Text>
         </View>
       </>
@@ -153,19 +193,12 @@ export default function StatsScreen() {
   if (error) {
     return (
       <>
-        <Stack.Screen
-          options={{
-            title: 'Statistiques des Militants',
-            headerShown: true,
-            headerStyle: { backgroundColor: colors.primary },
-            headerTintColor: '#FFFFFF',
-            headerTitleStyle: { fontWeight: 'bold' },
-          }}
-        />
+        <Stack.Screen options={screenOptions} />
         <View style={styles.centered}>
+          <Ionicons name="alert-circle-outline" size={52} color="#ef4444" />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchStats}>
-            <RefreshCw size={16} color="#FFFFFF" />
+            <Ionicons name="refresh" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.retryText}>Réessayer</Text>
           </TouchableOpacity>
         </View>
@@ -175,127 +208,181 @@ export default function StatsScreen() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: 'Statistiques des Militants',
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.primary },
-          headerTintColor: '#FFFFFF',
-          headerTitleStyle: { fontWeight: 'bold' },
-        }}
-      />
+      <Stack.Screen options={screenOptions} />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2d6a4f" colors={['#2d6a4f']} />
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Summary Cards */}
-        <View style={styles.summaryRow}>
-          <View style={[styles.summaryCard, styles.summaryCardPrimary]}>
-            <Users size={22} color={colors.primary} />
-            <Text style={[styles.summaryNumber, { color: colors.primary }]}>{String(data?.total ?? 0)}</Text>
-            <Text style={styles.summaryLabel}>Total</Text>
+        {/* Section 1 — KPI Cards */}
+        <View style={styles.kpiGrid}>
+          <View style={[styles.kpiCard, styles.kpiCardPrimary]}>
+            <View style={[styles.kpiIconWrap, { backgroundColor: '#2d6a4f30' }]}>
+              <Ionicons name="people" size={22} color="#4ade80" />
+            </View>
+            <Text style={[styles.kpiNumber, { color: '#4ade80' }]}>{totalStr}</Text>
+            <Text style={styles.kpiLabel}>Total membres</Text>
           </View>
-          <View style={[styles.summaryCard, styles.summaryCardActive]}>
-            <UserCheck size={22} color="#16A34A" />
-            <Text style={[styles.summaryNumber, { color: '#16A34A' }]}>{String(data?.active ?? 0)}</Text>
-            <Text style={styles.summaryLabel}>Actifs</Text>
+          <View style={[styles.kpiCard, styles.kpiCardActive]}>
+            <View style={[styles.kpiIconWrap, { backgroundColor: '#22c55e25' }]}>
+              <Ionicons name="checkmark-circle" size={22} color="#22c55e" />
+            </View>
+            <Text style={[styles.kpiNumber, { color: '#22c55e' }]}>{activeStr}</Text>
+            <Text style={styles.kpiLabel}>Actifs</Text>
           </View>
-          <View style={[styles.summaryCard, styles.summaryCardPending]}>
-            <Clock size={22} color="#D97706" />
-            <Text style={[styles.summaryNumber, { color: '#D97706' }]}>{String(data?.pending ?? 0)}</Text>
-            <Text style={styles.summaryLabel}>En attente</Text>
+          <View style={[styles.kpiCard, styles.kpiCardPending]}>
+            <View style={[styles.kpiIconWrap, { backgroundColor: '#f59e0b25' }]}>
+              <Ionicons name="time" size={22} color="#f59e0b" />
+            </View>
+            <Text style={[styles.kpiNumber, { color: '#f59e0b' }]}>{pendingStr}</Text>
+            <Text style={styles.kpiLabel}>En attente</Text>
           </View>
-          <View style={[styles.summaryCard, styles.summaryCardSuspended]}>
-            <UserX size={22} color="#DC2626" />
-            <Text style={[styles.summaryNumber, { color: '#DC2626' }]}>{String(data?.suspended ?? 0)}</Text>
-            <Text style={styles.summaryLabel}>Suspendus</Text>
+          <View style={[styles.kpiCard, styles.kpiCardSuspended]}>
+            <View style={[styles.kpiIconWrap, { backgroundColor: '#ef444425' }]}>
+              <Ionicons name="close-circle" size={22} color="#ef4444" />
+            </View>
+            <Text style={[styles.kpiNumber, { color: '#ef4444' }]}>{suspendedStr}</Text>
+            <Text style={styles.kpiLabel}>Suspendus</Text>
           </View>
         </View>
 
-        {/* Recent Registrations */}
-        <View style={styles.recentBox}>
-          <Text style={styles.recentLabel}>Inscriptions récentes (30j)</Text>
-          <Text style={styles.recentNumber}>{String(data?.recent_registrations ?? 0)}</Text>
+        {/* Section 2 — Inscriptions récentes */}
+        <View style={styles.recentBanner}>
+          <View style={styles.recentBannerLeft}>
+            <Ionicons name="trending-up" size={24} color="#4ade80" style={{ marginRight: 12 }} />
+            <View>
+              <Text style={styles.recentBannerTitle}>Inscriptions récentes</Text>
+              <Text style={styles.recentBannerSub}>30 derniers jours</Text>
+            </View>
+          </View>
+          <Text style={styles.recentBannerNumber}>{recentStr}</Text>
         </View>
 
-        {/* By Region */}
-        {data?.by_region && data.by_region.length > 0 && (
+        {/* Section 3 — Répartition par région */}
+        {(data?.by_region ?? []).length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Répartition par région</Text>
-            {data.by_region.map((r) => {
-              const barWidth = Math.max(4, (r.count / maxRegionCount) * 100);
-              const barWidthStr = `${barWidth}%`;
+            {(data?.by_region ?? []).map((r) => {
+              const pct = Math.max(4, (r.count / maxRegionCount) * 100);
+              const pctStr = `${pct}%`;
+              const regionPct = Math.round((r.count / (data?.total || 1)) * 100);
+              const regionPctStr = `${regionPct}%`;
               return (
                 <View key={r.region} style={styles.regionRow}>
-                  <Text style={styles.regionName} numberOfLines={1}>{r.region}</Text>
-                  <View style={styles.regionBarWrap}>
-                    <View style={[styles.regionBar, { width: barWidthStr as any }]} />
+                  <View style={styles.regionRowTop}>
+                    <Text style={styles.regionName} numberOfLines={1}>{r.region || 'Inconnue'}</Text>
+                    <View style={styles.regionRowRight}>
+                      <Text style={styles.regionPct}>{regionPctStr}</Text>
+                      <Text style={styles.regionCount}>{String(r.count)}</Text>
+                    </View>
                   </View>
-                  <Text style={styles.regionCount}>{String(r.count)}</Text>
+                  <View style={styles.regionBarWrap}>
+                    <View style={[styles.regionBar, { width: pctStr as any }]} />
+                  </View>
                 </View>
               );
             })}
           </View>
         )}
 
-        {/* By Gender */}
+        {/* Section 4 — Répartition par genre */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Répartition par genre</Text>
-          <View style={styles.genderRow}>
-            <Text style={styles.genderLabel}>Hommes</Text>
-            <Text style={styles.genderPct}>{malePct}%</Text>
+          <View style={styles.genderBlock}>
+            <View style={styles.genderRowHeader}>
+              <View style={styles.genderLabelRow}>
+                <View style={[styles.genderDot, { backgroundColor: '#2d6a4f' }]} />
+                <Text style={styles.genderLabel}>Hommes</Text>
+              </View>
+              <View style={styles.genderStats}>
+                <Text style={styles.genderCount}>{String(maleCount)}</Text>
+                <Text style={styles.genderPct}>{malePctStr}</Text>
+              </View>
+            </View>
+            <View style={styles.progressBarWrap}>
+              <View style={[styles.progressBarFill, { width: malePctStr as any, backgroundColor: '#2d6a4f' }]} />
+            </View>
           </View>
-          <View style={styles.progressBarWrap}>
-            <View style={[styles.progressBarFill, { width: `${malePct}%` as any, backgroundColor: colors.primary }]} />
-          </View>
-          <View style={[styles.genderRow, { marginTop: 12 }]}>
-            <Text style={styles.genderLabel}>Femmes</Text>
-            <Text style={styles.genderPct}>{femalePct}%</Text>
-          </View>
-          <View style={styles.progressBarWrap}>
-            <View style={[styles.progressBarFill, { width: `${femalePct}%` as any, backgroundColor: '#D97706' }]} />
+          <View style={[styles.genderBlock, { marginTop: 14 }]}>
+            <View style={styles.genderRowHeader}>
+              <View style={styles.genderLabelRow}>
+                <View style={[styles.genderDot, { backgroundColor: '#f59e0b' }]} />
+                <Text style={styles.genderLabel}>Femmes</Text>
+              </View>
+              <View style={styles.genderStats}>
+                <Text style={styles.genderCount}>{String(femaleCount)}</Text>
+                <Text style={styles.genderPct}>{femalePctStr}</Text>
+              </View>
+            </View>
+            <View style={styles.progressBarWrap}>
+              <View style={[styles.progressBarFill, { width: femalePctStr as any, backgroundColor: '#f59e0b' }]} />
+            </View>
           </View>
         </View>
 
-        {/* Members List */}
+        {/* Section 5 — Liste complète */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Liste Complète des Militants</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Liste des adhérents</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{memberCountLabel}</Text>
+            </View>
+          </View>
+
+          {/* Search */}
           <View style={styles.searchBar}>
-            <Search size={16} color={colors.textTertiary} />
+            <Ionicons name="search" size={16} color="#6b7280" style={{ marginRight: 8 }} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Rechercher par nom ou numéro..."
-              placeholderTextColor={colors.textTertiary}
+              placeholder="Nom, numéro, région..."
+              placeholderTextColor="#6b7280"
               value={search}
               onChangeText={(t) => {
                 console.log('[Stats] Recherche:', t);
                 setSearch(t);
               }}
             />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close-circle" size={16} color="#6b7280" />
+              </TouchableOpacity>
+            )}
           </View>
 
-          {filteredMembers.map((member) => (
-            <TouchableOpacity
-              key={member.id}
-              style={styles.memberRow}
-              onPress={() => handleMemberPress(member)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.memberLeft}>
-                <Text style={styles.memberNumber}>{member.member_number}</Text>
-                <Text style={styles.memberName}>{member.full_name}</Text>
-                <Text style={styles.memberRegion}>{member.region}</Text>
-              </View>
-              <StatusBadge status={member.status} />
-            </TouchableOpacity>
-          ))}
+          {filteredMembers.map((member) => {
+            const memberNum = member.member_number || member.membership_number || '';
+            const initials = getInitials(member.full_name);
+            const avatarColor = getAvatarColor(member.full_name);
+            const locationText = [member.commune, member.region].filter(Boolean).join(', ') || '—';
+            return (
+              <TouchableOpacity
+                key={member.id}
+                style={styles.memberRow}
+                onPress={() => handleMemberPress(member)}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.memberAvatar, { backgroundColor: avatarColor + '30' }]}>
+                  <Text style={[styles.memberAvatarText, { color: avatarColor }]}>{initials}</Text>
+                </View>
+                <View style={styles.memberInfo}>
+                  <Text style={styles.memberName} numberOfLines={1}>{member.full_name}</Text>
+                  <Text style={styles.memberNumber}>{memberNum}</Text>
+                  <Text style={styles.memberLocation} numberOfLines={1}>{locationText}</Text>
+                </View>
+                <View style={styles.memberRight}>
+                  <StatusBadge status={member.status} />
+                  <Ionicons name="chevron-forward" size={14} color="#6b7280" style={{ marginTop: 4 }} />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
 
           {filteredMembers.length === 0 && (
             <View style={styles.emptySearch}>
+              <Ionicons name="people-outline" size={40} color="#4b5563" />
               <Text style={styles.emptySearchText}>Aucun militant trouvé</Text>
             </View>
           )}
@@ -310,198 +397,286 @@ export default function StatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#0a0a0a',
   },
   content: {
     padding: 16,
     paddingBottom: 60,
   },
-  summaryRow: {
+  // KPI Grid
+  kpiGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  summaryCard: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 12,
+  kpiCard: {
+    width: '47.5%',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  kpiCardPrimary: { borderTopWidth: 2, borderTopColor: '#2d6a4f' },
+  kpiCardActive: { borderTopWidth: 2, borderTopColor: '#22c55e' },
+  kpiCardPending: { borderTopWidth: 2, borderTopColor: '#f59e0b' },
+  kpiCardSuspended: { borderTopWidth: 2, borderTopColor: '#ef4444' },
+  kpiIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 5,
-    elevation: 2,
+    marginBottom: 10,
   },
-  summaryCardPrimary: {
-    borderTopWidth: 3,
-    borderTopColor: colors.primary,
-  },
-  summaryCardActive: {
-    borderTopWidth: 3,
-    borderTopColor: '#16A34A',
-  },
-  summaryCardPending: {
-    borderTopWidth: 3,
-    borderTopColor: '#D97706',
-  },
-  summaryCardSuspended: {
-    borderTopWidth: 3,
-    borderTopColor: '#DC2626',
-  },
-  summaryNumber: {
-    fontSize: 22,
+  kpiNumber: {
+    fontSize: 28,
     fontWeight: '900',
     letterSpacing: -0.5,
+    marginBottom: 4,
   },
-  summaryLabel: {
-    fontSize: 10,
+  kpiLabel: {
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
-    textAlign: 'center',
+    color: '#9ca3af',
   },
-  recentBox: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    padding: 16,
+  // Recent banner
+  recentBanner: {
+    backgroundColor: '#1a2e1f',
+    borderRadius: 16,
+    padding: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  recentLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.85)',
-  },
-  recentNumber: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: colors.accent,
-  },
-  section: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.text,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#2d6a4f40',
   },
-  regionRow: {
+  recentBannerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    gap: 8,
+  },
+  recentBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#e5e7eb',
+  },
+  recentBannerSub: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  recentBannerNumber: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#4ade80',
+    letterSpacing: -1,
+  },
+  // Section
+  section: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#e5e7eb',
+    marginBottom: 14,
+    letterSpacing: -0.2,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  countBadge: {
+    backgroundColor: '#2d6a4f25',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#2d6a4f40',
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4ade80',
+  },
+  // Region bars
+  regionRow: {
+    marginBottom: 12,
+  },
+  regionRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
   regionName: {
-    width: 90,
+    flex: 1,
     fontSize: 13,
-    color: colors.text,
+    color: '#d1d5db',
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  regionRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  regionPct: {
+    fontSize: 12,
+    color: '#6b7280',
     fontWeight: '500',
   },
+  regionCount: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#4ade80',
+    minWidth: 24,
+    textAlign: 'right',
+  },
   regionBarWrap: {
-    flex: 1,
-    height: 10,
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 5,
+    height: 8,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 4,
     overflow: 'hidden',
   },
   regionBar: {
     height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 5,
+    backgroundColor: '#2d6a4f',
+    borderRadius: 4,
   },
-  regionCount: {
-    width: 30,
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.text,
-    textAlign: 'right',
-  },
-  genderRow: {
+  // Gender
+  genderBlock: {},
+  genderRowHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  genderLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  genderDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   genderLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
+    color: '#d1d5db',
+  },
+  genderStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  genderCount: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontWeight: '500',
   },
   genderPct: {
     fontSize: 14,
-    fontWeight: '700',
-    color: colors.primary,
+    fontWeight: '800',
+    color: '#e5e7eb',
   },
   progressBarWrap: {
-    height: 12,
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 6,
+    height: 10,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 5,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 6,
+    borderRadius: 5,
   },
+  // Search
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 10,
+    backgroundColor: '#111111',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
     marginBottom: 12,
-    gap: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#2a2a2a',
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: colors.text,
+    color: '#e5e7eb',
   },
+  // Member rows
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    borderBottomColor: '#222222',
+    gap: 12,
   },
-  memberLeft: {
+  memberAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  memberAvatarText: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  memberInfo: {
     flex: 1,
-    marginRight: 12,
+    minWidth: 0,
+  },
+  memberName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#e5e7eb',
+    marginBottom: 2,
   },
   memberNumber: {
     fontSize: 11,
     fontWeight: '700',
-    color: colors.primary,
+    color: '#4ade80',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
-  memberName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  memberRegion: {
+  memberLocation: {
     fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 1,
+    color: '#6b7280',
+  },
+  memberRight: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
+    gap: 4,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   statusBadgeText: {
     fontSize: 11,
@@ -509,37 +684,38 @@ const styles = StyleSheet.create({
   },
   emptySearch: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 32,
+    gap: 10,
   },
   emptySearchText: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: '#6b7280',
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     padding: 32,
-    backgroundColor: colors.background,
+    backgroundColor: '#0a0a0a',
   },
   loadingText: {
     fontSize: 15,
-    color: colors.textSecondary,
+    color: '#9ca3af',
   },
   errorText: {
     fontSize: 15,
-    color: colors.text,
+    color: '#d1d5db',
     textAlign: 'center',
+    lineHeight: 22,
   },
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: '#2d6a4f',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 10,
-    gap: 8,
+    borderRadius: 12,
   },
   retryText: {
     fontSize: 15,

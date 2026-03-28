@@ -16,8 +16,8 @@ import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
+import { BACKEND_URL } from '@/utils/api-helpers';
 
-const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'x-admin-password': 'admin123' };
 
 interface Stats {
