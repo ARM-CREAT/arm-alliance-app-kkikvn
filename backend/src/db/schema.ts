@@ -420,7 +420,7 @@ export const politicalMessages = pgTable('political_messages', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),
   content: text('content').notNull(),
-  author: text('author').notNull(),
+  author: text('author'),
   published: boolean('published').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -503,4 +503,15 @@ export const conferenceVideos = pgTable('conference_videos', {
   duration: text('duration'),
   eventDate: text('event_date'), // Using text for date to match schema
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// API News table - News articles for public API
+export const apiNews = pgTable('api_news', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  imageUrl: text('image_url'),
+  published: boolean('published').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

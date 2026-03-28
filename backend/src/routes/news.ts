@@ -3,71 +3,78 @@ import { eq, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
-interface NewsBody {
+interface CreateNewsBody {
   title: string;
   content: string;
-  publishedAt?: string;
-  published_at?: string;
-  imageUrl?: string;
   image_url?: string;
-  videoUrl?: string;
-  video_url?: string;
+  imageUrl?: string;
+  published?: boolean;
 }
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+interface UpdateNewsBody {
+  title?: string;
+  content?: string;
+  image_url?: string;
+  imageUrl?: string;
+  published?: boolean;
+}
 
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
   const password = request.headers['x-admin-password'];
-  if (!password || password !== ADMIN_PASSWORD) {
-    reply.status(401).send({ success: false, error: 'Non autorisé' });
+  if (!password || password !== 'admin123') {
+    reply.status(401);
     return false;
   }
   return true;
 }
 
-function formatNews(news: any) {
-  const publishedAtISO = news.publishedAt instanceof Date ? news.publishedAt.toISOString() : new Date(news.publishedAt).toISOString();
-  return {
-    id: news.id,
-    title: news.title,
-    content: news.content,
-    imageUrl: news.imageUrl || null,
-    videoUrl: news.videoUrl || null,
-    publishedAt: publishedAtISO,
-  };
-}
-
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/news - Get all news articles ordered by published_at DESC (public)
+  // GET /api/news - Get all news articles ordered by created_at DESC
   fastify.get(
     '/api/news',
     {
       schema: {
-        description: 'Get all news articles ordered by published date',
+        description: 'Get all news articles',
         tags: ['news'],
         response: {
-          200: { type: 'object' },
+          200: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                title: { type: 'string' },
+                content: { type: 'string' },
+                image_url: { type: ['string', 'null'] },
+                published: { type: 'boolean' },
+                created_at: { type: 'string', format: 'date-time' },
+                updated_at: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
         },
       },
     },
-    async (request, reply) => {
-      app.logger.info('Fetching news articles');
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      app.logger.info('Fetching all news articles');
 
       try {
-        const result = await app.db
+        const articles = await app.db
           .select()
-          .from(schema.news)
-          .orderBy(desc(schema.news.publishedAt));
+          .from(schema.apiNews)
+          .orderBy(desc(schema.apiNews.createdAt));
 
-        app.logger.info(
-          { count: result.length },
-          'News articles fetched successfully'
-        );
-        return {
-          success: true,
-          data: result.map(formatNews),
-          total: result.length,
-        };
+        app.logger.info({ count: articles.length }, 'News articles retrieved');
+
+        return articles.map(a => ({
+          id: a.id,
+          title: a.title,
+          content: a.content,
+          image_url: a.imageUrl,
+          published: a.published,
+          created_at: a.createdAt.toISOString(),
+          updated_at: a.updatedAt.toISOString(),
+        }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch news articles');
         throw error;
@@ -75,43 +82,50 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/news/:id - Get single news article (public)
+  // GET /api/news/:id - Get single news article
   fastify.get<{ Params: { id: string } }>(
     '/api/news/:id',
     {
       schema: {
-        description: 'Get a single news article by ID',
+        description: 'Get a news article by ID',
         tags: ['news'],
         params: {
           type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-          },
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
         },
         response: {
           200: { type: 'object' },
-          404: { type: 'object' },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request, reply) => {
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
       app.logger.info({ newsId: id }, 'Fetching news article');
 
       try {
-        const result = await app.db
+        const articles = await app.db
           .select()
-          .from(schema.news)
-          .where(eq(schema.news.id, id));
+          .from(schema.apiNews)
+          .where(eq(schema.apiNews.id, id));
 
-        if (result.length === 0) {
-          app.logger.warn({ newsId: id }, 'News article not found');
+        if (articles.length === 0) {
+          app.logger.info({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { success: false, error: 'Actualité non trouvée' };
+          return { error: 'Not found' };
         }
 
-        app.logger.info({ newsId: id }, 'News article fetched successfully');
-        return { success: true, data: formatNews(result[0]) };
+        const a = articles[0];
+        return {
+          id: a.id,
+          title: a.title,
+          content: a.content,
+          image_url: a.imageUrl,
+          published: a.published,
+          created_at: a.createdAt.toISOString(),
+          updated_at: a.updatedAt.toISOString(),
+        };
       } catch (error) {
         app.logger.error({ err: error, newsId: id }, 'Failed to fetch news article');
         throw error;
@@ -119,226 +133,243 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/admin/news - Create news article (admin only)
-  fastify.post<{ Body: NewsBody }>(
-    '/api/admin/news',
+  // POST /api/news - Create news article (admin only)
+  fastify.post<{ Body: CreateNewsBody }>(
+    '/api/news',
     {
       schema: {
-        description: 'Create a news article (admin only)',
+        description: 'Create news article (admin only)',
         tags: ['news'],
         body: {
           type: 'object',
+          required: ['title', 'content'],
           properties: {
             title: { type: 'string' },
             content: { type: 'string' },
-            publishedAt: { type: 'string', format: 'date-time' },
-            published_at: { type: 'string', format: 'date-time' },
-            imageUrl: { type: 'string' },
             image_url: { type: 'string' },
-            videoUrl: { type: 'string' },
-            video_url: { type: 'string' },
+            imageUrl: { type: 'string' },
+            published: { type: 'boolean' },
           },
-          required: ['title', 'content'],
         },
         response: {
           201: { type: 'object' },
-          400: { type: 'object' },
-          401: { type: 'object' },
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request, reply) => {
+    async (request: FastifyRequest<{ Body: CreateNewsBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const body = request.body as any;
-      const { title, content } = body;
+      const { title, content, published } = request.body;
+      const imageUrl = request.body.image_url || request.body.imageUrl;
 
       if (!title || !content) {
-        app.logger.warn({ body }, 'Missing required fields for news creation');
+        app.logger.warn({ title, content }, 'Missing required fields');
         reply.status(400);
-        return { success: false, error: 'Missing required fields: title, content' };
+        return { error: 'title and content are required' };
       }
-
-      // Map camelCase to correct field names
-      const imageUrl = body.imageUrl || body.image_url || null;
-      const videoUrl = body.videoUrl || body.video_url || null;
-      const publishedAtInput = body.publishedAt || body.published_at;
-      const publishedAt = publishedAtInput ? new Date(publishedAtInput) : new Date();
 
       app.logger.info({ title }, 'Creating news article');
 
       try {
+        const now = new Date();
         const result = await app.db
-          .insert(schema.news)
+          .insert(schema.apiNews)
           .values({
             title,
             content,
-            imageUrl,
-            videoUrl,
-            publishedAt,
-            createdBy: 'admin',
+            imageUrl: imageUrl || null,
+            published: published ?? false,
+            createdAt: now,
+            updatedAt: now,
           })
           .returning();
 
-        app.logger.info(
-          { newsId: result[0].id, title },
-          'News article created successfully'
-        );
+        const article = result[0];
+        app.logger.info({ newsId: article.id }, 'News article created');
+
         reply.status(201);
         return {
-          success: true,
-          message: 'Actualité créée avec succès',
-          data: formatNews(result[0]),
+          id: article.id,
+          title: article.title,
+          content: article.content,
+          image_url: article.imageUrl,
+          published: article.published,
+          created_at: article.createdAt.toISOString(),
+          updated_at: article.updatedAt.toISOString(),
         };
       } catch (error) {
-        app.logger.error(
-          { err: error, title },
-          'Failed to create news article'
-        );
+        app.logger.error({ err: error, title }, 'Failed to create news article');
         throw error;
       }
     }
   );
 
-  // PUT /api/admin/news/:id - Update news article (admin only)
-  fastify.put<{ Params: { id: string }; Body: Partial<NewsBody> }>(
-    '/api/admin/news/:id',
+  // PUT /api/news/:id - Update news article (admin only)
+  fastify.put<{ Params: { id: string }; Body: UpdateNewsBody }>(
+    '/api/news/:id',
     {
       schema: {
-        description: 'Update a news article (admin only)',
+        description: 'Update news article (admin only)',
         tags: ['news'],
         params: {
           type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-          },
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
         },
         body: {
           type: 'object',
           properties: {
             title: { type: 'string' },
             content: { type: 'string' },
-            publishedAt: { type: 'string', format: 'date-time' },
-            published_at: { type: 'string', format: 'date-time' },
-            imageUrl: { type: 'string' },
             image_url: { type: 'string' },
-            videoUrl: { type: 'string' },
-            video_url: { type: 'string' },
+            imageUrl: { type: 'string' },
+            published: { type: 'boolean' },
           },
         },
         response: {
           200: { type: 'object' },
-          404: { type: 'object' },
-          401: { type: 'object' },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request, reply) => {
+    async (request: FastifyRequest<{ Params: { id: string }; Body: UpdateNewsBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
-      const body = request.body as any;
-      const updates: any = {};
-
-      if (body.title !== undefined) updates.title = body.title;
-      if (body.content !== undefined) updates.content = body.content;
-      if (body.publishedAt !== undefined) updates.publishedAt = new Date(body.publishedAt);
-      if (body.published_at !== undefined) updates.publishedAt = new Date(body.published_at);
-      if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
-      if (body.image_url !== undefined) updates.imageUrl = body.image_url;
-      if (body.videoUrl !== undefined) updates.videoUrl = body.videoUrl;
-      if (body.video_url !== undefined) updates.videoUrl = body.video_url;
-
-      if (Object.keys(updates).length === 0) {
-        app.logger.warn({ newsId: id }, 'No fields to update');
-        reply.status(400);
-        return { success: false, error: 'No fields to update' };
-      }
+      const body = request.body;
 
       app.logger.info({ newsId: id }, 'Updating news article');
 
       try {
+        const updates: any = {};
+        if (body.title !== undefined) updates.title = body.title;
+        if (body.content !== undefined) updates.content = body.content;
+        if (body.image_url !== undefined) updates.imageUrl = body.image_url;
+        if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
+        if (body.published !== undefined) updates.published = body.published;
+        updates.updatedAt = new Date();
+
         const result = await app.db
-          .update(schema.news)
+          .update(schema.apiNews)
           .set(updates)
-          .where(eq(schema.news.id, id))
+          .where(eq(schema.apiNews.id, id))
           .returning();
 
         if (result.length === 0) {
-          app.logger.warn({ newsId: id }, 'News article not found');
+          app.logger.info({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { success: false, error: 'Actualité non trouvée' };
+          return { error: 'Not found' };
         }
 
-        app.logger.info(
-          { newsId: id },
-          'News article updated successfully'
-        );
+        const article = result[0];
+        app.logger.info({ newsId: id }, 'News article updated');
+
         return {
-          success: true,
-          message: 'Actualité mise à jour avec succès',
-          data: formatNews(result[0]),
+          id: article.id,
+          title: article.title,
+          content: article.content,
+          image_url: article.imageUrl,
+          published: article.published,
+          created_at: article.createdAt.toISOString(),
+          updated_at: article.updatedAt.toISOString(),
         };
       } catch (error) {
-        app.logger.error(
-          { err: error, newsId: id },
-          'Failed to update news article'
-        );
+        app.logger.error({ err: error, newsId: id }, 'Failed to update news article');
         throw error;
       }
     }
   );
 
-  // DELETE /api/admin/news/:id - Delete news article (admin only)
+  // DELETE /api/news/:id - Delete news article (admin only)
   fastify.delete<{ Params: { id: string } }>(
-    '/api/admin/news/:id',
+    '/api/news/:id',
     {
       schema: {
-        description: 'Delete a news article (admin only)',
+        description: 'Delete news article (admin only)',
         tags: ['news'],
         params: {
           type: 'object',
-          properties: {
-            id: { type: 'string', format: 'uuid' },
-          },
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
         },
         response: {
-          200: { type: 'object' },
-          404: { type: 'object' },
-          401: { type: 'object' },
+          200: { type: 'object', properties: { success: { type: 'boolean' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request, reply) => {
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
+
       app.logger.info({ newsId: id }, 'Deleting news article');
 
       try {
         const result = await app.db
-          .delete(schema.news)
-          .where(eq(schema.news.id, id))
+          .delete(schema.apiNews)
+          .where(eq(schema.apiNews.id, id))
           .returning();
 
         if (result.length === 0) {
-          app.logger.warn({ newsId: id }, 'News article not found');
+          app.logger.info({ newsId: id }, 'News article not found');
           reply.status(404);
-          return { success: false, error: 'Actualité non trouvée' };
+          return { error: 'Not found' };
         }
 
-        app.logger.info(
-          { newsId: id },
-          'News article deleted successfully'
-        );
-        return { success: true, message: 'Actualité supprimée' };
+        app.logger.info({ newsId: id }, 'News article deleted');
+        return { success: true };
       } catch (error) {
-        app.logger.error(
-          { err: error, newsId: id },
-          'Failed to delete news article'
-        );
+        app.logger.error({ err: error, newsId: id }, 'Failed to delete news article');
         throw error;
       }
     }
   );
+}
+
+export async function seedApiNews(app: App) {
+  try {
+    const count = await app.db.select().from(schema.apiNews);
+
+    if (count.length === 0) {
+      app.logger.info('Seeding api_news');
+
+      const now = new Date();
+      const seedData = [
+        {
+          title: "L'ARM renforce sa présence dans les régions",
+          content: 'L\'Alliance pour la Refondation du Mali a tenu des assemblées générales dans les huit régions du pays au cours du mois dernier. Ces rencontres ont permis de renforcer les structures locales et d\'enrôler de nouveaux militants. Le président national a personnellement présidé les assemblées de Kayes et Sikasso.',
+          imageUrl: 'https://picsum.photos/seed/news1/800/400',
+          published: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          title: 'Conférence de presse sur le programme économique',
+          content: 'Le porte-parole de l\'ARM a présenté lors d\'une conférence de presse les grandes lignes du programme économique du parti. Ce programme prévoit notamment la création de 500 000 emplois en cinq ans, le développement des infrastructures rurales et le soutien aux PME maliennes.',
+          imageUrl: 'https://picsum.photos/seed/news2/800/400',
+          published: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          title: 'Journée de solidarité avec les déplacés',
+          content: 'L\'ARM a organisé une journée de solidarité avec les populations déplacées par les conflits dans le nord et le centre du Mali. Des vivres, des médicaments et des vêtements ont été distribués à plus de 2000 familles. Cette action s\'inscrit dans la politique sociale du parti.',
+          imageUrl: 'https://picsum.photos/seed/news3/800/400',
+          published: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+
+      await app.db.insert(schema.apiNews).values(seedData);
+      app.logger.info({ count: seedData.length }, 'API news seeded');
+    }
+  } catch (error) {
+    app.logger.error({ err: error }, 'Failed to seed api_news');
+  }
 }

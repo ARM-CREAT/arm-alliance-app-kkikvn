@@ -537,6 +537,48 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
+  // GET /api/members/:id - Get single member by ID
+  fastify.get<{ Params: { id: string } }>(
+    '/api/members/:id',
+    {
+      schema: {
+        description: 'Get a member by ID',
+        tags: ['members'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      app.logger.info({ memberId: id }, 'Fetching member');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.members)
+          .where(eq(schema.members.id, id));
+
+        if (result.length === 0) {
+          app.logger.info({ memberId: id }, 'Member not found');
+          reply.status(404);
+          return { error: 'Not found' };
+        }
+
+        return formatMember(result[0]);
+      } catch (error) {
+        app.logger.error({ err: error, memberId: id }, 'Failed to fetch member');
+        throw error;
+      }
+    }
+  );
+
   // PUT /api/members/:id - Update member
   fastify.put<{ Params: { id: string }; Body: UpdateMemberBody }>(
     '/api/members/:id',
@@ -672,46 +714,84 @@ export function register(app: App, fastify: FastifyInstance) {
 
 export async function seedMembers(app: App) {
   try {
-    const existing = await app.db.select().from(schema.members);
+    // Check if members already exist by checking phone numbers
+    const check = await app.db
+      .select()
+      .from(schema.members)
+      .where(eq(schema.members.phone, '+22376543210'));
 
-    if (existing.length === 0) {
+    if (check.length === 0) {
       app.logger.info('Seeding members table');
 
       const now = new Date();
       const seedData = [
         {
-          memberNumber: 'ARM-2025-000001',
+          memberNumber: 'ARM-2024-00001',
           fullName: 'Amadou Coulibaly',
           phone: '+22376543210',
-          email: 'amadou@example.com',
-          commune: 'Bamako',
+          email: 'amadou.coulibaly@example.com',
           region: 'Bamako',
-          profession: 'Ingénieur',
+          commune: 'Commune IV',
+          profession: 'Enseignant',
+          dateOfBirth: '1985-03-15',
+          gender: 'male',
           status: 'active',
           createdAt: now,
           updatedAt: now,
         },
         {
-          memberNumber: 'ARM-2025-000002',
+          memberNumber: 'ARM-2024-00002',
           fullName: 'Fatoumata Diallo',
           phone: '+22365432109',
-          email: 'fatoumata@example.com',
-          commune: 'Sikasso',
-          region: 'Sikasso',
-          profession: 'Médecin',
+          email: 'fatoumata.diallo@example.com',
+          region: 'Kayes',
+          commune: 'Kayes Centre',
+          profession: 'Commerçante',
+          dateOfBirth: '1990-07-22',
+          gender: 'female',
           status: 'active',
           createdAt: now,
           updatedAt: now,
         },
         {
-          memberNumber: 'ARM-2025-000003',
+          memberNumber: 'ARM-2024-00003',
           fullName: 'Ibrahim Traoré',
           phone: '+22354321098',
-          email: 'ibrahim@example.com',
-          commune: 'Mopti',
-          region: 'Mopti',
-          profession: 'Professeur',
+          email: null,
+          region: 'Sikasso',
+          commune: 'Sikasso Ville',
+          profession: 'Agriculteur',
+          dateOfBirth: '1978-11-08',
+          gender: 'male',
           status: 'pending',
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          memberNumber: 'ARM-2024-00004',
+          fullName: 'Mariam Keita',
+          phone: '+22343210987',
+          email: 'mariam.keita@example.com',
+          region: 'Mopti',
+          commune: 'Mopti Centre',
+          profession: 'Infirmière',
+          dateOfBirth: '1992-05-30',
+          gender: 'female',
+          status: 'pending',
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          memberNumber: 'ARM-2024-00005',
+          fullName: 'Oumar Sanogo',
+          phone: '+22332109876',
+          email: null,
+          region: 'Ségou',
+          commune: 'Ségou Ville',
+          profession: 'Mécanicien',
+          dateOfBirth: '1982-09-14',
+          gender: 'male',
+          status: 'suspended',
           createdAt: now,
           updatedAt: now,
         },

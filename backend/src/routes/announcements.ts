@@ -27,31 +27,26 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/announcements - Public endpoint (only published)
+  // GET /api/announcements - Get all announcements ordered by created_at DESC
   fastify.get(
     '/api/announcements',
     {
       schema: {
-        description: 'Get announcements',
+        description: 'Get all announcements',
         tags: ['announcements'],
         response: {
           200: {
-            type: 'object',
-            properties: {
-              announcements: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string', format: 'uuid' },
-                    title: { type: 'string' },
-                    body: { type: 'string' },
-                    priority: { type: 'string' },
-                    published: { type: 'boolean' },
-                    created_at: { type: 'string', format: 'date-time' },
-                    updated_at: { type: 'string', format: 'date-time' },
-                  },
-                },
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                title: { type: 'string' },
+                body: { type: 'string' },
+                priority: { type: 'string' },
+                published: { type: 'boolean' },
+                created_at: { type: 'string', format: 'date-time' },
+                updated_at: { type: 'string', format: 'date-time' },
               },
             },
           },
@@ -59,17 +54,25 @@ export function register(app: App, fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      app.logger.info('Fetching announcements');
+      app.logger.info('Fetching all announcements');
 
       try {
         const announcements = await app.db
           .select()
           .from(schema.announcements)
-          .where(eq(schema.announcements.published, true))
           .orderBy(desc(schema.announcements.createdAt));
 
         app.logger.info({ count: announcements.length }, 'Announcements retrieved');
-        return { announcements };
+
+        return announcements.map(a => ({
+          id: a.id,
+          title: a.title,
+          body: a.body,
+          priority: a.priority,
+          published: a.published,
+          created_at: a.createdAt.toISOString(),
+          updated_at: a.updatedAt.toISOString(),
+        }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch announcements');
         throw error;
@@ -77,7 +80,58 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/announcements - Admin only
+  // GET /api/announcements/:id - Get single announcement
+  fastify.get<{ Params: { id: string } }>(
+    '/api/announcements/:id',
+    {
+      schema: {
+        description: 'Get an announcement by ID',
+        tags: ['announcements'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      app.logger.info({ announcementId: id }, 'Fetching announcement');
+
+      try {
+        const announcements = await app.db
+          .select()
+          .from(schema.announcements)
+          .where(eq(schema.announcements.id, id));
+
+        if (announcements.length === 0) {
+          app.logger.info({ announcementId: id }, 'Announcement not found');
+          reply.status(404);
+          return { error: 'Not found' };
+        }
+
+        const a = announcements[0];
+        return {
+          id: a.id,
+          title: a.title,
+          body: a.body,
+          priority: a.priority,
+          published: a.published,
+          created_at: a.createdAt.toISOString(),
+          updated_at: a.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, announcementId: id }, 'Failed to fetch announcement');
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/announcements - Create announcement (admin only)
   fastify.post<{ Body: CreateAnnouncementBody }>(
     '/api/announcements',
     {
@@ -95,40 +149,36 @@ export function register(app: App, fastify: FastifyInstance) {
           },
         },
         response: {
-          201: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              title: { type: 'string' },
-              body: { type: 'string' },
-              priority: { type: 'string' },
-              published: { type: 'boolean' },
-              created_at: { type: 'string', format: 'date-time' },
-              updated_at: { type: 'string', format: 'date-time' },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
+          201: { type: 'object' },
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: CreateAnnouncementBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const body = request.body as CreateAnnouncementBody;
-      const { title, body: bodyText, priority, published } = body;
+      const { title, body, priority, published } = request.body;
+
+      if (!title || !body) {
+        app.logger.warn({ title, body }, 'Missing required fields');
+        reply.status(400);
+        return { error: 'title and body are required' };
+      }
+
       app.logger.info({ title }, 'Creating announcement');
 
       try {
+        const now = new Date();
         const result = await app.db
           .insert(schema.announcements)
           .values({
             title,
-            body: bodyText,
+            body,
             priority: priority ?? 'normal',
-            published: published ?? true,
+            published: published ?? false,
+            createdAt: now,
+            updatedAt: now,
           })
           .returning();
 
@@ -142,8 +192,8 @@ export function register(app: App, fastify: FastifyInstance) {
           body: announcement.body,
           priority: announcement.priority,
           published: announcement.published,
-          created_at: announcement.createdAt,
-          updated_at: announcement.updatedAt,
+          created_at: announcement.createdAt.toISOString(),
+          updated_at: announcement.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create announcement');
@@ -152,7 +202,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // PUT /api/announcements/:id - Admin only
+  // PUT /api/announcements/:id - Update announcement (admin only)
   fastify.put<{ Params: { id: string }; Body: UpdateAnnouncementBody }>(
     '/api/announcements/:id',
     {
@@ -174,43 +224,26 @@ export function register(app: App, fastify: FastifyInstance) {
           },
         },
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              title: { type: 'string' },
-              body: { type: 'string' },
-              priority: { type: 'string' },
-              published: { type: 'boolean' },
-              created_at: { type: 'string', format: 'date-time' },
-              updated_at: { type: 'string', format: 'date-time' },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
-          404: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
+          200: { type: 'object' },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { id: string }; Body: UpdateAnnouncementBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { id } = request.params as { id: string };
-      const updateBody = request.body as UpdateAnnouncementBody;
+      const { id } = request.params;
+      const body = request.body;
 
       app.logger.info({ announcementId: id }, 'Updating announcement');
 
       try {
         const updates: any = {};
-        if (updateBody.title !== undefined) updates.title = updateBody.title;
-        if (updateBody.body !== undefined) updates.body = updateBody.body;
-        if (updateBody.priority !== undefined) updates.priority = updateBody.priority;
-        if (updateBody.published !== undefined) updates.published = updateBody.published;
+        if (body.title !== undefined) updates.title = body.title;
+        if (body.body !== undefined) updates.body = body.body;
+        if (body.priority !== undefined) updates.priority = body.priority;
+        if (body.published !== undefined) updates.published = body.published;
         updates.updatedAt = new Date();
 
         const result = await app.db
@@ -220,8 +253,9 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         if (result.length === 0) {
+          app.logger.info({ announcementId: id }, 'Announcement not found');
           reply.status(404);
-          return { error: 'Announcement not found' };
+          return { error: 'Not found' };
         }
 
         const announcement = result[0];
@@ -233,8 +267,8 @@ export function register(app: App, fastify: FastifyInstance) {
           body: announcement.body,
           priority: announcement.priority,
           published: announcement.published,
-          created_at: announcement.createdAt,
-          updated_at: announcement.updatedAt,
+          created_at: announcement.createdAt.toISOString(),
+          updated_at: announcement.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, announcementId: id }, 'Failed to update announcement');
@@ -243,7 +277,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/announcements/:id - Admin only
+  // DELETE /api/announcements/:id - Delete announcement (admin only)
   fastify.delete<{ Params: { id: string } }>(
     '/api/announcements/:id',
     {
@@ -256,25 +290,16 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: { id: { type: 'string', format: 'uuid' } },
         },
         response: {
-          200: {
-            type: 'object',
-            properties: { success: { type: 'boolean' } },
-          },
-          401: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
-          404: {
-            type: 'object',
-            properties: { error: { type: 'string' } },
-          },
+          200: { type: 'object', properties: { success: { type: 'boolean' } } },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { id } = request.params as { id: string };
+      const { id } = request.params;
 
       app.logger.info({ announcementId: id }, 'Deleting announcement');
 
@@ -285,8 +310,9 @@ export function register(app: App, fastify: FastifyInstance) {
           .returning();
 
         if (result.length === 0) {
+          app.logger.info({ announcementId: id }, 'Announcement not found');
           reply.status(404);
-          return { error: 'Announcement not found' };
+          return { error: 'Not found' };
         }
 
         app.logger.info({ announcementId: id }, 'Announcement deleted');
@@ -306,24 +332,31 @@ export async function seedAnnouncements(app: App) {
     if (count.length === 0) {
       app.logger.info('Seeding announcements');
 
+      const now = new Date();
       const seedData = [
         {
-          title: 'Réunion du bureau exécutif',
-          body: 'Le bureau exécutif national se réunira le samedi prochain à 9h00 au siège du parti à Bamako. La présence de tous les membres titulaires est obligatoire. Ordre du jour : bilan des activités du trimestre et planification des prochaines échéances électorales.',
+          title: 'Réunion du Bureau Politique',
+          body: 'Le Bureau Politique de l\'ARM se réunira le samedi prochain à 10h00 au siège national. Tous les membres du bureau sont priés d\'être présents. Ordre du jour: bilan des activités et planification du prochain trimestre.',
           priority: 'normal',
           published: true,
+          createdAt: now,
+          updatedAt: now,
         },
         {
-          title: 'URGENT : Mobilisation générale pour le meeting de Bamako',
-          body: 'Tous les militants et sympathisants sont appelés à se mobiliser massivement pour le grand meeting national prévu ce dimanche à la Place de l\'Indépendance. Le transport sera assuré depuis les différents quartiers. Soyez présents nombreux pour démontrer la force de notre mouvement.',
+          title: 'URGENT: Mobilisation pour le Meeting',
+          body: 'Un grand meeting populaire est organisé ce weekend à Bamako. Tous les militants sont appelés à mobiliser massivement. Des bus seront mis à disposition depuis les différentes communes. Contactez votre coordinateur de zone pour les détails.',
           priority: 'urgent',
           published: true,
+          createdAt: now,
+          updatedAt: now,
         },
         {
-          title: 'Mise à jour des cotisations 2024',
-          body: 'Nous rappelons à tous les membres que les cotisations annuelles pour l\'année 2024 sont dues avant le 31 mars. Les membres à jour recevront leur nouvelle carte d\'adhérent. Contactez votre responsable de section pour effectuer votre paiement.',
+          title: 'Formation des Responsables Locaux',
+          body: 'Une session de formation est organisée pour tous les responsables locaux de l\'ARM. La formation portera sur les techniques de mobilisation, la communication politique et la gestion des sections locales. Inscription obligatoire avant le 15 du mois.',
           priority: 'normal',
           published: true,
+          createdAt: now,
+          updatedAt: now,
         },
       ];
 
