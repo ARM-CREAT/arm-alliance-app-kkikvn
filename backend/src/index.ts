@@ -155,6 +155,7 @@ extendedProgramRoutes.register(app, app.fastify);
 membershipsRoutes.register(app, app.fastify);
 // notificationsRoutes.register(app, app.fastify); // Disabled
 membersApiRoutes.register(app, app.fastify);
+// memberStatsRoutes.register(app, app.fastify); // Disabled: GET /api/stats/members already defined in membersApiRoutes
 directionRoutes.register(app, app.fastify);
 cmsNewsRoutes.register(app, app.fastify);
 announcementsRoutes.register(app, app.fastify);
@@ -163,7 +164,6 @@ newsArticlesRoutes.register(app, app.fastify);
 mediaItemsRoutes.register(app, app.fastify);
 directMessagesRoutes.register(app, app.fastify);
 conferenceVideosRoutes.register(app, app.fastify);
-memberStatsRoutes.register(app, app.fastify);
 
 // Seed data
 await adminAuthRoutes.seedAdminUser(app);
