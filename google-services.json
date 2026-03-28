@@ -51,6 +51,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "548156441155-1m354sdivf65qhm0j4spjpjv1i3h2j26.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bouadiakite1.ARM1",
+            "certificate_hash": "0ba08691a1b93fb86c6cef9ed1bc1c406e6dc436"
+          }
+        },
+        {
           "client_id": "548156441155-6q357eho1los8cmpe3rs6qjid5q1njn0.apps.googleusercontent.com",
           "client_type": 3
         }
