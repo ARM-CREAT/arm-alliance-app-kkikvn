@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Alliance ARM",
-    "slug": "alliance-arm",
-    "version": "1.0.8",
+    "slug": "arm-alliance-app-kkikvn",
+    "version": "1.0.29",
     "orientation": "portrait",
     "icon": "./assets/images/SAVE_20251219_163224.jpg",
     "userInterfaceStyle": "automatic",
@@ -24,8 +24,8 @@
         "foregroundImage": "./assets/images/SAVE_20251219_163224.jpg",
         "backgroundColor": "#000000"
       },
-      "package": "com.anonymous.Natively",
-      "versionCode": 10
+      "package": "com.armmali.app",
+      "versionCode": 30
     },
     "web": {
       "favicon": "./assets/images/final_quest_240x240.png",
@@ -52,7 +52,7 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev"
+      "backendUrl": "https://prod-proj-lcqctzjnnyj98dyvuaf4w-liwg5h36mq-ey.a.run.app"
     }
   }
 }
