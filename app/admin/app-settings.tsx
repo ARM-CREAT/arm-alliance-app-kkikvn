@@ -25,7 +25,6 @@ interface AppSettings {
   contactEmail: string;
   contactAddress: string;
   donationEnabled: boolean;
-  conferenceEnabled: boolean;
 }
 
 const defaultSettings: AppSettings = {
@@ -35,7 +34,6 @@ const defaultSettings: AppSettings = {
   contactEmail: '',
   contactAddress: '',
   donationEnabled: true,
-  conferenceEnabled: true,
 };
 
 export default function AdminAppSettingsScreen() {
@@ -77,7 +75,6 @@ export default function AdminAppSettingsScreen() {
         contactEmail: data.contactEmail || '',
         contactAddress: data.contactAddress || '',
         donationEnabled: data.donationEnabled !== false,
-        conferenceEnabled: data.conferenceEnabled !== false,
       });
       setError('');
     } catch (e: any) {
@@ -235,23 +232,7 @@ export default function AdminAppSettingsScreen() {
             />
           </View>
 
-          <View style={styles.divider} />
 
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleInfo}>
-              <Text style={styles.toggleLabel}>Conférences activées</Text>
-              <Text style={styles.toggleDesc}>Afficher le module de conférences dans l'app</Text>
-            </View>
-            <Switch
-              value={settings.conferenceEnabled}
-              onValueChange={(v) => {
-                console.log('[Admin AppSettings] Toggle conferenceEnabled:', v);
-                updateField('conferenceEnabled', v);
-              }}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={settings.conferenceEnabled ? '#fff' : '#f4f3f4'}
-            />
-          </View>
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving} activeOpacity={0.8}>

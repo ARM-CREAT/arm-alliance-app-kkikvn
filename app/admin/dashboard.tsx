@@ -277,7 +277,6 @@ export default function AdminDashboardScreen() {
             <View style={styles.grid}>
               {[
                 { path: '/admin/leadership', label: 'Direction', icon: '👤' },
-                { path: '/admin/conferences', label: 'Conférences', icon: '🎤' },
                 { path: '/admin/membership-stats', label: 'Stats', icon: '📊' },
                 { path: '/admin/contacts', label: 'Contacts', icon: '📞' },
                 { path: '/admin/program', label: 'Programme', icon: '📜' },
