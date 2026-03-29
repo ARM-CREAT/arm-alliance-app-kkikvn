@@ -13,16 +13,18 @@ import {
 export const members = pgTable('members', {
   id: uuid('id').primaryKey().defaultRandom(),
   memberNumber: text('member_number').notNull().unique(), // ARM-YYYY-NNNNN format (sequential)
+  membershipNumber: text('membership_number').unique(), // Alias for memberNumber
   fullName: text('full_name').notNull(),
   firstName: text('first_name'),
   lastName: text('last_name'),
   phone: text('phone').notNull().unique(),
-  email: text('email'),
+  email: text('email').unique(),
   commune: text('commune'),
   region: text('region'),
   profession: text('profession'),
   dateOfBirth: text('date_of_birth'),
   gender: text('gender'),
+  address: text('address'),
   status: text('status').notNull().default('pending'), // pending, approved, rejected
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

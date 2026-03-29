@@ -5,16 +5,12 @@ import type { App } from '../index.js';
 
 interface CreateAnnouncementBody {
   title: string;
-  body: string;
-  priority?: 'normal' | 'urgent';
-  published?: boolean;
+  content: string;
 }
 
 interface UpdateAnnouncementBody {
   title?: string;
-  body?: string;
-  priority?: 'normal' | 'urgent';
-  published?: boolean;
+  content?: string;
 }
 
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
@@ -37,18 +33,7 @@ export function register(app: App, fastify: FastifyInstance) {
         response: {
           200: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                title: { type: 'string' },
-                body: { type: 'string' },
-                priority: { type: 'string' },
-                published: { type: 'boolean' },
-                created_at: { type: 'string', format: 'date-time' },
-                updated_at: { type: 'string', format: 'date-time' },
-              },
-            },
+            items: { type: 'object' },
           },
         },
       },
@@ -67,65 +52,11 @@ export function register(app: App, fastify: FastifyInstance) {
         return announcements.map(a => ({
           id: a.id,
           title: a.title,
-          body: a.body,
-          priority: a.priority,
-          published: a.published,
+          content: a.body, // Map body column to content field
           created_at: a.createdAt.toISOString(),
-          updated_at: a.updatedAt.toISOString(),
         }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch announcements');
-        throw error;
-      }
-    }
-  );
-
-  // GET /api/announcements/:id - Get single announcement
-  fastify.get<{ Params: { id: string } }>(
-    '/api/announcements/:id',
-    {
-      schema: {
-        description: 'Get an announcement by ID',
-        tags: ['announcements'],
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: { id: { type: 'string', format: 'uuid' } },
-        },
-        response: {
-          200: { type: 'object' },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const { id } = request.params;
-      app.logger.info({ announcementId: id }, 'Fetching announcement');
-
-      try {
-        const announcements = await app.db
-          .select()
-          .from(schema.announcements)
-          .where(eq(schema.announcements.id, id));
-
-        if (announcements.length === 0) {
-          app.logger.info({ announcementId: id }, 'Announcement not found');
-          reply.status(404);
-          return { error: 'Not found' };
-        }
-
-        const a = announcements[0];
-        return {
-          id: a.id,
-          title: a.title,
-          body: a.body,
-          priority: a.priority,
-          published: a.published,
-          created_at: a.createdAt.toISOString(),
-          updated_at: a.updatedAt.toISOString(),
-        };
-      } catch (error) {
-        app.logger.error({ err: error, announcementId: id }, 'Failed to fetch announcement');
         throw error;
       }
     }
@@ -140,31 +71,22 @@ export function register(app: App, fastify: FastifyInstance) {
         tags: ['announcements'],
         body: {
           type: 'object',
-          required: ['title', 'body'],
+          required: ['title', 'content'],
           properties: {
             title: { type: 'string' },
-            body: { type: 'string' },
-            priority: { type: 'string', enum: ['normal', 'urgent'] },
-            published: { type: 'boolean' },
+            content: { type: 'string' },
           },
         },
         response: {
           201: { type: 'object' },
-          400: { type: 'object', properties: { error: { type: 'string' } } },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object' },
         },
       },
     },
     async (request: FastifyRequest<{ Body: CreateAnnouncementBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { title, body, priority, published } = request.body;
-
-      if (!title || !body) {
-        app.logger.warn({ title, body }, 'Missing required fields');
-        reply.status(400);
-        return { error: 'title and body are required' };
-      }
+      const { title, content } = request.body;
 
       app.logger.info({ title }, 'Creating announcement');
 
@@ -174,9 +96,9 @@ export function register(app: App, fastify: FastifyInstance) {
           .insert(schema.announcements)
           .values({
             title,
-            body,
-            priority: priority ?? 'normal',
-            published: published ?? false,
+            body: content, // Store content in body column
+            priority: 'normal',
+            published: true,
             createdAt: now,
             updatedAt: now,
           })
@@ -189,11 +111,8 @@ export function register(app: App, fastify: FastifyInstance) {
         return {
           id: announcement.id,
           title: announcement.title,
-          body: announcement.body,
-          priority: announcement.priority,
-          published: announcement.published,
+          content: announcement.body,
           created_at: announcement.createdAt.toISOString(),
-          updated_at: announcement.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create announcement');
@@ -218,15 +137,13 @@ export function register(app: App, fastify: FastifyInstance) {
           type: 'object',
           properties: {
             title: { type: 'string' },
-            body: { type: 'string' },
-            priority: { type: 'string', enum: ['normal', 'urgent'] },
-            published: { type: 'boolean' },
+            content: { type: 'string' },
           },
         },
         response: {
           200: { type: 'object' },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
@@ -234,16 +151,14 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
-      const body = request.body;
+      const { title, content } = request.body;
 
       app.logger.info({ announcementId: id }, 'Updating announcement');
 
       try {
         const updates: any = {};
-        if (body.title !== undefined) updates.title = body.title;
-        if (body.body !== undefined) updates.body = body.body;
-        if (body.priority !== undefined) updates.priority = body.priority;
-        if (body.published !== undefined) updates.published = body.published;
+        if (title !== undefined) updates.title = title;
+        if (content !== undefined) updates.body = content; // content maps to body column
         updates.updatedAt = new Date();
 
         const result = await app.db
@@ -264,11 +179,8 @@ export function register(app: App, fastify: FastifyInstance) {
         return {
           id: announcement.id,
           title: announcement.title,
-          body: announcement.body,
-          priority: announcement.priority,
-          published: announcement.published,
+          content: announcement.body,
           created_at: announcement.createdAt.toISOString(),
-          updated_at: announcement.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, announcementId: id }, 'Failed to update announcement');
@@ -277,7 +189,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/announcements/:id - Delete announcement (admin only)
+  // DELETE /api/announcements/:id - Delete announcement (admin only, no body)
   fastify.delete<{ Params: { id: string } }>(
     '/api/announcements/:id',
     {
@@ -290,9 +202,9 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: { id: { type: 'string', format: 'uuid' } },
         },
         response: {
-          200: { type: 'object', properties: { success: { type: 'boolean' } } },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
@@ -327,32 +239,33 @@ export function register(app: App, fastify: FastifyInstance) {
 
 export async function seedAnnouncements(app: App) {
   try {
-    const count = await app.db.select().from(schema.announcements);
+    // Check if already seeded
+    const existing = await app.db.select().from(schema.announcements);
 
-    if (count.length === 0) {
-      app.logger.info('Seeding announcements');
+    if (existing.length === 0) {
+      app.logger.info('Seeding announcements table');
 
       const now = new Date();
       const seedData = [
         {
-          title: 'Réunion du Bureau Politique',
-          body: 'Le Bureau Politique de l\'ARM se réunira le samedi prochain à 10h00 au siège national. Tous les membres du bureau sont priés d\'être présents. Ordre du jour: bilan des activités et planification du prochain trimestre.',
+          title: 'Réunion du bureau exécutif',
+          body: "Le bureau exécutif de l'Alliance ARM se réunira le 15 du mois prochain. Tous les membres du bureau sont priés d'être présents.",
+          priority: 'high',
+          published: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          title: 'Collecte de cotisations',
+          body: 'La période de collecte des cotisations annuelles est ouverte. Les membres sont invités à régulariser leur situation avant la fin du mois.',
           priority: 'normal',
           published: true,
           createdAt: now,
           updatedAt: now,
         },
         {
-          title: 'URGENT: Mobilisation pour le Meeting',
-          body: 'Un grand meeting populaire est organisé ce weekend à Bamako. Tous les militants sont appelés à mobiliser massivement. Des bus seront mis à disposition depuis les différentes communes. Contactez votre coordinateur de zone pour les détails.',
-          priority: 'urgent',
-          published: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          title: 'Formation des Responsables Locaux',
-          body: 'Une session de formation est organisée pour tous les responsables locaux de l\'ARM. La formation portera sur les techniques de mobilisation, la communication politique et la gestion des sections locales. Inscription obligatoire avant le 15 du mois.',
+          title: 'Journée de solidarité',
+          body: "L'Alliance ARM organise une journée de solidarité en faveur des populations vulnérables. Votre participation est la bienvenue.",
           priority: 'normal',
           published: true,
           createdAt: now,

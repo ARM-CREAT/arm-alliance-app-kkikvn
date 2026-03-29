@@ -7,16 +7,12 @@ interface CreateNewsBody {
   title: string;
   content: string;
   image_url?: string;
-  imageUrl?: string;
-  published?: boolean;
 }
 
 interface UpdateNewsBody {
   title?: string;
   content?: string;
   image_url?: string;
-  imageUrl?: string;
-  published?: boolean;
 }
 
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
@@ -39,18 +35,7 @@ export function register(app: App, fastify: FastifyInstance) {
         response: {
           200: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                title: { type: 'string' },
-                content: { type: 'string' },
-                image_url: { type: ['string', 'null'] },
-                published: { type: 'boolean' },
-                created_at: { type: 'string', format: 'date-time' },
-                updated_at: { type: 'string', format: 'date-time' },
-              },
-            },
+            items: { type: 'object' },
           },
         },
       },
@@ -71,63 +56,10 @@ export function register(app: App, fastify: FastifyInstance) {
           title: a.title,
           content: a.content,
           image_url: a.imageUrl,
-          published: a.published,
           created_at: a.createdAt.toISOString(),
-          updated_at: a.updatedAt.toISOString(),
         }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch news articles');
-        throw error;
-      }
-    }
-  );
-
-  // GET /api/news/:id - Get single news article
-  fastify.get<{ Params: { id: string } }>(
-    '/api/news/:id',
-    {
-      schema: {
-        description: 'Get a news article by ID',
-        tags: ['news'],
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: { id: { type: 'string', format: 'uuid' } },
-        },
-        response: {
-          200: { type: 'object' },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
-        },
-      },
-    },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const { id } = request.params;
-      app.logger.info({ newsId: id }, 'Fetching news article');
-
-      try {
-        const articles = await app.db
-          .select()
-          .from(schema.apiNews)
-          .where(eq(schema.apiNews.id, id));
-
-        if (articles.length === 0) {
-          app.logger.info({ newsId: id }, 'News article not found');
-          reply.status(404);
-          return { error: 'Not found' };
-        }
-
-        const a = articles[0];
-        return {
-          id: a.id,
-          title: a.title,
-          content: a.content,
-          image_url: a.imageUrl,
-          published: a.published,
-          created_at: a.createdAt.toISOString(),
-          updated_at: a.updatedAt.toISOString(),
-        };
-      } catch (error) {
-        app.logger.error({ err: error, newsId: id }, 'Failed to fetch news article');
         throw error;
       }
     }
@@ -147,28 +79,18 @@ export function register(app: App, fastify: FastifyInstance) {
             title: { type: 'string' },
             content: { type: 'string' },
             image_url: { type: 'string' },
-            imageUrl: { type: 'string' },
-            published: { type: 'boolean' },
           },
         },
         response: {
           201: { type: 'object' },
-          400: { type: 'object', properties: { error: { type: 'string' } } },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object' },
         },
       },
     },
     async (request: FastifyRequest<{ Body: CreateNewsBody }>, reply: FastifyReply) => {
       if (!verifyAdminPassword(request, reply)) return;
 
-      const { title, content, published } = request.body;
-      const imageUrl = request.body.image_url || request.body.imageUrl;
-
-      if (!title || !content) {
-        app.logger.warn({ title, content }, 'Missing required fields');
-        reply.status(400);
-        return { error: 'title and content are required' };
-      }
+      const { title, content, image_url } = request.body;
 
       app.logger.info({ title }, 'Creating news article');
 
@@ -179,8 +101,8 @@ export function register(app: App, fastify: FastifyInstance) {
           .values({
             title,
             content,
-            imageUrl: imageUrl || null,
-            published: published ?? false,
+            imageUrl: image_url || null,
+            published: true,
             createdAt: now,
             updatedAt: now,
           })
@@ -195,9 +117,7 @@ export function register(app: App, fastify: FastifyInstance) {
           title: article.title,
           content: article.content,
           image_url: article.imageUrl,
-          published: article.published,
           created_at: article.createdAt.toISOString(),
-          updated_at: article.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, title }, 'Failed to create news article');
@@ -224,14 +144,12 @@ export function register(app: App, fastify: FastifyInstance) {
             title: { type: 'string' },
             content: { type: 'string' },
             image_url: { type: 'string' },
-            imageUrl: { type: 'string' },
-            published: { type: 'boolean' },
           },
         },
         response: {
           200: { type: 'object' },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
@@ -239,17 +157,15 @@ export function register(app: App, fastify: FastifyInstance) {
       if (!verifyAdminPassword(request, reply)) return;
 
       const { id } = request.params;
-      const body = request.body;
+      const { title, content, image_url } = request.body;
 
       app.logger.info({ newsId: id }, 'Updating news article');
 
       try {
         const updates: any = {};
-        if (body.title !== undefined) updates.title = body.title;
-        if (body.content !== undefined) updates.content = body.content;
-        if (body.image_url !== undefined) updates.imageUrl = body.image_url;
-        if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
-        if (body.published !== undefined) updates.published = body.published;
+        if (title !== undefined) updates.title = title;
+        if (content !== undefined) updates.content = content;
+        if (image_url !== undefined) updates.imageUrl = image_url;
         updates.updatedAt = new Date();
 
         const result = await app.db
@@ -272,9 +188,7 @@ export function register(app: App, fastify: FastifyInstance) {
           title: article.title,
           content: article.content,
           image_url: article.imageUrl,
-          published: article.published,
           created_at: article.createdAt.toISOString(),
-          updated_at: article.updatedAt.toISOString(),
         };
       } catch (error) {
         app.logger.error({ err: error, newsId: id }, 'Failed to update news article');
@@ -283,7 +197,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // DELETE /api/news/:id - Delete news article (admin only)
+  // DELETE /api/news/:id - Delete news article (admin only, no body)
   fastify.delete<{ Params: { id: string } }>(
     '/api/news/:id',
     {
@@ -296,9 +210,9 @@ export function register(app: App, fastify: FastifyInstance) {
           properties: { id: { type: 'string', format: 'uuid' } },
         },
         response: {
-          200: { type: 'object', properties: { success: { type: 'boolean' } } },
-          401: { type: 'object', properties: { error: { type: 'string' } } },
-          404: { type: 'object', properties: { error: { type: 'string' } } },
+          200: { type: 'object' },
+          401: { type: 'object' },
+          404: { type: 'object' },
         },
       },
     },
@@ -333,32 +247,33 @@ export function register(app: App, fastify: FastifyInstance) {
 
 export async function seedApiNews(app: App) {
   try {
-    const count = await app.db.select().from(schema.apiNews);
+    // Check if already seeded
+    const existing = await app.db.select().from(schema.apiNews);
 
-    if (count.length === 0) {
-      app.logger.info('Seeding api_news');
+    if (existing.length === 0) {
+      app.logger.info('Seeding api_news table');
 
       const now = new Date();
       const seedData = [
         {
-          title: "L'ARM renforce sa présence dans les régions",
-          content: 'L\'Alliance pour la Refondation du Mali a tenu des assemblées générales dans les huit régions du pays au cours du mois dernier. Ces rencontres ont permis de renforcer les structures locales et d\'enrôler de nouveaux militants. Le président national a personnellement présidé les assemblées de Kayes et Sikasso.',
+          title: 'Alliance ARM lance sa campagne nationale',
+          content: "L'Alliance pour la République du Mali lance officiellement sa grande campagne nationale de sensibilisation à travers toutes les régions du pays.",
           imageUrl: 'https://picsum.photos/seed/news1/800/400',
           published: true,
           createdAt: now,
           updatedAt: now,
         },
         {
-          title: 'Conférence de presse sur le programme économique',
-          content: 'Le porte-parole de l\'ARM a présenté lors d\'une conférence de presse les grandes lignes du programme économique du parti. Ce programme prévoit notamment la création de 500 000 emplois en cinq ans, le développement des infrastructures rurales et le soutien aux PME maliennes.',
+          title: 'Conférence régionale à Bamako',
+          content: 'Une conférence régionale réunissant les délégués de toutes les régions s\'est tenue à Bamako pour discuter des enjeux politiques actuels.',
           imageUrl: 'https://picsum.photos/seed/news2/800/400',
           published: true,
           createdAt: now,
           updatedAt: now,
         },
         {
-          title: 'Journée de solidarité avec les déplacés',
-          content: 'L\'ARM a organisé une journée de solidarité avec les populations déplacées par les conflits dans le nord et le centre du Mali. Des vivres, des médicaments et des vêtements ont été distribués à plus de 2000 familles. Cette action s\'inscrit dans la politique sociale du parti.',
+          title: 'Nouveau programme de formation des militants',
+          content: "L'Alliance ARM annonce un nouveau programme de formation destiné à renforcer les capacités de ses militants sur le terrain.",
           imageUrl: 'https://picsum.photos/seed/news3/800/400',
           published: true,
           createdAt: now,
