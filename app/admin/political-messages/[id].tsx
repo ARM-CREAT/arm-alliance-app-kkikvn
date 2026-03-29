@@ -15,11 +15,14 @@ import {
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/styles/commonStyles';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 
 const ADMIN_HEADERS = {
   'Content-Type': 'application/json',
+  'x-admin-password': 'admin123',
+};
+const ADMIN_DELETE_HEADERS = {
   'x-admin-password': 'admin123',
 };
 
@@ -131,7 +134,7 @@ export default function PoliticalMessageFormScreen() {
             try {
               const res = await fetch(`${BACKEND_URL}/api/political-messages/${id}`, {
                 method: 'DELETE',
-                headers: ADMIN_HEADERS,
+                headers: ADMIN_DELETE_HEADERS,
               });
               if (!res.ok) {
                 const text = await res.text();

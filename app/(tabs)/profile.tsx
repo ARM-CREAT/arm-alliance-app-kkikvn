@@ -81,14 +81,19 @@ export default function MembershipScreen() {
 
     setLoading(true);
 
+    // Split full_name into first_name / last_name for the API
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] ?? '';
+    const lastName = nameParts.slice(1).join(' ') || firstName;
+
     const payload: Record<string, string> = {
-      full_name: fullName.trim(),
+      first_name: firstName,
+      last_name: lastName,
       phone: phone.trim(),
     };
     if (email.trim()) payload.email = email.trim();
     if (region.trim()) payload.region = region.trim();
-    if (commune.trim()) payload.commune = commune.trim();
-    if (profession.trim()) payload.profession = profession.trim();
+    if (commune.trim()) payload.address = commune.trim();
     if (dateOfBirth.trim()) payload.date_of_birth = dateOfBirth.trim();
     if (gender) payload.gender = gender;
 
@@ -111,8 +116,8 @@ export default function MembershipScreen() {
           let dupName = "";
           try {
             const json = JSON.parse(text);
-            dupNumber = json.member_number ?? json.membership_number ?? "";
-            dupName = json.full_name ?? "";
+            dupNumber = json.membership_number ?? json.member_number ?? "";
+            dupName = json.member_name ?? json.full_name ?? "";
             console.log("[Profile] 409 doublon — membre existant:", dupNumber, dupName);
           } catch {
             console.log("[Profile] 409 — impossible de parser la réponse");

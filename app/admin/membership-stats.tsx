@@ -13,15 +13,15 @@ import {
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 
 interface Stats {
   total: number;
   pending: number;
   active: number;
   suspended: number;
-  byRegion: { region: string; count: number }[];
-  recentCount: number;
+  by_region: { region: string; count: number }[];
+  recent_registrations: number;
   thisMonth: number;
 }
 
@@ -60,7 +60,7 @@ export default function MembershipStatsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, active: 0, suspended: 0, byRegion: [], recentCount: 0, thisMonth: 0 });
+  const [stats, setStats] = useState<Stats>({ total: 0, pending: 0, active: 0, suspended: 0, by_region: [], recent_registrations: 0, thisMonth: 0 });
   const [monthly, setMonthly] = useState<MonthlyEntry[]>([]);
 
   const loadStats = useCallback(async () => {
@@ -74,15 +74,15 @@ export default function MembershipStatsScreen() {
         const text = await response.text();
         throw new Error(`Erreur ${response.status}: ${text.slice(0, 120)}`);
       }
-      const data: Stats = await response.json();
+      const data = await response.json();
       console.log('[MembershipStats] Stats loaded:', JSON.stringify(data));
       setStats({
         total: Number(data.total) || 0,
         pending: Number(data.pending) || 0,
         active: Number(data.active) || 0,
         suspended: Number(data.suspended) || 0,
-        byRegion: Array.isArray(data.byRegion) ? data.byRegion : [],
-        recentCount: Number(data.recentCount) || 0,
+        by_region: Array.isArray(data.by_region) ? data.by_region : [],
+        recent_registrations: Number(data.recent_registrations) || 0,
         thisMonth: Number(data.thisMonth) || 0,
       });
       setMonthly([]);
@@ -207,20 +207,20 @@ export default function MembershipStatsScreen() {
                   icon_ios="clock.arrow.circlepath"
                   icon_android="history"
                   label="Récents (30j)"
-                  value={stats.recentCount}
+                  value={stats.recent_registrations}
                   iconColor="#AF52DE"
                 />
               </View>
 
               {/* By Region */}
-              {stats.byRegion.length > 0 && (
+              {stats.by_region.length > 0 && (
                 <>
                   <Text style={styles.sectionTitle}>Membres par région</Text>
                   <View style={styles.listContainer}>
-                    {stats.byRegion.map((item, index) => {
+                    {stats.by_region.map((item, index) => {
                       const regionName = String(item.region || 'Inconnue');
                       const regionCount = String(Number(item.count) || 0);
-                      const isLast = index === stats.byRegion.length - 1;
+                      const isLast = index === stats.by_region.length - 1;
                       return (
                         <View key={index} style={[styles.listRow, isLast && styles.listRowLast]}>
                           <View style={styles.listRowLeft}>

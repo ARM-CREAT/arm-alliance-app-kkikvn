@@ -13,22 +13,26 @@ import {
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/styles/commonStyles';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 
 const ADMIN_HEADERS = {
   'Content-Type': 'application/json',
   'x-admin-password': 'admin123',
 };
+const ADMIN_DELETE_HEADERS = {
+  'x-admin-password': 'admin123',
+};
 
 interface Announcement {
   id: string;
   title: string;
-  body: string;
-  priority: 'normal' | 'urgent';
-  published: boolean;
+  content: string;
+  body?: string;
+  priority?: 'normal' | 'urgent';
+  published?: boolean;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 function formatDate(dateString?: string): string {
@@ -115,7 +119,7 @@ export default function AdminAnnouncementsScreen() {
             try {
               const res = await fetch(`${BACKEND_URL}/api/announcements/${item.id}`, {
                 method: 'DELETE',
-                headers: ADMIN_HEADERS,
+                headers: ADMIN_DELETE_HEADERS,
               });
               if (!res.ok) {
                 const text = await res.text();
@@ -140,8 +144,9 @@ export default function AdminAnnouncementsScreen() {
     const isUrgent = item.priority === 'urgent';
     const priorityLabel = isUrgent ? 'URGENT' : 'NORMAL';
     const priorityColor = isUrgent ? colors.danger : colors.primary;
-    const publishedLabel = item.published ? 'Publié' : 'Brouillon';
-    const publishedColor = item.published ? colors.success : colors.textTertiary;
+    const publishedLabel = item.published ? 'Publié' : 'Annonce';
+    const publishedColor = item.published ? colors.success : colors.primary;
+    const bodyText = item.content ?? item.body ?? '';
 
     return (
       <TouchableOpacity
@@ -161,7 +166,7 @@ export default function AdminAnnouncementsScreen() {
           <Text style={styles.cardDate}>{dateStr}</Text>
         </View>
         <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.cardBody} numberOfLines={2}>{item.body}</Text>
+        <Text style={styles.cardBody} numberOfLines={2}>{bodyText}</Text>
         <View style={styles.cardActions}>
           <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)}>
             <Ionicons name="pencil-outline" size={14} color={colors.primary} />

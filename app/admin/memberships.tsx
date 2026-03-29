@@ -16,7 +16,7 @@ import {
 import { Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 import * as Haptics from 'expo-haptics';
 
 const C = Colors.light;
@@ -24,13 +24,19 @@ const ADMIN_HEADERS = {
   'Content-Type': 'application/json',
   'x-admin-password': 'admin123',
 };
+const ADMIN_DELETE_HEADERS = {
+  'x-admin-password': 'admin123',
+};
 
 type FilterStatus = 'all' | 'pending' | 'active' | 'suspended';
 
 interface Member {
   id: string;
-  member_number: string;
-  full_name: string;
+  membership_number?: string;
+  member_number?: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
   phone: string;
   email?: string;
   commune?: string;
@@ -41,6 +47,16 @@ interface Member {
   status: string;
   created_at: string;
   updated_at?: string;
+}
+
+function getMemberDisplayName(m: Member): string {
+  if (m.full_name) return m.full_name;
+  const parts = [m.first_name, m.last_name].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : '—';
+}
+
+function getMemberNumber(m: Member): string {
+  return m.membership_number ?? m.member_number ?? '';
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -59,11 +75,12 @@ function formatDate(dateString?: string): string {
 }
 
 function getInitials(fullName: string): string {
-  const parts = (fullName || '').trim().split(' ');
+  const name = fullName || '';
+  const parts = name.trim().split(' ');
   if (parts.length >= 2) {
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   }
-  return (fullName || '?').charAt(0).toUpperCase();
+  return (name || '?').charAt(0).toUpperCase();
 }
 
 function getStatusColor(status: string): string {
@@ -107,7 +124,9 @@ function DetailModal({ member, visible, onClose, onApprove, onReject, onDelete, 
 
   const statusColor = getStatusColor(member.status);
   const statusLabel = getStatusLabel(member.status);
-  const initials = getInitials(member.full_name);
+  const displayName = getMemberDisplayName(member);
+  const memberNum = getMemberNumber(member);
+  const initials = getInitials(displayName);
   const isApproved = (member.status || '').toLowerCase() === 'active';
   const isRejected = (member.status || '').toLowerCase() === 'suspended';
   const genderLabel = getGenderLabel(member.gender);
@@ -131,8 +150,8 @@ function DetailModal({ member, visible, onClose, onApprove, onReject, onDelete, 
               <Text style={[detailStyles.avatarText, { color: statusColor }]}>{initials}</Text>
             </View>
             <View style={detailStyles.headerInfo}>
-              <Text style={detailStyles.name} numberOfLines={2}>{member.full_name}</Text>
-              <Text style={detailStyles.memberNumber}>{member.member_number}</Text>
+              <Text style={detailStyles.name} numberOfLines={2}>{displayName}</Text>
+              <Text style={detailStyles.memberNumber}>{memberNum}</Text>
               <View style={[detailStyles.statusBadge, { backgroundColor: statusColor + '22' }]}>
                 <Text style={[detailStyles.statusText, { color: statusColor }]}>{statusLabel}</Text>
               </View>
@@ -222,7 +241,9 @@ function DetailRow({ icon, label, value, last }: { icon: string; label: string; 
 function MemberCard({ item, onPress }: { item: Member; onPress: (m: Member) => void }) {
   const statusColor = getStatusColor(item.status);
   const statusLabel = getStatusLabel(item.status);
-  const initials = getInitials(item.full_name);
+  const displayName = getMemberDisplayName(item);
+  const memberNum = getMemberNumber(item);
+  const initials = getInitials(displayName);
   const dateStr = formatDate(item.created_at);
   const locationParts = [item.commune, item.region].filter(Boolean);
   const locationText = locationParts.length > 0 ? locationParts.join(', ') : '—';
@@ -231,7 +252,7 @@ function MemberCard({ item, onPress }: { item: Member; onPress: (m: Member) => v
     <TouchableOpacity
       style={styles.memberCard}
       onPress={() => {
-        console.log('[AdminMemberships] Carte membre appuyée:', item.full_name, item.id);
+        console.log('[AdminMemberships] Carte membre appuyée:', displayName, item.id);
         onPress(item);
       }}
       activeOpacity={0.75}
@@ -241,8 +262,8 @@ function MemberCard({ item, onPress }: { item: Member; onPress: (m: Member) => v
           <Text style={[styles.memberAvatarText, { color: statusColor }]}>{initials}</Text>
         </View>
         <View style={styles.memberInfo}>
-          <Text style={styles.memberName} numberOfLines={1}>{item.full_name}</Text>
-          <Text style={styles.memberNumber}>{item.member_number}</Text>
+          <Text style={styles.memberName} numberOfLines={1}>{displayName}</Text>
+          <Text style={styles.memberNumber}>{memberNum}</Text>
           <View style={styles.memberMetaRow}>
             <Ionicons name="call-outline" size={11} color={C.textTertiary} style={{ marginRight: 3 }} />
             <Text style={styles.memberMeta} numberOfLines={1}>{item.phone || '—'}</Text>
@@ -305,7 +326,7 @@ export default function AdminMembershipsScreen() {
     try {
       const [membersRes, statsRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/members?limit=200`, { headers: ADMIN_HEADERS, signal: controller.signal }),
-        fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS }),
+        fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS, signal: controller.signal }),
       ]);
       clearTimeout(timeoutId);
 
@@ -372,11 +393,12 @@ export default function AdminMembershipsScreen() {
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter((m) => {
-        const name = (m.full_name || '').toLowerCase();
+        const name = getMemberDisplayName(m).toLowerCase();
         const phone = (m.phone || '').toLowerCase();
-        const num = (m.member_number || '').toLowerCase();
+        const num = getMemberNumber(m).toLowerCase();
         const commune = (m.commune || '').toLowerCase();
-        return name.includes(q) || phone.includes(q) || num.includes(q) || commune.includes(q);
+        const region = (m.region || '').toLowerCase();
+        return name.includes(q) || phone.includes(q) || num.includes(q) || commune.includes(q) || region.includes(q);
       });
     }
 
@@ -453,10 +475,11 @@ export default function AdminMembershipsScreen() {
   };
 
   const handleDelete = (member: Member) => {
-    console.log('[AdminMemberships] Demande suppression:', member.id, member.full_name);
+    const displayName = getMemberDisplayName(member);
+    console.log('[AdminMemberships] Demande suppression:', member.id, displayName);
     Alert.alert(
       'Supprimer l\'adhérent',
-      `Êtes-vous sûr de vouloir supprimer "${member.full_name}" ? Cette action est irréversible.`,
+      `Êtes-vous sûr de vouloir supprimer "${displayName}" ? Cette action est irréversible.`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -468,7 +491,7 @@ export default function AdminMembershipsScreen() {
             try {
               const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
                 method: 'DELETE',
-                headers: ADMIN_HEADERS,
+                headers: ADMIN_DELETE_HEADERS,
               });
               if (!res.ok) {
                 const text = await res.text();

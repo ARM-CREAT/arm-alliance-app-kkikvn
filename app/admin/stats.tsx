@@ -14,7 +14,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { Ionicons } from '@expo/vector-icons';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 
 interface RegionStat {
   region: string;

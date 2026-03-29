@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 import { Colors } from '@/constants/Colors';
 
 const C = Colors.light;
@@ -100,14 +100,19 @@ export default function RegisterScreen() {
 
     setLoading(true);
 
+    // Split full_name into first_name / last_name for the API
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] ?? '';
+    const lastName = nameParts.slice(1).join(' ') || firstName;
+
     const payload: Record<string, string> = {
-      full_name: fullName.trim(),
+      first_name: firstName,
+      last_name: lastName,
       phone: phone.trim(),
     };
     if (email.trim()) payload.email = email.trim();
-    if (commune.trim()) payload.commune = commune.trim();
+    if (commune.trim()) payload.address = commune.trim();
     if (region.trim()) payload.region = region.trim();
-    if (profession.trim()) payload.profession = profession.trim();
     if (dateOfBirth.trim()) payload.date_of_birth = dateOfBirth.trim();
     if (gender) payload.gender = gender;
 
@@ -138,8 +143,8 @@ export default function RegisterScreen() {
           let dupFullName = '';
           try {
             const json = JSON.parse(text);
-            dupMemberNumber = json.member_number ?? '';
-            dupFullName = json.full_name ?? '';
+            dupMemberNumber = json.membership_number ?? json.member_number ?? '';
+            dupFullName = json.member_name ?? json.full_name ?? '';
             console.log('[Register] 409 PHONE_EXISTS — membre existant:', dupMemberNumber, dupFullName);
           } catch {
             console.log('[Register] 409 — impossible de parser la réponse');
@@ -168,7 +173,7 @@ export default function RegisterScreen() {
         pathname: '/member/success',
         params: {
           membership_number: data.membership_number ?? data.member_number ?? '',
-          full_name: data.full_name ?? fullName.trim(),
+          full_name: data.member_name ?? data.full_name ?? fullName.trim(),
         },
       });
     } catch (err: unknown) {
