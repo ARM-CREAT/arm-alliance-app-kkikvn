@@ -87,15 +87,26 @@ export default function CotisationScreen() {
 
   const loadHistory = useCallback(async () => {
     console.log('[Cotisation] GET /api/cotisations/my-history');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await authenticatedGet<{ cotisations: Cotisation[] }>('/api/cotisations/my-history');
+      const response = await authenticatedGet<{ cotisations: Cotisation[] }>('/api/cotisations/my-history', { signal: controller.signal } as any);
+      clearTimeout(timeoutId);
       const list = response?.cotisations ?? [];
       console.log('[Cotisation] Historique chargé:', list.length, 'éléments');
       setHistory(list);
       setIsAuthenticated(true);
     } catch (error: any) {
+      clearTimeout(timeoutId);
       console.error('[Cotisation] Erreur historique:', error.message);
-      if (error.message?.includes('token') || error.message?.includes('Authentication') || error.message?.includes('401')) {
+      const msg: string = error?.message ?? '';
+      if (
+        msg.includes('token') ||
+        msg.includes('Authentication') ||
+        msg.includes('sign in') ||
+        msg.includes('401') ||
+        msg.includes('Unauthorized')
+      ) {
         setIsAuthenticated(false);
       }
       setHistory([]);
@@ -145,7 +156,19 @@ export default function CotisationScreen() {
       setPaymentInstructions(instructions);
     } catch (error: any) {
       console.error('[Cotisation] Erreur initiation:', error.message);
-      showModal('Erreur', error?.message || 'Une erreur est survenue. Veuillez réessayer.', 'error');
+      const msg: string = error?.message ?? '';
+      if (
+        msg.includes('token') ||
+        msg.includes('Authentication') ||
+        msg.includes('sign in') ||
+        msg.includes('401') ||
+        msg.includes('Unauthorized')
+      ) {
+        setIsAuthenticated(false);
+        showModal('Connexion requise', 'Veuillez vous connecter pour accéder à vos cotisations.', 'error');
+      } else {
+        showModal('Erreur', msg || 'Une erreur est survenue. Veuillez réessayer.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -179,7 +202,19 @@ export default function CotisationScreen() {
       loadHistory();
     } catch (error: any) {
       console.error('[Cotisation] Erreur confirmation:', error.message);
-      showModal('Erreur', error?.message || 'Impossible de confirmer le paiement.', 'error');
+      const msg: string = error?.message ?? '';
+      if (
+        msg.includes('token') ||
+        msg.includes('Authentication') ||
+        msg.includes('sign in') ||
+        msg.includes('401') ||
+        msg.includes('Unauthorized')
+      ) {
+        setIsAuthenticated(false);
+        showModal('Connexion requise', 'Veuillez vous connecter pour accéder à vos cotisations.', 'error');
+      } else {
+        showModal('Erreur', msg || 'Impossible de confirmer le paiement.', 'error');
+      }
     } finally {
       setConfirmLoading(false);
     }

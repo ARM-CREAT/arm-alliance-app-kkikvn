@@ -55,11 +55,19 @@ export default function HomeScreen() {
     setError(null);
 
     try {
+      const statsController = new AbortController();
+      const statsTimeoutId = setTimeout(() => statsController.abort(), 15000);
+
       const [leaderResult, statsResult] = await Promise.allSettled([
         apiGet<LeadershipMember[]>('/api/leadership'),
-        fetch(`${BACKEND_URL}/api/members/stats`).then(async (res) => {
+        fetch(`${BACKEND_URL}/api/members/stats`, { signal: statsController.signal }).then(async (res) => {
+          clearTimeout(statsTimeoutId);
           if (!res.ok) throw new Error(`Stats: ${res.status}`);
           return res.json();
+        }).catch((err: any) => {
+          clearTimeout(statsTimeoutId);
+          console.warn('[HomeScreen] Stats fetch échoué:', err?.message);
+          throw err;
         }),
       ]);
 
@@ -73,6 +81,8 @@ export default function HomeScreen() {
       if (statsResult.status === 'fulfilled') {
         console.log('[HomeScreen] Stats membres chargées:', statsResult.value);
         setMemberStats(statsResult.value);
+      } else {
+        console.warn('[HomeScreen] Stats membres non disponibles, affichage sans compteur');
       }
 
       if (leaderResult.status === 'rejected') {

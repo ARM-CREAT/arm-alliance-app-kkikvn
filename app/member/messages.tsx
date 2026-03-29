@@ -11,7 +11,7 @@ import {
   RefreshControl,
   Modal as RNModal,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost } from '@/utils/api';
@@ -40,6 +40,7 @@ function formatDate(dateString: string) {
 }
 
 export default function MemberMessagesScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -50,17 +51,31 @@ export default function MemberMessagesScreen() {
   const loadMessages = useCallback(async () => {
     console.log('[MemberMessages] GET /api/messages/my-messages');
     setError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await authenticatedGet<{ messages: Message[] }>('/api/messages/my-messages');
+      const response = await authenticatedGet<{ messages: Message[] }>('/api/messages/my-messages', { signal: controller.signal } as any);
+      clearTimeout(timeoutId);
       const list = response?.messages ?? (Array.isArray(response) ? response : []);
       console.log('[MemberMessages] Messages loaded:', list.length);
       setMessages(list);
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error('[MemberMessages] Error loading messages:', err);
-      if (err?.message?.includes('Authentication token not found') || err?.message?.includes('401')) {
+      const msg: string = err?.message ?? '';
+      if (
+        msg.includes('token') ||
+        msg.includes('Authentication') ||
+        msg.includes('sign in') ||
+        msg.includes('401') ||
+        msg.includes('Unauthorized')
+      ) {
         setMessages([]);
+        setError('Veuillez vous connecter pour accéder à vos messages.');
+      } else if (err?.name === 'AbortError') {
+        setError('Délai dépassé. Vérifiez votre connexion internet.');
       } else {
-        setError(err?.message || 'Impossible de charger les messages');
+        setError(msg || 'Impossible de charger les messages.');
       }
     } finally {
       setLoading(false);
@@ -104,6 +119,8 @@ export default function MemberMessagesScreen() {
   const unreadCount = messages.filter(m => !m.isRead).length;
   const unreadCountStr = String(unreadCount);
 
+  const isAuthError = (error ?? '').includes('connecter');
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -144,12 +161,21 @@ export default function MemberMessagesScreen() {
             color={colors.danger}
           />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryBtn}
-            onPress={() => { setLoading(true); loadMessages(); }}
-          >
-            <Text style={styles.retryBtnText}>Réessayer</Text>
-          </TouchableOpacity>
+          {isAuthError ? (
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => { console.log('[MemberMessages] Bouton Se connecter appuyé'); router.push('/auth'); }}
+            >
+              <Text style={styles.retryBtnText}>Se connecter</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => { setLoading(true); loadMessages(); }}
+            >
+              <Text style={styles.retryBtnText}>Réessayer</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <ScrollView

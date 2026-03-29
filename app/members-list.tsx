@@ -199,8 +199,11 @@ export default function MembersListScreen() {
 
   const loadStats = useCallback(async () => {
     console.log('[MembersList] GET /api/members/stats');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS });
+      const res = await fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS, signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         const text = await res.text();
         console.error('[MembersList] Stats erreur:', res.status, text);
@@ -210,7 +213,12 @@ export default function MembersListScreen() {
       console.log('[MembersList] Stats chargées:', JSON.stringify(data));
       setStats(data);
     } catch (err: any) {
-      console.error('[MembersList] Stats erreur réseau:', err.message);
+      clearTimeout(timeoutId);
+      if (err?.name === 'AbortError') {
+        console.error('[MembersList] Stats timeout');
+      } else {
+        console.error('[MembersList] Stats erreur réseau:', err.message);
+      }
     }
   }, []);
 
@@ -222,8 +230,11 @@ export default function MembersListScreen() {
     console.log('[MembersList] GET', url);
     setError(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(url, { headers: ADMIN_HEADERS });
+      const res = await fetch(url, { headers: ADMIN_HEADERS, signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         const text = await res.text();
         console.error('[MembersList] Erreur:', res.status, text);
@@ -249,8 +260,13 @@ export default function MembersListScreen() {
       setMembers(normalised);
       setTotal(count);
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error('[MembersList] Erreur chargement:', err.message);
-      setError(err.message || 'Impossible de charger les adhérents.');
+      if (err?.name === 'AbortError' || err?.message?.includes('Network request failed')) {
+        setError('Erreur réseau. Vérifiez votre connexion internet.');
+      } else {
+        setError(err.message || 'Impossible de charger les adhérents.');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

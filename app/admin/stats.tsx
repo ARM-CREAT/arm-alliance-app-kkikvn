@@ -14,7 +14,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { Ionicons } from '@expo/vector-icons';
-import { apiGet } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api-helpers';
 
 interface RegionStat {
   region: string;
@@ -97,13 +97,32 @@ export default function StatsScreen() {
   const fetchStats = useCallback(async () => {
     console.log('[Stats] GET /api/stats/members');
     setError(null);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const json = await apiGet<StatsData>('/api/stats/members');
+      const res = await fetch(`${BACKEND_URL}/api/stats/members`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': 'admin123',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+      }
+      const json: StatsData = await res.json();
       console.log('[Stats] Données chargées — total:', json.total, 'membres_list:', json.members_list?.length ?? 0);
       setData(json);
     } catch (err: any) {
+      clearTimeout(timeoutId);
       console.error('[Stats] Erreur:', err.message);
-      setError('Impossible de charger les statistiques.');
+      if (err.name === 'AbortError') {
+        setError('Délai dépassé. Vérifiez votre connexion.');
+      } else {
+        setError(err.message || 'Impossible de charger les statistiques.');
+      }
     } finally {
       setLoading(false);
     }
