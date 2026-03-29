@@ -32,6 +32,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "@react-native-firebase/app",
       "expo-font",
       "expo-router",
       "expo-web-browser",
