@@ -16,7 +16,8 @@ export default function ArmMessageScreen() {
           headerBackTitle: 'Retour',
         }}
       />
-      <BodyScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={{ flex: 1, backgroundColor: '#0A1A0F' }}>
+      <BodyScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>
           Message de l'ARM Alliance au Rassemblement Malien pour le peuple malien
         </Text>
@@ -70,8 +71,8 @@ export default function ArmMessageScreen() {
           Par la coordination nationale de l'ARM Alliance
         </Text>
 
-        <View style={{ height: 40 }} />
       </BodyScrollView>
+      </View>
     </>
   );
 }
@@ -84,6 +85,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 24,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 19,
