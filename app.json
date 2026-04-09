@@ -16,7 +16,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.anonymous.Natively",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      },
+      "entitlements": {
+        "aps-environment": "production",
+        "com.apple.security.application-groups": [
+          "group.com.anonymous.Natively.onesignal"
+        ]
       }
     },
     "android": {
@@ -32,6 +41,12 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production"
+        }
+      ],
       "@react-native-firebase/app",
       "expo-font",
       "expo-router",
@@ -53,7 +68,8 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://prod-proj-lcqctzjnnyj98dyvuaf4w-liwg5h36mq-ey.a.run.app"
+      "backendUrl": "https://prod-proj-lcqctzjnnyj98dyvuaf4w-liwg5h36mq-ey.a.run.app",
+      "oneSignalAppId": "98ed1b4b-8e0c-4827-830c-03974958721a"
     }
   }
 }

@@ -1,5 +1,6 @@
 
 import { IconSymbol } from "@/components/IconSymbol";
+import { NotificationBell } from "@/components/NotificationBell";
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "expo-router";
 import * as Haptics from 'expo-haptics';
@@ -266,7 +267,9 @@ export default function HomeScreen() {
                   color={colors.primary}
                 />
                 <Text style={styles.sectionTitle}>Notre Programme</Text>
-              </View>
+                            <NotificationBell />
+              
+</View>
               <TouchableOpacity onPress={handleProgram} activeOpacity={0.7}>
                 <Text style={styles.voirToutText}>Voir tout</Text>
               </TouchableOpacity>

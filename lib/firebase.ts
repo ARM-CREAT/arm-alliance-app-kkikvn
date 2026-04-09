@@ -2,6 +2,43 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 
 export { firestore };
 
+export type ArmMessageDoc = {
+  id: string;
+  title: string;
+  content: string;
+  image_url?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Subscribe to real-time ARM messages from Firestore.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToArmMessages(
+  onUpdate: (messages: ArmMessageDoc[]) => void,
+  onError?: (error: Error) => void
+) {
+  console.log('[Firebase] Subscribing to arm_messages collection');
+  return firestore()
+    .collection('arm_messages')
+    .orderBy('created_at', 'desc')
+    .onSnapshot(
+      (snapshot) => {
+        console.log('[Firebase] arm_messages snapshot received, count:', snapshot.docs.length);
+        const messages: ArmMessageDoc[] = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<ArmMessageDoc, 'id'>),
+        }));
+        onUpdate(messages);
+      },
+      (error) => {
+        console.error('[Firebase] arm_messages snapshot error:', error.code, error.message);
+        if (onError) onError(error);
+      }
+    );
+}
+
 export type MemberDoc = {
   id: string;
   first_name: string;

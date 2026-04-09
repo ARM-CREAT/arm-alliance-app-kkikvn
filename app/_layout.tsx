@@ -18,6 +18,7 @@ import { WidgetProvider } from "@/contexts/WidgetContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AdminAuthProvider, useAdminAuth } from "@/contexts/AdminAuthContext";
 import { LocalizationProvider } from "@/contexts/LocalizationContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 import { useFonts } from "expo-font";
 import { colors } from "@/styles/commonStyles";
 import { Modal } from "@/components/ui/Modal";
@@ -98,6 +99,7 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <LocalizationProvider>
           <AuthProvider>
+        <NotificationProvider>
             <AdminAuthProvider>
               <WidgetProvider>
                 <ThemeProvider value={ARMTheme}>
@@ -298,7 +300,8 @@ export default function RootLayout() {
                 </ThemeProvider>
               </WidgetProvider>
             </AdminAuthProvider>
-          </AuthProvider>
+          </NotificationProvider>
+        </AuthProvider>
         </LocalizationProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>

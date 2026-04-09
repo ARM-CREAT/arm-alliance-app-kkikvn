@@ -276,6 +276,7 @@ export default function AdminDashboardScreen() {
             <Text style={styles.sectionTitle}>Gestion</Text>
             <View style={styles.grid}>
               {[
+                { path: '/admin/arm-messages', label: 'Messages ARM', icon: '📢' },
                 { path: '/admin/leadership', label: 'Direction', icon: '👤' },
                 { path: '/admin/membership-stats', label: 'Stats', icon: '📊' },
                 { path: '/admin/contacts', label: 'Contacts', icon: '📞' },
