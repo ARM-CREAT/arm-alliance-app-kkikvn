@@ -38,7 +38,7 @@ export function subscribeTomembers(
         onUpdate(members);
       },
       (error) => {
-        console.log('[Firebase] Members snapshot error:', error);
+        console.error('[Firebase] Members snapshot error:', error.code, error.message);
         if (onError) onError(error);
       }
     );

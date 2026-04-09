@@ -87,18 +87,20 @@ export default function CotisationScreen() {
 
   const loadHistory = useCallback(async () => {
     console.log('[Cotisation] GET /api/cotisations/my-history');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await authenticatedGet<{ cotisations: Cotisation[] }>('/api/cotisations/my-history', { signal: controller.signal } as any);
-      clearTimeout(timeoutId);
-      const list = response?.cotisations ?? [];
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Délai dépassé. Vérifiez votre connexion internet.')), 20000)
+      );
+      const fetchPromise = authenticatedGet<{ cotisations: Cotisation[] } | Cotisation[]>('/api/cotisations/my-history');
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      const list: Cotisation[] = Array.isArray(response)
+        ? response
+        : (response as { cotisations: Cotisation[] })?.cotisations ?? [];
       console.log('[Cotisation] Historique chargé:', list.length, 'éléments');
       setHistory(list);
       setIsAuthenticated(true);
     } catch (error: any) {
-      clearTimeout(timeoutId);
-      console.error('[Cotisation] Erreur historique:', error.message);
+      console.error('[Cotisation] Erreur chargement historique:', error.message);
       const msg: string = error?.message ?? '';
       if (
         msg.includes('token') ||

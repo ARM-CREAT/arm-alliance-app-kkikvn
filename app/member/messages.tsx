@@ -51,17 +51,19 @@ export default function MemberMessagesScreen() {
   const loadMessages = useCallback(async () => {
     console.log('[MemberMessages] GET /api/messages/my-messages');
     setError(null);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await authenticatedGet<{ messages: Message[] }>('/api/messages/my-messages', { signal: controller.signal } as any);
-      clearTimeout(timeoutId);
-      const list = response?.messages ?? (Array.isArray(response) ? response : []);
-      console.log('[MemberMessages] Messages loaded:', list.length);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Délai dépassé. Vérifiez votre connexion internet.')), 20000)
+      );
+      const fetchPromise = authenticatedGet<{ messages: Message[] } | Message[]>('/api/messages/my-messages');
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      const list: Message[] = Array.isArray(response)
+        ? response
+        : (response as { messages: Message[] })?.messages ?? [];
+      console.log('[MemberMessages] Messages chargés:', list.length, 'éléments');
       setMessages(list);
     } catch (err: any) {
-      clearTimeout(timeoutId);
-      console.error('[MemberMessages] Error loading messages:', err);
+      console.error('[MemberMessages] Erreur chargement messages:', err.message);
       const msg: string = err?.message ?? '';
       if (
         msg.includes('token') ||
@@ -72,8 +74,6 @@ export default function MemberMessagesScreen() {
       ) {
         setMessages([]);
         setError('Veuillez vous connecter pour accéder à vos messages.');
-      } else if (err?.name === 'AbortError') {
-        setError('Délai dépassé. Vérifiez votre connexion internet.');
       } else {
         setError(msg || 'Impossible de charger les messages.');
       }
