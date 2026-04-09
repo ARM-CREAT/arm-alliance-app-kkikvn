@@ -27,8 +27,7 @@ export default function MemberSuccessScreen() {
 
   const handleGoHome = () => {
     console.log('[MemberSuccess] Bouton "Retour à l\'accueil" appuyé');
-    router.dismissAll();
-    router.replace('/(tabs)/(home)');
+    router.replace('/(tabs)');
   };
 
   return (

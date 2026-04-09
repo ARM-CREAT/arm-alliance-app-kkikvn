@@ -113,10 +113,11 @@ export default function RegisterScreen() {
     if (email.trim()) payload.email = email.trim();
     if (commune.trim()) payload.address = commune.trim();
     if (region.trim()) payload.region = region.trim();
+    if (profession.trim()) payload.profession = profession.trim();
     if (dateOfBirth.trim()) payload.date_of_birth = dateOfBirth.trim();
     if (gender) payload.gender = gender;
 
-    console.log('[Register] POST /api/members/register', JSON.stringify(payload));
+    console.log('[Register] POST /api/members/register payload:', JSON.stringify(payload));
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -136,7 +137,7 @@ export default function RegisterScreen() {
 
       if (!response.ok) {
         const text = await response.text();
-        console.log('[Register] Erreur HTTP', response.status, text);
+        console.error('[Register] Erreur HTTP', response.status, text);
 
         if (response.status === 409) {
           let dupMemberNumber = '';
@@ -147,11 +148,12 @@ export default function RegisterScreen() {
             dupFullName = json.member_name ?? json.full_name ?? '';
             console.log('[Register] 409 PHONE_EXISTS — membre existant:', dupMemberNumber, dupFullName);
           } catch {
-            console.log('[Register] 409 — impossible de parser la réponse');
+            console.error('[Register] 409 — impossible de parser la réponse JSON:', text);
           }
           setDuplicateMemberNumber(dupMemberNumber);
           setDuplicateFullName(dupFullName);
           setDuplicateModal(true);
+          setLoading(false);
           return;
         }
 
@@ -160,30 +162,36 @@ export default function RegisterScreen() {
           const json = JSON.parse(text);
           message = json.message || json.error || message;
         } catch {
-          message = text || message;
+          if (text && text.length < 300) message = text;
         }
+        console.error('[Register] Message d\'erreur affiché:', message);
         setErrorBanner(message);
+        setLoading(false);
         return;
       }
 
       const data = await response.json();
       console.log('[Register] Inscription réussie:', JSON.stringify(data));
 
-      router.push({
+      const membershipNumber = data.membership_number ?? data.member_number ?? '';
+      const memberFullName = data.member_name ?? data.full_name ?? fullName.trim();
+      console.log('[Register] Navigation vers /member/success, numéro:', membershipNumber);
+
+      router.replace({
         pathname: '/member/success',
         params: {
-          membership_number: data.membership_number ?? data.member_number ?? '',
-          full_name: data.member_name ?? data.full_name ?? fullName.trim(),
+          membership_number: membershipNumber,
+          full_name: memberFullName,
         },
       });
     } catch (err: unknown) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('[Register] Requête annulée (timeout 30s)');
+        console.error('[Register] Requête annulée (timeout 30s)');
         setErrorBanner('La requête a expiré. Vérifiez votre connexion et réessayez.');
       } else {
         const message = err instanceof Error ? err.message : String(err);
-        console.log('[Register] Erreur réseau:', message);
+        console.error('[Register] Erreur réseau:', message, err);
         setErrorBanner('Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
       }
     } finally {

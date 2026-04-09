@@ -49,12 +49,19 @@ export default function RecoverScreen() {
 
       if (!response.ok) {
         const text = await response.text();
-        console.log('[Recover] Erreur HTTP', response.status, text);
-        throw new Error(`Erreur ${response.status}`);
+        console.error('[Recover] Erreur HTTP', response.status, text);
+        let errMsg = `Erreur ${response.status}`;
+        try {
+          const json = JSON.parse(text);
+          errMsg = json.message || json.error || errMsg;
+        } catch {
+          if (text && text.length < 300) errMsg = text;
+        }
+        throw new Error(errMsg);
       }
 
       const data = await response.json();
-      console.log('[Recover] Membre trouvé:', data.member_number);
+      console.log('[Recover] Membre trouvé:', data.member_number, JSON.stringify(data));
 
       router.push({
         pathname: '/member/card',
@@ -62,7 +69,7 @@ export default function RecoverScreen() {
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.log('[Recover] Erreur:', message);
+      console.error('[Recover] Erreur:', message, err);
       setError(message || 'Erreur de connexion. Vérifiez votre connexion internet.');
     } finally {
       setLoading(false);
