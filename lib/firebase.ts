@@ -1,6 +1,45 @@
-import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+let db: any;
+let firebase: any;
 
-export { firestore };
+try {
+  const firebaseApp = require('@react-native-firebase/app').default;
+  const firestore = require('@react-native-firebase/firestore').default;
+  firebase = firebaseApp;
+  db = firestore();
+} catch (e) {
+  console.warn('[Firebase] Native module not available (Expo Go) — using mock');
+
+  const mockDoc = (): any => ({
+    get: () => Promise.resolve({ exists: false, data: () => null, id: 'mock' }),
+    set: () => Promise.resolve(),
+    update: () => Promise.resolve(),
+    delete: () => Promise.resolve(),
+    onSnapshot: (cb: any) => {
+      cb({ exists: false, data: () => null });
+      return () => {};
+    },
+    collection: (name: string) => mockCollection(name),
+  });
+
+  const mockCollection = (name: string): any => ({
+    doc: (_id?: string) => mockDoc(),
+    add: () => Promise.resolve({ id: 'mock' }),
+    get: () => Promise.resolve({ docs: [], empty: true, forEach: () => {} }),
+    where: () => mockCollection(name),
+    orderBy: () => mockCollection(name),
+    limit: () => mockCollection(name),
+    onSnapshot: (cb: any) => {
+      cb({ docs: [], empty: true, forEach: () => {} });
+      return () => {};
+    },
+  });
+
+  db = { collection: mockCollection };
+  firebase = { apps: [] };
+}
+
+export { db, firebase };
+export default firebase;
 
 export type ArmMessageDoc = {
   id: string;
@@ -20,20 +59,20 @@ export function subscribeToArmMessages(
   onError?: (error: Error) => void
 ) {
   console.log('[Firebase] Subscribing to arm_messages collection');
-  return firestore()
+  return db
     .collection('arm_messages')
     .orderBy('created_at', 'desc')
     .onSnapshot(
-      (snapshot) => {
+      (snapshot: any) => {
         console.log('[Firebase] arm_messages snapshot received, count:', snapshot.docs.length);
-        const messages: ArmMessageDoc[] = snapshot.docs.map((doc) => ({
+        const messages: ArmMessageDoc[] = snapshot.docs.map((doc: any) => ({
           id: doc.id,
           ...(doc.data() as Omit<ArmMessageDoc, 'id'>),
         }));
         onUpdate(messages);
       },
-      (error) => {
-        console.error('[Firebase] arm_messages snapshot error:', error.code, error.message);
+      (error: Error) => {
+        console.error('[Firebase] arm_messages snapshot error:', error.message);
         if (onError) onError(error);
       }
     );
@@ -62,20 +101,20 @@ export function subscribeTomembers(
   onError?: (error: Error) => void
 ) {
   console.log('[Firebase] Subscribing to members collection');
-  return firestore()
+  return db
     .collection('members')
     .orderBy('created_at', 'desc')
     .onSnapshot(
-      (snapshot) => {
+      (snapshot: any) => {
         console.log('[Firebase] Members snapshot received, count:', snapshot.docs.length);
-        const members: MemberDoc[] = snapshot.docs.map((doc) => ({
+        const members: MemberDoc[] = snapshot.docs.map((doc: any) => ({
           id: doc.id,
           ...(doc.data() as Omit<MemberDoc, 'id'>),
         }));
         onUpdate(members);
       },
-      (error) => {
-        console.error('[Firebase] Members snapshot error:', error.code, error.message);
+      (error: Error) => {
+        console.error('[Firebase] Members snapshot error:', error.message);
         if (onError) onError(error);
       }
     );
@@ -86,7 +125,7 @@ export function subscribeTomembers(
  */
 export async function syncMemberToFirestore(member: MemberDoc): Promise<void> {
   console.log('[Firebase] Syncing member to Firestore:', member.id);
-  await firestore()
+  await db
     .collection('members')
     .doc(member.id)
     .set({ ...member, updated_at: new Date().toISOString() }, { merge: true });

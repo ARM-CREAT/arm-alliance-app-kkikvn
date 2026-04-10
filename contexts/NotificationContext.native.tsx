@@ -4,15 +4,7 @@
  * Provides push notification management for Expo + React Native apps.
  * Reads OneSignal App ID from app.json (expo.extra) automatically.
  *
- * Supports:
- * - Native iOS/Android via OneSignal SDK
- * - Permission management
- * - Notification event handling
- * - User ID linking for targeted notifications
- *
- * SETUP:
- * 1. Wrap your app with <NotificationProvider> inside <AuthProvider>
- * 2. Run: npx expo install onesignal-expo-plugin react-native-onesignal && npx expo prebuild
+ * Falls back to no-op stubs when running in Expo Go (native module unavailable).
  */
 
 import React, {
@@ -24,10 +16,9 @@ import React, {
   ReactNode,
 } from "react";
 import { Platform } from "react-native";
-import { OneSignal, NotificationWillDisplayEvent } from "react-native-onesignal";
 import Constants from "expo-constants";
 
-// Import auth hook for user targeting (validated at setup time)
+// Import auth hook for user targeting
 import { useAuth } from "./AuthContext";
 
 // Read App ID from app.json (expo.extra)
@@ -36,6 +27,20 @@ const ONESIGNAL_APP_ID = extra.oneSignalAppId || "";
 
 // Check if running on web
 const isWeb = Platform.OS === "web";
+
+// Safely import OneSignal — will throw in Expo Go where native module is absent
+let OneSignal: any = null;
+let NotificationWillDisplayEvent: any = null;
+let oneSignalAvailable = false;
+
+try {
+  const onesignal = require("react-native-onesignal");
+  OneSignal = onesignal.OneSignal;
+  NotificationWillDisplayEvent = onesignal.NotificationWillDisplayEvent;
+  oneSignalAvailable = true;
+} catch (e) {
+  console.warn("[OneSignal] Native module not available (Expo Go) — notifications disabled");
+}
 
 interface NotificationContextType {
   /** Whether the user has granted notification permission */
@@ -65,8 +70,6 @@ interface NotificationProviderProps {
 }
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
-  // Get user from auth context for notification targeting
-  // Safe: handles different auth context shapes (Better Auth, Supabase, etc.)
   const auth = useAuth() as Record<string, unknown> | null;
   const session = auth?.session as Record<string, unknown> | undefined;
   const user = (auth?.user ?? session?.user ?? null) as { id?: string } | null;
@@ -78,7 +81,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
   // Initialize OneSignal on mount
   useEffect(() => {
-    if (isWeb) {
+    if (isWeb || !oneSignalAvailable) {
       setLoading(false);
       return;
     }
@@ -93,22 +96,17 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     }
 
     try {
-      // Initialize OneSignal
       OneSignal.initialize(ONESIGNAL_APP_ID);
 
       if (__DEV__) {
         console.log("[OneSignal] Initialized with App ID:", ONESIGNAL_APP_ID.substring(0, 8) + "...");
       }
 
-      // Check current permission status
       const permissionStatus = OneSignal.Notifications.hasPermission();
       setHasPermission(permissionStatus);
 
-      // Listen for notification events
-      const foregroundHandler = (event: NotificationWillDisplayEvent) => {
-        // Display the notification
+      const foregroundHandler = (event: any) => {
         event.getNotification().display();
-
         const notification = event.getNotification();
         setLastNotification({
           title: notification.title,
@@ -118,7 +116,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       };
       OneSignal.Notifications.addEventListener("foregroundWillDisplay", foregroundHandler);
 
-      // Listen for permission changes
       const permissionHandler = (granted: boolean) => {
         setHasPermission(granted);
         setPermissionDenied(!granted);
@@ -138,7 +135,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
   // Sync OneSignal external user ID with authenticated user
   useEffect(() => {
-    if (isWeb || !ONESIGNAL_APP_ID) return;
+    if (isWeb || !oneSignalAvailable || !ONESIGNAL_APP_ID) return;
 
     try {
       if (user?.id) {
@@ -155,7 +152,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   }, [user?.id]);
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
-    if (isWeb) return false;
+    if (isWeb || !oneSignalAvailable) return false;
 
     try {
       const granted = await OneSignal.Notifications.requestPermission(true);
@@ -169,7 +166,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   }, []);
 
   const sendTag = useCallback((key: string, value: string) => {
-    if (isWeb) return;
+    if (isWeb || !oneSignalAvailable) return;
     try {
       OneSignal.User.addTag(key, value);
     } catch (error) {
@@ -178,7 +175,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   }, []);
 
   const deleteTag = useCallback((key: string) => {
-    if (isWeb) return;
+    if (isWeb || !oneSignalAvailable) return;
     try {
       OneSignal.User.removeTag(key);
     } catch (error) {
@@ -204,16 +201,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   );
 }
 
-/**
- * Hook to access notification state and methods.
- *
- * @example
- * const { hasPermission, requestPermission } = useNotifications();
- *
- * if (!hasPermission) {
- *   return <Button onPress={requestPermission}>Enable Notifications</Button>;
- * }
- */
 export function useNotifications() {
   const context = useContext(NotificationContext);
   if (context === undefined) {
