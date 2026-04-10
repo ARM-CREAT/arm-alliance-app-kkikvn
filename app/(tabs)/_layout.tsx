@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { View } from 'react-native';
 import { Stack } from 'expo-router';
@@ -7,7 +6,7 @@ import FloatingTabBar, { TabBarItem } from '@/components/FloatingTabBar';
 const TABS: TabBarItem[] = [
   {
     name: '(home)',
-    route: '/(tabs)/(home)/',
+    route: '/(tabs)/(home)',
     icon: 'home',
     label: 'Accueil',
   },
