@@ -7,7 +7,7 @@ import FloatingTabBar, { TabBarItem } from '@/components/FloatingTabBar';
 const TABS: TabBarItem[] = [
   {
     name: '(home)',
-    route: '/(tabs)/(home)/',
+    route: '/(tabs)/(home)',
     icon: 'home',
     label: 'Accueil',
   },

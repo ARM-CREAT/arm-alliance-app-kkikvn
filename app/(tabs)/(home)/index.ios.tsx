@@ -1,8 +1,7 @@
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Stack } from 'expo-router';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { useRouter, Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
