@@ -4,17 +4,6 @@ import { getLocales } from 'expo-localization';
 import { translations, Language } from '@/constants/translations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Create i18n instance
-const i18n = new I18n(translations);
-
-// Set default language
-i18n.defaultLocale = 'fr';
-i18n.enableFallback = true;
-
-// Get device locale
-const deviceLocale = getLocales()[0];
-const deviceLanguage = deviceLocale?.languageCode || 'fr';
-
 // Map device language to supported languages
 const languageMap: Record<string, Language> = {
   'fr': 'fr',
@@ -24,8 +13,25 @@ const languageMap: Record<string, Language> = {
   'ar': 'ar',
 };
 
-// Set initial locale based on device or default to French
-i18n.locale = languageMap[deviceLanguage] || 'fr';
+// Create i18n instance — guarded so a bad translations shape never crashes at import time
+let i18n: I18n;
+try {
+  i18n = new I18n(translations);
+  i18n.defaultLocale = 'fr';
+  i18n.enableFallback = true;
+
+  // Get device locale
+  const locales = getLocales();
+  const deviceLocale = locales[0];
+  const deviceLanguage = deviceLocale?.languageCode || 'fr';
+  i18n.locale = languageMap[deviceLanguage] || 'fr';
+} catch (e) {
+  console.error('[i18n] Failed to initialise i18n instance:', e);
+  i18n = new I18n({});
+  i18n.defaultLocale = 'fr';
+  i18n.enableFallback = true;
+  i18n.locale = 'fr';
+}
 
 // Load saved language preference
 export const loadLanguagePreference = async (): Promise<Language> => {

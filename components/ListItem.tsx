@@ -1,47 +1,61 @@
 import React from "react";
 import * as Haptics from "expo-haptics";
-import { Pressable, StyleSheet, useColorScheme, View, Text } from "react-native";
-import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-import Animated, {
-  configureReanimatedLogger,
-  FadeIn,
-  SharedValue,
-  useAnimatedStyle,
-} from "react-native-reanimated";
-import Reanimated from "react-native-reanimated";
+import { Pressable, StyleSheet, useColorScheme, View, Text, Platform, Animated as RNAnimated } from "react-native";
 import { appleRed, borderColor } from "@/constants/Colors";
-import { IconCircle } from "./IconCircle";
 import { IconSymbol } from "./IconSymbol";
 
-configureReanimatedLogger({ strict: false });
+// react-native-reanimated and gesture-handler are native-only — guard against web crash
+let Animated: any = { View: RNAnimated.View };
+let FadeIn: any = undefined;
+let useAnimatedStyle: any = () => ({});
+let ReanimatedSwipeable: any = null;
+if (Platform.OS !== "web") {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Reanimated = require("react-native-reanimated");
+    Animated = Reanimated.default ?? Reanimated;
+    FadeIn = Reanimated.FadeIn;
+    useAnimatedStyle = Reanimated.useAnimatedStyle;
+  } catch { /* ignore */ }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    ReanimatedSwipeable = require("react-native-gesture-handler/ReanimatedSwipeable").default;
+  } catch { /* ignore */ }
+}
+
+function RightAction({ drag, listId }: { drag: any; listId: string }) {
+  const styleAnimation = useAnimatedStyle(() => ({
+    transform: [{ translateX: (drag?.value ?? 0) + 200 }],
+  }));
+
+  return (
+    <Pressable
+      onPress={() => {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+        console.log("[ListItem] Delete pressed for:", listId);
+      }}
+    >
+      <Animated.View style={[styleAnimation, styles.rightAction]}>
+        <IconSymbol ios_icon_name="trash.fill" android_material_icon_name="delete" size={24} color="white" />
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 export default function ListItem({ listId }: { listId: string }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
-  const RightAction = (
-    prog: SharedValue<number>,
-    drag: SharedValue<number>
-  ) => {
-    const styleAnimation = useAnimatedStyle(() => ({
-      transform: [{ translateX: drag.value + 200 }],
-    }));
-
+  // On web, render a simple non-swipeable list item
+  if (Platform.OS === "web" || !ReanimatedSwipeable) {
     return (
-      <Pressable
-        onPress={() => {
-          if (process.env.EXPO_OS === "ios") {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          }
-          console.log("delete");
-        }}
-      >
-        <Reanimated.View style={[styleAnimation, styles.rightAction]}>
-          <IconSymbol ios_icon_name="trash.fill" android_material_icon_name="delete" size={24} color="white" />
-        </Reanimated.View>
-      </Pressable>
+      <View style={styles.listItemContainer}>
+        <Text style={[styles.listItemText, { color: isDark ? "#FFFFFF" : "#000000" }]}>{listId}</Text>
+      </View>
     );
-  };
+  }
 
   return (
     <Animated.View entering={FadeIn}>
@@ -50,14 +64,13 @@ export default function ListItem({ listId }: { listId: string }) {
         friction={2}
         enableTrackpadTwoFingerGesture
         rightThreshold={40}
-        renderRightActions={RightAction}
+        renderRightActions={(_prog: any, drag: any) => <RightAction drag={drag} listId={listId} />}
         overshootRight={false}
         enableContextMenu
       >
         <View style={styles.listItemContainer}>
           <Text style={[styles.listItemText, { color: isDark ? "#FFFFFF" : "#000000" }]}>{listId}</Text>
         </View>
-
       </ReanimatedSwipeable>
     </Animated.View>
   );

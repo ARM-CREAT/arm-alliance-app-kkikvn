@@ -110,12 +110,13 @@ export default function AdminMediaScreen() {
       const result = await response.json();
       console.log('[AdminMedia] Upload successful:', result);
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showModal('Succès', 'Fichier téléchargé avec succès!', 'success');
+
       await loadMedia();
     } catch (error: any) {
       console.error('[AdminMedia] Upload error:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showModal('Erreur', error.message || 'Échec du téléchargement.', 'error');
     } finally {
       setUploading(false);
@@ -124,7 +125,7 @@ export default function AdminMediaScreen() {
 
   const handlePickImage = async () => {
     console.log('[AdminMedia] User tapped Photo/Vidéo upload button');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
@@ -153,7 +154,7 @@ export default function AdminMediaScreen() {
 
   const handlePickDocument = async () => {
     console.log('[AdminMedia] User tapped Document upload button');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -184,7 +185,7 @@ export default function AdminMediaScreen() {
     const url = getMediaUrl(media);
     try {
       await Clipboard.setStringAsync(url);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showModal('Copié', 'URL copiée dans le presse-papiers!', 'success');
     } catch (err) {
       console.error('[AdminMedia] Clipboard error:', err);
@@ -194,7 +195,7 @@ export default function AdminMediaScreen() {
 
   const handleDelete = (media: MediaFile) => {
     console.log('[AdminMedia] User tapped Supprimer for media:', media.id, media.fileName);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       'Supprimer le fichier',
       `Êtes-vous sûr de vouloir supprimer "${media.fileName}" ?`,
@@ -209,7 +210,7 @@ export default function AdminMediaScreen() {
               await apiDelete(`/api/media/${media.id}`);
               console.log('[AdminMedia] Media deleted successfully:', media.id);
               setMediaFiles(prev => prev.filter(m => m.id !== media.id));
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error: any) {
               console.error('[AdminMedia] Delete error:', error);
               showModal('Erreur', error.message || 'Impossible de supprimer le fichier.', 'error');

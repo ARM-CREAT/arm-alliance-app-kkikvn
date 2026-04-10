@@ -63,11 +63,8 @@ export default function AdminConferencesScreen() {
   const [saving, setSaving] = useState(false);
 
   const checkAuth = useCallback(async () => {
-    const password = await AsyncStorage.getItem('admin_password');
-    if (!password) {
-      router.replace('/admin/login');
-    }
-  }, [router]);
+    // Auth is handled by the admin layout guard — no redirect needed here
+  }, []);
 
   const getAdminHeaders = async () => {
     const password = await AsyncStorage.getItem('admin_password');
@@ -109,9 +106,8 @@ export default function AdminConferencesScreen() {
   }, [fetchConferences]);
 
   useEffect(() => {
-    checkAuth();
     loadData();
-  }, [checkAuth, loadData]);
+  }, [loadData]);
 
   const openCreate = () => {
     console.log('[Admin Conferences] Open create modal');

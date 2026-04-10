@@ -72,40 +72,121 @@ function openOAuthPopup(provider: string): Promise<string> {
   });
 }
 
+// Wraps a promise with a timeout — rejects after `ms` milliseconds
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Prevent re-entrant calls to fetchUser from setting loading=true again
+  const isFetchingRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
 
   useEffect(() => {
-    fetchUser();
+    isMountedRef.current = true;
+
+    // Hard safety net: no matter what, unblock after 3s
+    const safetyTimer = setTimeout(() => {
+      console.warn("[AuthContext] Safety timer fired — forcing loading=false");
+      if (isMountedRef.current) setLoading(false);
+    }, 3000);
+
+    initAuth().finally(() => {
+      clearTimeout(safetyTimer);
+    });
 
     // Listen for deep links (e.g. from social auth redirects)
-    const subscription = Linking.addEventListener("url", (event) => {
+    const subscription = Linking.addEventListener("url", (_event) => {
       console.log("Deep link received, refreshing user session");
-      // Allow time for the client to process the token if needed
-      setTimeout(() => fetchUser(), 500);
+      setTimeout(() => fetchUserSilent(), 500);
     });
 
     // POLLING: Refresh session every 5 minutes to keep SecureStore token in sync
-    // This prevents 401 errors when the session token rotates
     const intervalId = setInterval(() => {
       console.log("Auto-refreshing user session to sync token...");
-      fetchUser();
-    }, 5 * 60 * 1000); // 5 minutes
+      fetchUserSilent();
+    }, 5 * 60 * 1000);
 
     return () => {
+      isMountedRef.current = false;
       subscription.remove();
       clearInterval(intervalId);
+      clearTimeout(safetyTimer);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchUser = async () => {
+  // Initial auth load — only called once at mount
+  const initAuth = async () => {
+    console.log("[AuthContext] initAuth started");
     try {
-      setLoading(true);
-      const session = await authClient.getSession();
+      const session = await withTimeout(authClient.getSession(), 2500);
+      if (!isMountedRef.current) return;
       if (session?.data?.user) {
         setUser(session.data.user as User);
-        // Sync token to SecureStore for utils/api.ts
+        if (session.data.session?.token) {
+          await setBearerToken(session.data.session.token);
+        }
+      } else {
+        setUser(null);
+        await clearAuthTokens();
+      }
+    } catch (error) {
+      console.error("[AuthContext] initAuth failed:", error);
+      if (isMountedRef.current) setUser(null);
+    } finally {
+      console.log("[AuthContext] initAuth complete — setting loading=false");
+      if (isMountedRef.current) setLoading(false);
+    }
+  };
+
+  // Silent refresh — never touches loading state (used for polling & deep links)
+  const fetchUserSilent = async () => {
+    try {
+      const session = await withTimeout(authClient.getSession(), 5000);
+      if (!isMountedRef.current) return;
+      if (session?.data?.user) {
+        setUser(session.data.user as User);
+        if (session.data.session?.token) {
+          await setBearerToken(session.data.session.token);
+        }
+      } else {
+        setUser(null);
+        await clearAuthTokens();
+      }
+    } catch (error) {
+      console.error("Silent session refresh failed:", error);
+    }
+  };
+
+  const fetchUser = async () => {
+    // Guard against re-entrant calls that would flip loading=true again
+    if (isFetchingRef.current) {
+      console.log("[AuthContext] fetchUser skipped — already in progress");
+      return;
+    }
+    isFetchingRef.current = true;
+    console.log("[AuthContext] fetchUser called");
+
+    const safetyTimer = setTimeout(() => {
+      console.warn("[AuthContext] fetchUser safety timer — forcing loading=false");
+      if (isMountedRef.current) setLoading(false);
+      isFetchingRef.current = false;
+    }, 3000);
+
+    try {
+      setLoading(true);
+      const session = await withTimeout(authClient.getSession(), 2500);
+      if (!isMountedRef.current) return;
+      if (session?.data?.user) {
+        setUser(session.data.user as User);
         if (session.data.session?.token) {
           await setBearerToken(session.data.session.token);
         }
@@ -115,9 +196,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
-      setUser(null);
+      if (isMountedRef.current) setUser(null);
     } finally {
-      setLoading(false);
+      clearTimeout(safetyTimer);
+      isFetchingRef.current = false;
+      if (isMountedRef.current) setLoading(false);
     }
   };
 

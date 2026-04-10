@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { colors } from '@/styles/commonStyles';
 
 function AdminGuard() {
@@ -10,9 +10,6 @@ function AdminGuard() {
   const segments = useSegments();
   const didMountRef = useRef(false);
 
-  // On every render, check if we are still inside the admin section.
-  // If the user navigated outside /admin/* while the layout is still mounted,
-  // auto-logout so they must re-authenticate next time.
   useEffect(() => {
     const isInAdmin = segments[0] === 'admin';
 
@@ -54,10 +51,8 @@ function AdminGuard() {
   );
 }
 
+// AdminAuthProvider is already mounted in the root _layout.tsx.
+// This layout just adds the route guard on top of it.
 export default function AdminLayout() {
-  return (
-    <AdminAuthProvider>
-      <AdminGuard />
-    </AdminAuthProvider>
-  );
+  return <AdminGuard />;
 }

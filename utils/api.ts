@@ -1,8 +1,10 @@
 
 import Constants from "expo-constants";
 import { Platform } from "react-native";
-import * as SecureStore from "expo-secure-store";
 import { BEARER_TOKEN_KEY } from "@/lib/auth";
+
+// expo-secure-store is native-only — never import it at top level on web.
+// We require() it lazily inside platform-guarded branches below.
 
 /**
  * Backend URL is configured in app.json under expo.extra.backendUrl
@@ -67,6 +69,8 @@ export const getBearerToken = async (): Promise<string | null> => {
     if (Platform.OS === "web") {
       return localStorage.getItem(BEARER_TOKEN_KEY);
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const SecureStore = require("expo-secure-store");
       return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
     }
   } catch (error) {

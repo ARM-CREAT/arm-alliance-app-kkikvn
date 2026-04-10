@@ -44,11 +44,8 @@ export default function AdminAppSettingsScreen() {
   const [error, setError] = useState('');
 
   const checkAuth = useCallback(async () => {
-    const password = await AsyncStorage.getItem('admin_password');
-    if (!password) {
-      router.replace('/admin/login');
-    }
-  }, [router]);
+    // Auth is handled by the admin layout guard — no redirect needed here
+  }, []);
 
   const getAdminHeaders = async () => {
     const password = await AsyncStorage.getItem('admin_password');
@@ -84,14 +81,13 @@ export default function AdminAppSettingsScreen() {
   }, []);
 
   useEffect(() => {
-    checkAuth();
     const load = async () => {
       setLoading(true);
       await fetchSettings();
       setLoading(false);
     };
     load();
-  }, [checkAuth, fetchSettings]);
+  }, [fetchSettings]);
 
   const handleSave = async () => {
     console.log('[Admin AppSettings] PUT /api/admin/settings');

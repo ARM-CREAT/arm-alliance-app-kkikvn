@@ -50,7 +50,12 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    recheck();
+    // Safety net: never block on AsyncStorage for more than 2s
+    const safetyTimer = setTimeout(() => {
+      console.warn('[AdminAuthContext] Safety timer fired — forcing isChecking=false');
+      setIsChecking(false);
+    }, 2000);
+    recheck().finally(() => clearTimeout(safetyTimer));
   }, [recheck]);
 
   return (

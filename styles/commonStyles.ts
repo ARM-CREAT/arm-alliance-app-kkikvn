@@ -9,7 +9,7 @@ export const colors = {
   accent: '#F5C518',         // Jaune/or Mali
   accentMuted: '#FEF9E7',    // Jaune très clair
   background: '#F7FAF8',     // Blanc cassé teinté vert
-  backgroundAlt: '#EEF5F1',  // Vert très clair
+  backgroundAlt: '#EEF5F1',  // Vert très clair (alias for surfaceSecondary)
   surface: '#FFFFFF',
   surfaceSecondary: '#EEF5F1',
   text: '#0D2818',           // Noir très foncé teinté vert

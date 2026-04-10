@@ -13,3 +13,5 @@ export const BodyScrollView = forwardRef<any, ScrollViewProps>((props, ref) => {
     />
   );
 });
+
+export default BodyScrollView;

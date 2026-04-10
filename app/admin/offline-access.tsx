@@ -233,7 +233,7 @@ export default function OfflineAccessScreen() {
     console.log('Offline Access - Enabling offline access');
     
     if (!password.trim()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showModal('Erreur', 'Veuillez entrer le mot de passe administrateur.', 'error');
       return;
     }
@@ -253,7 +253,7 @@ export default function OfflineAccessScreen() {
       setSavedPassword(trimmedPassword);
       setPassword('');
       
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       showModal(
         'Accès hors ligne activé',
@@ -262,7 +262,7 @@ export default function OfflineAccessScreen() {
       );
     } catch (error: any) {
       console.error('Offline Access - Failed to enable offline access:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showModal('Erreur', 'Impossible d\'activer l\'accès hors ligne.', 'error');
     } finally {
       setLoading(false);
@@ -279,18 +279,18 @@ export default function OfflineAccessScreen() {
       setOfflineAccessEnabled(false);
       setSavedPassword(null);
       
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showModal('Accès hors ligne désactivé', 'L\'accès administrateur hors ligne a été désactivé.', 'info');
     } catch (error) {
       console.error('Offline Access - Failed to disable offline access:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showModal('Erreur', 'Impossible de désactiver l\'accès hors ligne.', 'error');
     }
   };
 
   const handleAccessDashboard = () => {
     console.log('Offline Access - Accessing dashboard in offline mode');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push('/admin/dashboard');
   };
 
