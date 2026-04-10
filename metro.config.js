@@ -5,25 +5,7 @@ const fs = require('fs');
 
 const config = getDefaultConfig(__dirname);
 
-// NOTE: unstable_enablePackageExports is intentionally disabled.
-// When enabled, Metro uses each package's "exports" field and can bypass
-// extraNodeModules, causing the npm:expo-constants@^55 aliases in package.json
-// to resolve to the wrong SDK-55 package instead of our local stubs.
-// config.resolver.unstable_enablePackageExports = true;
-
-// Override broken package.json aliases (npm:expo-constants@^55 stubs) with
-// the correct local stub files so the web preview doesn't white-screen.
-config.resolver.extraNodeModules = {
-  ...config.resolver.extraNodeModules,
-  '@react-native-community/datetimepicker': path.resolve(__dirname, 'stubs/datetimepicker-stub.js'),
-  '@react-native-firebase/app': path.resolve(__dirname, 'stubs/firebase-app-stub.js'),
-  '@react-native-firebase/firestore': path.resolve(__dirname, 'stubs/firebase-firestore-stub.js'),
-  'onesignal-expo-plugin': path.resolve(__dirname, 'stubs/onesignal-stub.js'),
-  'react-native-maps': path.resolve(__dirname, 'stubs/maps-stub.js'),
-  'react-native-onesignal': path.resolve(__dirname, 'stubs/onesignal-stub.js'),
-  'react-native-qrcode-svg': path.resolve(__dirname, 'stubs/qrcode-stub.js'),
-  'react-native-worklets': path.resolve(__dirname, 'stubs/worklets-stub.js'),
-};
+config.resolver.unstable_enablePackageExports = true;
 
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
