@@ -6,7 +6,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
 import { BACKEND_URL } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   View,
   Text,
@@ -20,6 +19,7 @@ import {
   Platform,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
+
 
 interface EventItem {
   id: string;
@@ -51,11 +51,10 @@ export default function AdminEventsScreen() {
   const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [formTitle, setFormTitle] = useState('');
   const [formDescription, setFormDescription] = useState('');
-  const [formDate, setFormDate] = useState(new Date());
   const [formLocation, setFormLocation] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [formDateText, setFormDateText] = useState('');
+  const [formTimeText, setFormTimeText] = useState('');
 
   const loadEvents = useCallback(async () => {
     console.log('[AdminEvents] GET /api/events');
@@ -107,10 +106,10 @@ export default function AdminEventsScreen() {
     setEditingEvent(null);
     setFormTitle('');
     setFormDescription('');
-    setFormDate(new Date());
+    const now = new Date();
+    setFormDateText(now.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }));
+    setFormTimeText(now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
     setFormLocation('');
-    setShowDatePicker(false);
-    setShowTimePicker(false);
     setShowEditModal(true);
   };
 
@@ -121,10 +120,10 @@ export default function AdminEventsScreen() {
     setFormTitle(item.title || '');
     setFormDescription(item.description || '');
     const d = new Date(item.date);
-    setFormDate(isNaN(d.getTime()) ? new Date() : d);
+    const parsed = isNaN(d.getTime()) ? new Date() : d;
+    setFormDateText(parsed.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }));
+    setFormTimeText(parsed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
     setFormLocation(item.location || '');
-    setShowDatePicker(false);
-    setShowTimePicker(false);
     setShowEditModal(true);
   };
 
@@ -144,7 +143,16 @@ export default function AdminEventsScreen() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSubmitting(true);
 
-    const isoDate = formDate.toISOString();
+    // Parse DD/MM/YYYY + HH:MM into ISO string
+    const dateParts = formDateText.split('/');
+    const timeParts = formTimeText.split(':');
+    const day = parseInt(dateParts[0] || '1', 10);
+    const month = parseInt(dateParts[1] || '1', 10) - 1;
+    const year = parseInt(dateParts[2] || String(new Date().getFullYear()), 10);
+    const hours = parseInt(timeParts[0] || '0', 10);
+    const minutes = parseInt(timeParts[1] || '0', 10);
+    const parsedDate = new Date(year, month, day, hours, minutes);
+    const isoDate = isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString();
     console.log('[AdminEvents] Date ISO:', isoDate);
 
     const eventData: Record<string, string> = {
@@ -354,66 +362,25 @@ export default function AdminEventsScreen() {
                   numberOfLines={4}
                 />
 
-                <Text style={styles.inputLabel}>Date *</Text>
-                <TouchableOpacity
-                  style={styles.dateButton}
-                  onPress={() => {
-                    console.log('[AdminEvents] User tapped date picker button');
-                    setShowTimePicker(false);
-                    setShowDatePicker(true);
-                  }}
-                >
-                  <IconSymbol ios_icon_name="calendar" android_material_icon_name="event" size={18} color={colors.primary} />
-                  <Text style={styles.dateButtonText}>
-                    {formDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.inputLabel}>Heure *</Text>
-                <TouchableOpacity
-                  style={styles.dateButton}
-                  onPress={() => {
-                    console.log('[AdminEvents] User tapped time picker button');
-                    setShowDatePicker(false);
-                    setShowTimePicker(true);
-                  }}
-                >
-                  <IconSymbol ios_icon_name="clock" android_material_icon_name="schedule" size={18} color={colors.primary} />
-                  <Text style={styles.dateButtonText}>
-                    {formDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                </TouchableOpacity>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={formDate}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                    onChange={(_event, selected) => {
-                      if (Platform.OS !== 'ios') setShowDatePicker(false);
-                      if (selected) {
-                        const updated = new Date(formDate);
-                        updated.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
-                        console.log('[AdminEvents] Date selected:', updated.toISOString());
-                        setFormDate(updated);
-                      }
-                    }}
-                  />
-                )}
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={formDate}
-                    mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(_event, selected) => {
-                      if (Platform.OS !== 'ios') setShowTimePicker(false);
-                      if (selected) {
-                        const updated = new Date(formDate);
-                        updated.setHours(selected.getHours(), selected.getMinutes());
-                        console.log('[AdminEvents] Time selected:', updated.toISOString());
-                        setFormDate(updated);
-                      }
-                    }}
-                  />
-                )}
+                <Text style={styles.inputLabel}>Date * (JJ/MM/AAAA)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formDateText}
+                  onChangeText={setFormDateText}
+                  placeholder="ex: 25/12/2025"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                />
+
+                <Text style={styles.inputLabel}>Heure * (HH:MM)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formTimeText}
+                  onChangeText={setFormTimeText}
+                  placeholder="ex: 14:30"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                />
 
                 <Text style={styles.inputLabel}>Lieu</Text>
                 <TextInput

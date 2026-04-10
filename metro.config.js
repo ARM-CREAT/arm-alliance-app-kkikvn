@@ -12,6 +12,22 @@ config.cacheStores = [
     new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
   ];
 
+// Stub out native-only packages so the app works in Expo Go
+const NATIVE_PACKAGE_STUBS = {
+  '@react-native-firebase/app': `${__dirname}/stubs/firebase-app-stub.js`,
+  '@react-native-firebase/firestore': `${__dirname}/stubs/firebase-firestore-stub.js`,
+  'react-native-onesignal': `${__dirname}/stubs/onesignal-stub.js`,
+  'onesignal-expo-plugin': `${__dirname}/stubs/onesignal-stub.js`,
+  '@react-native-community/datetimepicker': `${__dirname}/stubs/datetimepicker-stub.js`,
+};
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (NATIVE_PACKAGE_STUBS[moduleName]) {
+    return { filePath: NATIVE_PACKAGE_STUBS[moduleName], type: 'sourceFile' };
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 // Custom server middleware to receive console.log messages from the app
 const LOG_FILE_PATH = path.join(__dirname, '.natively', 'app_console.log');
 const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB
