@@ -8,7 +8,7 @@ const mockDoc = (id = 'mock'): any => ({
   update: () => Promise.resolve(),
   delete: () => Promise.resolve(),
   onSnapshot: (cb: any) => {
-    cb({ exists: false, data: () => null, id });
+    try { cb({ exists: false, data: () => null, id }); } catch(e) {}
     return () => {};
   },
   collection: (name: string) => mockCollection(name),
@@ -17,12 +17,12 @@ const mockDoc = (id = 'mock'): any => ({
 const mockCollection = (name: string): any => ({
   doc: (id?: string) => mockDoc(id),
   add: () => Promise.resolve({ id: 'mock' }),
-  get: () => Promise.resolve({ docs: [], empty: true, forEach: () => {} }),
+  get: () => Promise.resolve({ docs: [], empty: true, forEach: () => {}, size: 0 }),
   where: () => mockCollection(name),
   orderBy: () => mockCollection(name),
   limit: () => mockCollection(name),
   onSnapshot: (cb: any) => {
-    cb({ docs: [], empty: true, forEach: () => {} });
+    try { cb({ docs: [], empty: true, forEach: () => {}, size: 0 }); } catch(e) {}
     return () => {};
   },
 });

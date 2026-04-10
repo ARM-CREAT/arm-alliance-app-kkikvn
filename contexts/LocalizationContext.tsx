@@ -53,22 +53,27 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const loadPreferences = async () => {
       console.log('[Localization] Loading preferences from AsyncStorage...');
-      const [savedLanguage, savedCurrency] = await Promise.all([
-        loadLanguagePreference(),
-        loadCurrencyPreference(),
-      ]);
+      try {
+        const [savedLanguage, savedCurrency] = await Promise.all([
+          loadLanguagePreference(),
+          loadCurrencyPreference(),
+        ]);
 
-      setLanguageState(savedLanguage);
-      setCurrencyState(savedCurrency);
+        setLanguageState(savedLanguage);
+        setCurrencyState(savedCurrency);
 
-      // Apply RTL layout if Arabic
-      const shouldBeRTL = savedLanguage === 'ar';
-      if (I18nManager.isRTL !== shouldBeRTL) {
-        I18nManager.forceRTL(shouldBeRTL);
+        // Apply RTL layout if Arabic
+        const shouldBeRTL = savedLanguage === 'ar';
+        if (I18nManager.isRTL !== shouldBeRTL) {
+          I18nManager.forceRTL(shouldBeRTL);
+        }
+
+        console.log('[Localization] Preferences loaded:', { language: savedLanguage, currency: savedCurrency });
+      } catch (err) {
+        console.error('[Localization] Failed to load preferences:', err);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
-      console.log('[Localization] Preferences loaded:', { language: savedLanguage, currency: savedCurrency });
     };
 
     loadPreferences();

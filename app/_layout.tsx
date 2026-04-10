@@ -68,7 +68,7 @@ function AdminAutoLogout() {
 }
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
+  const [loaded, fontError] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
 
@@ -77,10 +77,11 @@ export default function RootLayout() {
   const [showNetworkModal, setShowNetworkModal] = useState(false);
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    if (loaded || fontError) {
+      // Hide splash screen whether fonts loaded successfully or not
+      SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loaded]);
+  }, [loaded, fontError]);
 
   useEffect(() => {
     if (isConnected === false) {
@@ -90,7 +91,7 @@ export default function RootLayout() {
     }
   }, [isConnected]);
 
-  if (!loaded) {
+  if (!loaded && !fontError) {
     return null;
   }
 

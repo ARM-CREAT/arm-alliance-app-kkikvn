@@ -1,12 +1,11 @@
 const React = require('react');
 const { TextInput } = require('react-native');
-/* eslint-disable react/prop-types */
-const DateTimePicker = (props) => {
+const DateTimePicker = ({ value, onChange, style }) => {
   return React.createElement(TextInput, {
-    value: props.value ? new Date(props.value).toLocaleDateString() : '',
-    onChangeText: () => {},
-    placeholder: 'Date',
-    style: props.style,
+    value: value ? (value instanceof Date ? value.toLocaleDateString('fr-FR') : String(value)) : '',
+    onChangeText: (text) => { if (onChange) onChange({ type: 'set' }, new Date(text)); },
+    placeholder: 'JJ/MM/AAAA',
+    style: [{ borderWidth: 1, borderColor: '#ccc', padding: 8, borderRadius: 6 }, style],
   });
 };
 module.exports = DateTimePicker;

@@ -7,32 +7,40 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = true;
 
-// Use turborepo to restore the cache when possible
 config.cacheStores = [
-    new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
-  ];
+  new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
+];
 
-// Stub out native-only packages so the app works in Expo Go
-const NATIVE_PACKAGE_STUBS = {
-  '@react-native-firebase/app': `${__dirname}/stubs/firebase-app-stub.js`,
-  '@react-native-firebase/firestore': `${__dirname}/stubs/firebase-firestore-stub.js`,
-  'react-native-onesignal': `${__dirname}/stubs/onesignal-stub.js`,
-  'onesignal-expo-plugin': `${__dirname}/stubs/onesignal-stub.js`,
-  '@react-native-community/datetimepicker': `${__dirname}/stubs/datetimepicker-stub.js`,
+// Redirect any remaining native package imports to safe stubs
+const STUBS = {
+  '@react-native-firebase/app': path.join(__dirname, 'stubs/firebase-app-stub.js'),
+  '@react-native-firebase/firestore': path.join(__dirname, 'stubs/firebase-firestore-stub.js'),
+  'react-native-onesignal': path.join(__dirname, 'stubs/onesignal-stub.js'),
+  'onesignal-expo-plugin': path.join(__dirname, 'stubs/onesignal-stub.js'),
+  '@react-native-community/datetimepicker': path.join(__dirname, 'stubs/datetimepicker-stub.js'),
+  'react-native-maps': path.join(__dirname, 'stubs/maps-stub.js'),
+  'react-native-qrcode-svg': path.join(__dirname, 'stubs/qrcode-stub.js'),
+  'react-native-worklets': path.join(__dirname, 'stubs/worklets-stub.js'),
 };
 
-config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (NATIVE_PACKAGE_STUBS[moduleName]) {
-    return { filePath: NATIVE_PACKAGE_STUBS[moduleName], type: 'sourceFile' };
-  }
-  return context.resolveRequest(context, moduleName, platform);
+const originalResolveRequest = config.resolver?.resolveRequest;
+config.resolver = {
+  ...config.resolver,
+  resolveRequest: (context, moduleName, platform) => {
+    if (STUBS[moduleName]) {
+      return { filePath: STUBS[moduleName], type: 'sourceFile' };
+    }
+    if (originalResolveRequest) {
+      return originalResolveRequest(context, moduleName, platform);
+    }
+    return context.resolveRequest(context, moduleName, platform);
+  },
 };
 
 // Custom server middleware to receive console.log messages from the app
 const LOG_FILE_PATH = path.join(__dirname, '.natively', 'app_console.log');
-const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_LOG_SIZE = 5 * 1024 * 1024;
 
-// Ensure log directory exists
 const logDir = path.dirname(LOG_FILE_PATH);
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
@@ -41,22 +49,11 @@ if (!fs.existsSync(logDir)) {
 config.server = config.server || {};
 config.server.enhanceMiddleware = (middleware) => {
   return (req, res, next) => {
-
-    // DEBUG: log all metro bundle requests
-    if (req.url.includes('index.bundle') || req.url.includes('.bundle')) {
-      console.log('[METRO] Request:', req.method, req.url);
-    }
-
-    // Extract pathname without query params for matching
     const pathname = req.url.split('?')[0];
 
-    // Handle log receiving endpoint
     if (pathname === '/natively-logs' && req.method === 'POST') {
-      console.log('[NATIVELY-LOGS] Received POST request');
       let body = '';
-      req.on('data', chunk => {
-        body += chunk.toString();
-      });
+      req.on('data', chunk => { body += chunk.toString(); });
       req.on('end', () => {
         try {
           const logData = JSON.parse(body);
@@ -65,46 +62,28 @@ config.server.enhanceMiddleware = (middleware) => {
           const message = logData.message || '';
           const source = logData.source || '';
           const platform = logData.platform || '';
-
           const platformInfo = platform ? `[${platform}] ` : '';
           const sourceInfo = source ? `[${source}] ` : '';
           const logLine = `[${timestamp}] ${platformInfo}[${level}] ${sourceInfo}${message}\n`;
-
-          console.log('[NATIVELY-LOGS] Writing log:', logLine.trim());
-
-          // Rotate log file if too large
           try {
             if (fs.existsSync(LOG_FILE_PATH) && fs.statSync(LOG_FILE_PATH).size > MAX_LOG_SIZE) {
               const content = fs.readFileSync(LOG_FILE_PATH, 'utf8');
               const lines = content.split('\n');
               fs.writeFileSync(LOG_FILE_PATH, lines.slice(lines.length / 2).join('\n'));
             }
-          } catch (e) {
-            // Ignore rotation errors
-          }
-
+          } catch (e) {}
           fs.appendFileSync(LOG_FILE_PATH, logLine);
-
-          res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          });
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
           res.end('{"status":"ok"}');
         } catch (e) {
-          console.error('[NATIVELY-LOGS] Error processing log:', e.message);
-          res.writeHead(500, {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          });
+          res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
           res.end(JSON.stringify({ error: e.message }));
         }
       });
       return;
     }
 
-    // Handle CORS preflight for log endpoint
     if (pathname === '/natively-logs' && req.method === 'OPTIONS') {
-      console.log('[NATIVELY-LOGS] Received OPTIONS preflight request');
       res.writeHead(200, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -115,7 +94,6 @@ config.server.enhanceMiddleware = (middleware) => {
       return;
     }
 
-    // Pass through to default Metro middleware
     return middleware(req, res, next);
   };
 };

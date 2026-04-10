@@ -3,6 +3,7 @@
  *
  * No-op implementation. Push notifications require a custom dev build.
  * This stub keeps the app working in Expo Go without any native modules.
+ * Interface matches NotificationContext.tsx exactly so both platforms are compatible.
  */
 
 import React, { createContext, useContext, useCallback, ReactNode } from "react";
@@ -21,7 +22,16 @@ interface NotificationContextType {
   lastNotification: Record<string, unknown> | null;
 }
 
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+const NotificationContext = createContext<NotificationContextType>({
+  hasPermission: false,
+  permissionDenied: false,
+  loading: false,
+  isWeb,
+  requestPermission: async () => false,
+  sendTag: () => {},
+  deleteTag: () => {},
+  lastNotification: null,
+});
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const requestPermission = useCallback(async (): Promise<boolean> => {
@@ -51,9 +61,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 }
 
 export function useNotifications() {
-  const context = useContext(NotificationContext);
-  if (context === undefined) {
-    throw new Error("useNotifications must be used within NotificationProvider");
-  }
-  return context;
+  return useContext(NotificationContext);
 }
+
+export default NotificationContext;

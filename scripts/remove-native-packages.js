@@ -11,6 +11,9 @@ const toRemove = [
   'react-native-onesignal',
   'onesignal-expo-plugin',
   '@react-native-community/datetimepicker',
+  'react-native-maps',
+  'react-native-qrcode-svg',
+  'react-native-worklets',
 ];
 
 let changed = false;
@@ -19,6 +22,8 @@ for (const pkg_name of toRemove) {
     delete pkg.dependencies[pkg_name];
     changed = true;
     console.log(`Removed: ${pkg_name}`);
+  } else {
+    console.log(`Not found (already removed?): ${pkg_name}`);
   }
 }
 

@@ -1,5 +1,1 @@
-module.exports = {
-  default: { apps: [], initializeApp: () => ({}), app: () => ({}) },
-  apps: [],
-  initializeApp: () => ({}),
-};
+module.exports = { default: { apps: [], initializeApp: () => ({}) }, apps: [], initializeApp: () => ({}) };

@@ -26,6 +26,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function openOAuthPopup(provider: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    // window is only available on web
+    if (typeof window === 'undefined') {
+      reject(new Error("OAuth popup not available on this platform."));
+      return;
+    }
     const popupUrl = `${window.location.origin}/auth-popup?provider=${provider}`;
     const width = 500;
     const height = 600;
