@@ -88,6 +88,42 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
+  // GET /api/members/count - Get total count of members (public)
+  fastify.get(
+    '/api/members/count',
+    {
+      schema: {
+        description: 'Get total count of registered members',
+        tags: ['members'],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              count: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      app.logger.info('Fetching member count');
+
+      try {
+        const result = await app.db
+          .select({ count: count() })
+          .from(schema.members);
+
+        const memberCount = result[0]?.count || 0;
+        app.logger.info({ count: memberCount }, 'Member count retrieved');
+
+        return { count: memberCount };
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch member count');
+        return { count: 0 };
+      }
+    }
+  );
+
   // POST /api/members/register - Register new member (NO admin password required)
   fastify.post<{ Body: RegisterMemberBody }>(
     '/api/members/register',
