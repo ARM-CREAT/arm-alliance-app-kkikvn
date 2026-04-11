@@ -74,6 +74,7 @@ export default function RootLayout() {
                       <Stack.Screen name="member/cotisation" options={{ headerShown: false }} />
                       <Stack.Screen name="member/messages" options={{ headerShown: false }} />
                       <Stack.Screen name="member/election-results" options={{ headerShown: false }} />
+                      <Stack.Screen name="member/recover" options={{ headerShown: false }} />
                       <Stack.Screen name="ideology" options={{ headerShown: false }} />
                       <Stack.Screen name="auth" options={{ headerShown: false }} />
                       <Stack.Screen name="auth-callback" options={{ headerShown: false }} />

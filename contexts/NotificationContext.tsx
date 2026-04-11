@@ -52,3 +52,5 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 export function useNotifications() {
   return useContext(NotificationContext);
 }
+
+export default NotificationContext;
