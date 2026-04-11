@@ -1,6 +1,5 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { I18nManager } from 'react-native';
+import { I18nManager, Platform } from 'react-native';
 import { Language, translations } from '@/constants/translations';
 import { Currency } from '@/utils/currency';
 import {
@@ -24,10 +23,6 @@ interface LocalizationContextType {
 
 const LocalizationContext = createContext<LocalizationContextType | undefined>(undefined);
 
-/**
- * Translate a key using the given language, with optional interpolation.
- * Falls back to French, then to the key itself.
- */
 function translate(
   lang: Language,
   key: string,
@@ -48,18 +43,19 @@ function translate(
 export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<Language>('fr');
   const [currency, setCurrencyState] = useState<Currency>('XOF');
-  // Start as false — app renders immediately; preferences load in background
+  // Always false — never block render
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Safety net: never block rendering for more than 500ms waiting on AsyncStorage
+    // On web: use localStorage-backed AsyncStorage (lib/async-storage.ts) — safe to call
+    // but skip I18nManager.forceRTL which is native-only
     const safetyTimer = setTimeout(() => {
       console.warn('[Localization] Safety timer fired — forcing loading=false');
       setLoading(false);
     }, 500);
 
     const loadPreferences = async () => {
-      console.log('[Localization] Loading preferences from AsyncStorage...');
+      console.log('[Localization] Loading preferences...');
       try {
         const [savedLanguage, savedCurrency] = await Promise.all([
           loadLanguagePreference(),
@@ -69,10 +65,12 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
         setLanguageState(savedLanguage);
         setCurrencyState(savedCurrency);
 
-        // Apply RTL layout if Arabic
-        const shouldBeRTL = savedLanguage === 'ar';
-        if (I18nManager.isRTL !== shouldBeRTL) {
-          I18nManager.forceRTL(shouldBeRTL);
+        // RTL only applies on native
+        if (Platform.OS !== 'web') {
+          const shouldBeRTL = savedLanguage === 'ar';
+          if (I18nManager.isRTL !== shouldBeRTL) {
+            I18nManager.forceRTL(shouldBeRTL);
+          }
         }
 
         console.log('[Localization] Preferences loaded:', { language: savedLanguage, currency: savedCurrency });
@@ -94,11 +92,11 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
     await saveLanguagePreference(lang);
     setLanguageState(lang);
 
-    // Apply RTL layout if Arabic
-    const shouldBeRTL = lang === 'ar';
-    if (I18nManager.isRTL !== shouldBeRTL) {
-      I18nManager.forceRTL(shouldBeRTL);
-      // Note: full RTL layout requires app restart, but text direction updates immediately
+    if (Platform.OS !== 'web') {
+      const shouldBeRTL = lang === 'ar';
+      if (I18nManager.isRTL !== shouldBeRTL) {
+        I18nManager.forceRTL(shouldBeRTL);
+      }
     }
   }, []);
 
@@ -108,8 +106,6 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
     setCurrencyState(curr);
   }, []);
 
-  // Reactive translate function — re-created when language changes so all
-  // consumers that call t() automatically get the new strings on re-render.
   const t = useCallback(
     (key: string, params?: Record<string, string | number>) => {
       return translate(language, key, params);

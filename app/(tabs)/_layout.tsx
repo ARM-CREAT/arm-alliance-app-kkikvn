@@ -20,7 +20,7 @@ const TABS: TabBarItem[] = [
 
 export default function TabLayout() {
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, position: 'relative' }}>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(home)" />
         <Stack.Screen name="profile" />

@@ -15,7 +15,7 @@ const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefin
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  // Start as false — app renders immediately; check resolves in background
+  // Always false — never block render
   const [isChecking, setIsChecking] = useState(false);
 
   const recheck = useCallback(async () => {

@@ -49,7 +49,7 @@ function TabIndicator({
   React.useEffect(() => {
     Animated.spring(translateX, {
       toValue: tabWidth * activeTabIndex,
-      useNativeDriver: true,
+      useNativeDriver: false,
       damping: 20,
       stiffness: 120,
       mass: 1,

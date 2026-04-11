@@ -1,6 +1,4 @@
 
-import { I18n } from 'i18n-js';
-import { getLocales } from 'expo-localization';
 import { translations, Language } from '@/constants/translations';
 import AsyncStorage from '@/lib/async-storage';
 
@@ -13,25 +11,51 @@ const languageMap: Record<string, Language> = {
   'ar': 'ar',
 };
 
-// Create i18n instance — guarded so a bad translations shape never crashes at import time
-let i18n: I18n;
-try {
-  i18n = new I18n(translations);
-  i18n.defaultLocale = 'fr';
-  i18n.enableFallback = true;
+// Minimal i18n shim — avoids importing i18n-js and expo-localization at module
+// evaluation time, both of which can crash the web module graph.
+type I18nShim = {
+  locale: string;
+  defaultLocale: string;
+  enableFallback: boolean;
+  t: (key: string, params?: Record<string, string | number>) => string;
+};
 
-  // Get device locale
-  const locales = getLocales();
-  const deviceLocale = locales[0];
-  const deviceLanguage = deviceLocale?.languageCode || 'fr';
-  i18n.locale = languageMap[deviceLanguage] || 'fr';
-} catch (e) {
-  console.error('[i18n] Failed to initialise i18n instance:', e);
-  i18n = new I18n({});
-  i18n.defaultLocale = 'fr';
-  i18n.enableFallback = true;
-  i18n.locale = 'fr';
+function makeI18n(): I18nShim {
+  let _locale = 'fr';
+
+  // Safely detect device locale — never throws
+  try {
+    // expo-localization is web-safe but guard anyway
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getLocales } = require('expo-localization');
+    const locales = getLocales?.() ?? [];
+    const deviceLanguage = locales[0]?.languageCode ?? 'fr';
+    _locale = languageMap[deviceLanguage] ?? 'fr';
+  } catch {
+    _locale = 'fr';
+  }
+
+  return {
+    get locale() { return _locale; },
+    set locale(v: string) { _locale = v; },
+    defaultLocale: 'fr',
+    enableFallback: true,
+    t(key: string, params?: Record<string, string | number>): string {
+      const lang = (_locale as Language) in translations ? (_locale as Language) : 'fr';
+      const dict = translations[lang] as Record<string, string>;
+      const fallback = translations['fr'] as Record<string, string>;
+      let str = dict?.[key] ?? fallback?.[key] ?? key;
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+        });
+      }
+      return str;
+    },
+  };
 }
+
+const i18n = makeI18n();
 
 // Load saved language preference
 export const loadLanguagePreference = async (): Promise<Language> => {

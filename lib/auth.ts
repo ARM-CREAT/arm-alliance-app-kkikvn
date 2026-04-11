@@ -5,58 +5,37 @@ const API_URL = Constants.expoConfig?.extra?.backendUrl || 'https://q4thnc8stu4b
 
 export const BEARER_TOKEN_KEY = 'alliance-arm_bearer_token';
 
-// Fallback stub — used when better-auth is unavailable or broken
+// Fallback stub — used on web and when better-auth is unavailable
 const authClientStub = {
   getSession: async () => ({ data: null, error: null }),
   signIn: {
-    email: async () => ({ data: null, error: { message: 'Auth unavailable' } }),
-    social: async () => ({ data: null, error: { message: 'Auth unavailable' } }),
+    email: async (_opts: any) => ({ data: null, error: { message: 'Auth unavailable' } }),
+    social: async (_opts: any) => ({ data: null, error: { message: 'Auth unavailable' } }),
   },
   signUp: {
-    email: async () => ({ data: null, error: { message: 'Auth unavailable' } }),
+    email: async (_opts: any) => ({ data: null, error: { message: 'Auth unavailable' } }),
   },
   signOut: async () => ({ data: null, error: null }),
 } as any;
 
 function buildAuthClient() {
-  try {
-    if (Platform.OS === 'web') {
-      // Ensure we're in a real browser environment
-      if (typeof window === 'undefined' || typeof document === 'undefined') {
-        console.warn('[auth] Not in browser environment, using stub');
-        return authClientStub;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createAuthClient } = require('better-auth/react');
-      const client = createAuthClient({
-        baseURL: API_URL,
-        fetchOptions: {
-          credentials: 'include' as const,
-          auth: {
-            type: 'Bearer' as const,
-            token: () => {
-              try { return localStorage.getItem(BEARER_TOKEN_KEY) || ''; } catch { return ''; }
-            },
-          },
-        },
-      });
-      // Validate the client actually works by checking it has the expected shape
-      if (!client || typeof client.getSession !== 'function') {
-        console.warn('[auth] createAuthClient returned invalid client, using stub');
-        return authClientStub;
-      }
-      return client;
-    }
+  // On web: always return stub — better-auth is stubbed by Metro to prevent
+  // the deep dependency chain from crashing the web module graph.
+  if (Platform.OS === 'web') {
+    console.log('[auth] Web platform — using stub auth client');
+    return authClientStub;
+  }
 
-    // Native path
+  // Native path — use the real better-auth/expo client
+  try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createAuthClient } = require('better-auth/react');
+    const { createAuthClient } = require('better-auth/client');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { expoClient } = require('@better-auth/expo/client');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const SecureStore = require('expo-secure-store');
 
-    return createAuthClient({
+    const client = createAuthClient({
       baseURL: API_URL,
       plugins: [
         expoClient({
@@ -66,6 +45,8 @@ function buildAuthClient() {
         }),
       ],
     });
+    console.log('[auth] Native auth client built successfully');
+    return client;
   } catch (e) {
     console.warn('[auth] buildAuthClient failed, using stub:', e);
     return authClientStub;

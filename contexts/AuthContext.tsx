@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { Platform } from "react-native";
-import * as Linking from "expo-linking";
-import { authClient, setBearerToken, clearAuthTokens } from "@/lib/auth";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
+import { authClient, setBearerToken, clearAuthTokens } from '@/lib/auth';
 
 interface User {
   id: string;
@@ -26,9 +26,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function openOAuthPopup(provider: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    // window is only available on web
     if (typeof window === 'undefined') {
-      reject(new Error("OAuth popup not available on this platform."));
+      reject(new Error('OAuth popup not available on this platform.'));
       return;
     }
     const popupUrl = `${window.location.origin}/auth-popup?provider=${provider}`;
@@ -39,40 +38,39 @@ function openOAuthPopup(provider: string): Promise<string> {
 
     const popup = window.open(
       popupUrl,
-      "oauth-popup",
+      'oauth-popup',
       `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
     );
 
     if (!popup) {
-      reject(new Error("Failed to open popup. Please allow popups."));
+      reject(new Error('Failed to open popup. Please allow popups.'));
       return;
     }
 
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "oauth-success" && event.data?.token) {
-        window.removeEventListener("message", handleMessage);
+      if (event.data?.type === 'oauth-success' && event.data?.token) {
+        window.removeEventListener('message', handleMessage);
         clearInterval(checkClosed);
         resolve(event.data.token);
-      } else if (event.data?.type === "oauth-error") {
-        window.removeEventListener("message", handleMessage);
+      } else if (event.data?.type === 'oauth-error') {
+        window.removeEventListener('message', handleMessage);
         clearInterval(checkClosed);
-        reject(new Error(event.data.error || "OAuth failed"));
+        reject(new Error(event.data.error || 'OAuth failed'));
       }
     };
 
-    window.addEventListener("message", handleMessage);
+    window.addEventListener('message', handleMessage);
 
     const checkClosed = setInterval(() => {
       if (popup.closed) {
         clearInterval(checkClosed);
-        window.removeEventListener("message", handleMessage);
-        reject(new Error("Authentication cancelled"));
+        window.removeEventListener('message', handleMessage);
+        reject(new Error('Authentication cancelled'));
       }
     }, 500);
   });
 }
 
-// Wraps a promise with a timeout — rejects after `ms` milliseconds
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -84,18 +82,22 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  // Start as false — app renders immediately; auth state resolves in background
+  // Always start as false — never block render
   const [loading, setLoading] = useState(false);
-  // Prevent re-entrant calls to fetchUser from setting loading=true again
   const isFetchingRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
 
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Hard safety net: no matter what, unblock after 500ms
+    // On web: skip session check entirely — auth client is a stub
+    if (Platform.OS === 'web') {
+      console.log('[AuthContext] Web platform — skipping session check');
+      return () => { isMountedRef.current = false; };
+    }
+
     const safetyTimer = setTimeout(() => {
-      console.warn("[AuthContext] Safety timer fired — forcing loading=false");
+      console.warn('[AuthContext] Safety timer fired — forcing loading=false');
       if (isMountedRef.current) setLoading(false);
     }, 500);
 
@@ -103,15 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(safetyTimer);
     });
 
-    // Listen for deep links (e.g. from social auth redirects)
-    const subscription = Linking.addEventListener("url", (_event) => {
-      console.log("Deep link received, refreshing user session");
+    const subscription = Linking.addEventListener('url', (_event) => {
+      console.log('[AuthContext] Deep link received, refreshing user session');
       setTimeout(() => fetchUserSilent(), 500);
     });
 
-    // POLLING: Refresh session every 5 minutes to keep SecureStore token in sync
     const intervalId = setInterval(() => {
-      console.log("Auto-refreshing user session to sync token...");
+      console.log('[AuthContext] Auto-refreshing user session...');
       fetchUserSilent();
     }, 5 * 60 * 1000);
 
@@ -124,9 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initial auth load — only called once at mount
   const initAuth = async () => {
-    console.log("[AuthContext] initAuth started");
+    console.log('[AuthContext] initAuth started');
     try {
       const session = await withTimeout(authClient.getSession(), 400);
       if (!isMountedRef.current) return;
@@ -140,15 +139,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthTokens();
       }
     } catch (error) {
-      console.error("[AuthContext] initAuth failed:", error);
+      console.error('[AuthContext] initAuth failed:', error);
       if (isMountedRef.current) setUser(null);
     } finally {
-      console.log("[AuthContext] initAuth complete — setting loading=false");
+      console.log('[AuthContext] initAuth complete — setting loading=false');
       if (isMountedRef.current) setLoading(false);
     }
   };
 
-  // Silent refresh — never touches loading state (used for polling & deep links)
   const fetchUserSilent = async () => {
     try {
       const session = await withTimeout(authClient.getSession(), 5000);
@@ -163,28 +161,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthTokens();
       }
     } catch (error) {
-      console.error("Silent session refresh failed:", error);
+      console.error('[AuthContext] Silent session refresh failed:', error);
     }
   };
 
   const fetchUser = async () => {
-    // Guard against re-entrant calls that would flip loading=true again
     if (isFetchingRef.current) {
-      console.log("[AuthContext] fetchUser skipped — already in progress");
+      console.log('[AuthContext] fetchUser skipped — already in progress');
       return;
     }
     isFetchingRef.current = true;
-    console.log("[AuthContext] fetchUser called");
+    console.log('[AuthContext] fetchUser called');
 
     const safetyTimer = setTimeout(() => {
-      console.warn("[AuthContext] fetchUser safety timer — forcing loading=false");
+      console.warn('[AuthContext] fetchUser safety timer — forcing loading=false');
       if (isMountedRef.current) setLoading(false);
       isFetchingRef.current = false;
     }, 3000);
 
     try {
-      // Do NOT set loading=true here — fetchUser is called after sign-in/sign-up
-      // and we don't want to flash a loading state on the whole app
       const session = await withTimeout(authClient.getSession(), 2500);
       if (!isMountedRef.current) return;
       if (session?.data?.user) {
@@ -197,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthTokens();
       }
     } catch (error) {
-      console.error("Failed to fetch user:", error);
+      console.error('[AuthContext] Failed to fetch user:', error);
       if (isMountedRef.current) setUser(null);
     } finally {
       clearTimeout(safetyTimer);
@@ -207,69 +202,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithEmail = async (email: string, password: string) => {
-    console.log("[AuthContext] signInWithEmail called for:", email);
+    console.log('[AuthContext] signInWithEmail called for:', email);
     const result = await authClient.signIn.email({ email, password });
-    console.log("[AuthContext] signIn.email result:", JSON.stringify(result));
+    console.log('[AuthContext] signIn.email result:', JSON.stringify(result));
     if (result?.error) {
-      const msg = result.error.message || result.error.code || "Échec de la connexion";
-      console.error("[AuthContext] signIn.email error:", msg);
+      const msg = result.error.message || result.error.code || 'Échec de la connexion';
+      console.error('[AuthContext] signIn.email error:', msg);
       throw new Error(msg);
     }
     await fetchUser();
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    console.log("[AuthContext] signUpWithEmail called for:", email);
+    console.log('[AuthContext] signUpWithEmail called for:', email);
     const result = await authClient.signUp.email({ email, password, name });
-    console.log("[AuthContext] signUp.email result:", JSON.stringify(result));
+    console.log('[AuthContext] signUp.email result:', JSON.stringify(result));
     if (result?.error) {
-      const msg = result.error.message || result.error.code || "Échec de la création du compte";
-      console.error("[AuthContext] signUp.email error:", msg);
+      const msg = result.error.message || result.error.code || 'Échec de la création du compte';
+      console.error('[AuthContext] signUp.email error:', msg);
       throw new Error(msg);
     }
     await fetchUser();
   };
 
-  const signInWithSocial = async (provider: "google" | "apple" | "github") => {
+  const signInWithSocial = async (provider: 'google' | 'apple' | 'github') => {
+    console.log('[AuthContext] signInWithSocial called for provider:', provider);
     try {
-      if (Platform.OS === "web") {
+      if (Platform.OS === 'web') {
         const token = await openOAuthPopup(provider);
         await setBearerToken(token);
         await fetchUser();
       } else {
-        // Native: Use expo-linking to generate a proper deep link
-        const callbackURL = Linking.createURL("/admin/dashboard");
-        await authClient.signIn.social({
-          provider,
-          callbackURL,
-        });
-        // Note: The redirect will reload the app or be handled by deep linking.
-        // fetchUser will be called on mount or via event listener if needed.
-        // For simple flow, we might need to listen to URL events.
-        // But better-auth expo client handles the redirect and session storage?
-        // We typically need to wait or rely on fetchUser on next app load.
-        // For now, call fetchUser just in case.
+        const callbackURL = Linking.createURL('/admin/dashboard');
+        await authClient.signIn.social({ provider, callbackURL });
         await fetchUser();
       }
     } catch (error) {
-      console.error(`${provider} sign in failed:`, error);
+      console.error(`[AuthContext] ${provider} sign in failed:`, error);
       throw error;
     }
   };
 
-  const signInWithGoogle = () => signInWithSocial("google");
-  const signInWithApple = () => signInWithSocial("apple");
-  const signInWithGitHub = () => signInWithSocial("github");
+  const signInWithGoogle = () => signInWithSocial('google');
+  const signInWithApple = () => signInWithSocial('apple');
+  const signInWithGitHub = () => signInWithSocial('github');
 
   const signOut = async () => {
+    console.log('[AuthContext] signOut called');
     try {
       await authClient.signOut();
     } catch (error) {
-      console.error("Sign out failed (API):", error);
+      console.error('[AuthContext] Sign out failed (API):', error);
     } finally {
-       // Always clear local state
-       setUser(null);
-       await clearAuthTokens();
+      setUser(null);
+      await clearAuthTokens();
     }
   };
 
@@ -295,7 +281,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within AuthProvider");
+    throw new Error('useAuth must be used within AuthProvider');
   }
   return context;
 }

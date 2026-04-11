@@ -9,14 +9,37 @@ const config = getDefaultConfig(__dirname);
 // native-only entry points (which crash/hang the web preview).
 config.resolver.unstable_enablePackageExports = false;
 
+// With package exports disabled, subpath imports like 'better-auth/client' and
+// 'better-auth/react' won't resolve via the exports field. Map them explicitly
+// using direct file paths (require.resolve respects exports too, so use path.join).
+//
+// IMPORTANT: On web, better-auth/client pulls in a deep chain of @better-auth/core
+// subpaths (env, error, utils/*) plus @better-fetch/fetch and defu — many of which
+// fail to resolve with unstable_enablePackageExports=false, crashing the entire
+// module graph and hanging the web preview. We stub better-auth/client on web via
+// resolveRequest below. The extraNodeModules mappings below are for native only
+// (they are overridden by the web stub in resolveRequest).
+config.resolver.extraNodeModules = {
+  ...config.resolver.extraNodeModules,
+  'better-auth/client': path.join(__dirname, 'node_modules/better-auth/dist/client/index.mjs'),
+  'better-auth/react': path.join(__dirname, 'node_modules/better-auth/dist/client/react/index.mjs'),
+  // @better-auth/core subpaths used by better-auth/client internals
+  '@better-auth/core/utils/string': path.join(__dirname, 'node_modules/@better-auth/core/dist/utils/string.mjs'),
+  '@better-auth/core/utils/url': path.join(__dirname, 'node_modules/@better-auth/core/dist/utils/url.mjs'),
+  '@better-auth/core/utils/id': path.join(__dirname, 'node_modules/@better-auth/core/dist/utils/id.mjs'),
+  '@better-auth/core/utils/json': path.join(__dirname, 'node_modules/@better-auth/core/dist/utils/json.mjs'),
+  '@better-auth/core/utils/error-codes': path.join(__dirname, 'node_modules/@better-auth/core/dist/utils/error-codes.mjs'),
+  '@better-auth/core/env': path.join(__dirname, 'node_modules/@better-auth/core/dist/env/index.mjs'),
+  '@better-auth/core/error': path.join(__dirname, 'node_modules/@better-auth/core/dist/error/index.mjs'),
+};
+
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
-    new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
-  ];
+  new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
+];
 
 // ---------------------------------------------------------------------------
 // Stub redirects — redirect native-only packages to web-safe stubs.
-// This runs for ALL platforms; stubs are designed to be no-ops on native too.
 // ---------------------------------------------------------------------------
 const STUB_DIR = path.join(__dirname, 'stubs');
 
@@ -24,8 +47,9 @@ const NATIVE_PACKAGE_STUBS = {
   // Firebase
   '@react-native-firebase/app': path.join(STUB_DIR, 'firebase-app-stub.js'),
   '@react-native-firebase/firestore': path.join(STUB_DIR, 'firebase-firestore-stub.js'),
-  // OneSignal
+  // OneSignal — both package names
   'react-native-onesignal': path.join(STUB_DIR, 'onesignal-stub.js'),
+  '@onesignal/react-native-onesignal': path.join(STUB_DIR, 'onesignal-stub.js'),
   // Date picker
   '@react-native-community/datetimepicker': path.join(STUB_DIR, 'datetimepicker-stub.js'),
   // Maps
@@ -35,6 +59,7 @@ const NATIVE_PACKAGE_STUBS = {
   // Worklets / Reanimated
   'react-native-worklets': path.join(STUB_DIR, 'worklets-stub.js'),
   'react-native-worklets-core': path.join(STUB_DIR, 'worklets-stub.js'),
+  'react-native-reanimated': path.join(STUB_DIR, 'worklets-stub.js'),
   // Gesture handler
   'react-native-gesture-handler': path.join(STUB_DIR, 'gesture-handler-stub.js'),
   // Edge to edge
@@ -61,12 +86,40 @@ const NATIVE_PACKAGE_STUBS = {
   '@react-native-async-storage/async-storage': path.join(__dirname, 'lib', 'async-storage.ts'),
 };
 
+// Packages that must be stubbed on web to prevent module-graph crashes.
+// better-auth/client pulls in @better-auth/core/env, @better-auth/core/error,
+// @better-fetch/fetch, defu, nanostores — many fail with package exports disabled.
+// Stubbing the entry point on web prevents the entire chain from being evaluated.
+// @better-auth/expo also pulls in native SecureStore — stub it on web too.
+const BETTER_AUTH_WEB_STUBS = {
+  'better-auth/client': path.join(STUB_DIR, 'better-auth-client-stub.js'),
+  'better-auth/react': path.join(STUB_DIR, 'better-auth-client-stub.js'),
+  '@better-auth/expo': path.join(STUB_DIR, 'better-auth-client-stub.js'),
+  '@better-auth/expo/client': path.join(STUB_DIR, 'better-auth-client-stub.js'),
+  // Stub the entire better-auth package on web — it pulls in server-side Node.js
+  // modules (crypto, fs, etc.) that crash the web bundler.
+  'better-auth': path.join(STUB_DIR, 'better-auth-client-stub.js'),
+};
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  // Only redirect on web platform
-  if (platform === 'web' && NATIVE_PACKAGE_STUBS[moduleName]) {
-    const stubPath = NATIVE_PACKAGE_STUBS[moduleName];
-    if (fs.existsSync(stubPath)) {
-      return { filePath: stubPath, type: 'sourceFile' };
+  if (platform === 'web') {
+    // Stub better-auth packages on web first (highest priority).
+    // Use startsWith so subpaths like 'better-auth/client/index' are also caught.
+    for (const [key, stubPath] of Object.entries(BETTER_AUTH_WEB_STUBS)) {
+      if (moduleName === key || moduleName.startsWith(key + '/')) {
+        if (fs.existsSync(stubPath)) {
+          return { filePath: stubPath, type: 'sourceFile' };
+        }
+      }
+    }
+    // Stub native-only packages on web.
+    // Use startsWith so subpaths are also caught.
+    for (const [key, stubPath] of Object.entries(NATIVE_PACKAGE_STUBS)) {
+      if (moduleName === key || moduleName.startsWith(key + '/')) {
+        if (fs.existsSync(stubPath)) {
+          return { filePath: stubPath, type: 'sourceFile' };
+        }
+      }
     }
   }
   // Fall through to default resolution
