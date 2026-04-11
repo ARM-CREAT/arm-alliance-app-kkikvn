@@ -48,14 +48,15 @@ function translate(
 export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<Language>('fr');
   const [currency, setCurrencyState] = useState<Currency>('XOF');
-  const [loading, setLoading] = useState(true);
+  // Start as false — app renders immediately; preferences load in background
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Safety net: never block rendering for more than 1.5s waiting on AsyncStorage
+    // Safety net: never block rendering for more than 500ms waiting on AsyncStorage
     const safetyTimer = setTimeout(() => {
       console.warn('[Localization] Safety timer fired — forcing loading=false');
       setLoading(false);
-    }, 1500);
+    }, 500);
 
     const loadPreferences = async () => {
       console.log('[Localization] Loading preferences from AsyncStorage...');

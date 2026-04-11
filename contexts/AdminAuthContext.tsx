@@ -15,7 +15,8 @@ const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefin
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
+  // Start as false — app renders immediately; check resolves in background
+  const [isChecking, setIsChecking] = useState(false);
 
   const recheck = useCallback(async () => {
     console.log('[AdminAuthContext] Vérification session admin...');
@@ -50,11 +51,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Safety net: never block on AsyncStorage for more than 2s
+    // Safety net: never block on AsyncStorage for more than 500ms
     const safetyTimer = setTimeout(() => {
       console.warn('[AdminAuthContext] Safety timer fired — forcing isChecking=false');
       setIsChecking(false);
-    }, 2000);
+    }, 500);
     recheck().finally(() => clearTimeout(safetyTimer));
   }, [recheck]);
 

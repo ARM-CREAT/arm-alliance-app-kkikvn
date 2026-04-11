@@ -5,7 +5,7 @@ const API_URL = Constants.expoConfig?.extra?.backendUrl || 'https://q4thnc8stu4b
 
 export const BEARER_TOKEN_KEY = 'alliance-arm_bearer_token';
 
-// Fallback stub — used when better-auth is unavailable
+// Fallback stub — used when better-auth is unavailable or broken
 const authClientStub = {
   getSession: async () => ({ data: null, error: null }),
   signIn: {
@@ -20,11 +20,15 @@ const authClientStub = {
 
 function buildAuthClient() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createAuthClient } = require('better-auth/react');
-
     if (Platform.OS === 'web') {
-      return createAuthClient({
+      // Ensure we're in a real browser environment
+      if (typeof window === 'undefined' || typeof document === 'undefined') {
+        console.warn('[auth] Not in browser environment, using stub');
+        return authClientStub;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createAuthClient } = require('better-auth/react');
+      const client = createAuthClient({
         baseURL: API_URL,
         fetchOptions: {
           credentials: 'include' as const,
@@ -36,8 +40,17 @@ function buildAuthClient() {
           },
         },
       });
+      // Validate the client actually works by checking it has the expected shape
+      if (!client || typeof client.getSession !== 'function') {
+        console.warn('[auth] createAuthClient returned invalid client, using stub');
+        return authClientStub;
+      }
+      return client;
     }
 
+    // Native path
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createAuthClient } = require('better-auth/react');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { expoClient } = require('@better-auth/expo/client');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -59,7 +72,55 @@ function buildAuthClient() {
   }
 }
 
-export const authClient = buildAuthClient();
+// Lazily build the auth client so module evaluation never throws
+let _authClient: typeof authClientStub | null = null;
+
+function getAuthClient() {
+  if (!_authClient) {
+    _authClient = buildAuthClient();
+  }
+  return _authClient;
+}
+
+// Safe wrapper around getSession that never throws — always returns stub shape
+async function safeGetSession(): Promise<{ data: any; error: any }> {
+  try {
+    const client = getAuthClient();
+    const result = await client.getSession();
+    return result ?? { data: null, error: null };
+  } catch (e) {
+    console.warn('[auth] getSession threw, returning null session:', e);
+    return { data: null, error: null };
+  }
+}
+
+// Proxy that defers client construction until first use
+export const authClient = new Proxy({} as typeof authClientStub, {
+  get(_target, prop) {
+    // Intercept getSession to use the safe wrapper
+    if (prop === 'getSession') {
+      return safeGetSession;
+    }
+    const client = getAuthClient();
+    const value = (client as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    if (value && typeof value === 'object') {
+      // Handle nested objects like signIn.email, signUp.email
+      return new Proxy(value, {
+        get(obj, innerProp) {
+          const innerValue = obj[innerProp];
+          if (typeof innerValue === 'function') {
+            return innerValue.bind(obj);
+          }
+          return innerValue;
+        },
+      });
+    }
+    return value;
+  },
+});
 
 export async function setBearerToken(token: string) {
   if (Platform.OS === 'web') {

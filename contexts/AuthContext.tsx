@@ -84,7 +84,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Start as false — app renders immediately; auth state resolves in background
+  const [loading, setLoading] = useState(false);
   // Prevent re-entrant calls to fetchUser from setting loading=true again
   const isFetchingRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
@@ -92,11 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Hard safety net: no matter what, unblock after 3s
+    // Hard safety net: no matter what, unblock after 500ms
     const safetyTimer = setTimeout(() => {
       console.warn("[AuthContext] Safety timer fired — forcing loading=false");
       if (isMountedRef.current) setLoading(false);
-    }, 3000);
+    }, 500);
 
     initAuth().finally(() => {
       clearTimeout(safetyTimer);
@@ -127,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const initAuth = async () => {
     console.log("[AuthContext] initAuth started");
     try {
-      const session = await withTimeout(authClient.getSession(), 2500);
+      const session = await withTimeout(authClient.getSession(), 400);
       if (!isMountedRef.current) return;
       if (session?.data?.user) {
         setUser(session.data.user as User);
@@ -182,7 +183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 3000);
 
     try {
-      setLoading(true);
+      // Do NOT set loading=true here — fetchUser is called after sign-in/sign-up
+      // and we don't want to flash a loading state on the whole app
       const session = await withTimeout(authClient.getSession(), 2500);
       if (!isMountedRef.current) return;
       if (session?.data?.user) {
