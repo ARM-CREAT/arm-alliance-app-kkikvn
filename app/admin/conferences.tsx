@@ -14,9 +14,16 @@ import {
   Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@/lib/async-storage';
 import { colors } from '@/styles/commonStyles';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 import { BACKEND_URL } from '@/utils/api-helpers';
 
 interface Conference {

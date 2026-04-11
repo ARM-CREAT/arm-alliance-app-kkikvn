@@ -1,10 +1,10 @@
 import { Stack, usePathname } from 'expo-router';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import React, { useEffect, useRef } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { DefaultTheme, Theme, ThemeProvider } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { View as SafeAreaProvider } from 'react-native';
 import { WidgetProvider } from '@/contexts/WidgetContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext';
@@ -15,13 +15,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 try { SplashScreen.preventAutoHideAsync(); } catch {}
 
-let GestureHandlerRootView: any = View;
-if (Platform.OS !== 'web') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    GestureHandlerRootView = require('react-native-gesture-handler').GestureHandlerRootView;
-  } catch {}
-}
+const GestureHandlerRootView = View;
 
 const ARMTheme: Theme = {
   ...DefaultTheme,

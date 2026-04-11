@@ -1,11 +1,18 @@
 
 import { Stack } from 'expo-router';
 import { Modal } from '@/components/ui/Modal';
-import * as Haptics from 'expo-haptics';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 import React, { useState, useEffect, useCallback } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
 import { BACKEND_URL } from '@/utils/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/async-storage';
 import {
   View,
   Text,

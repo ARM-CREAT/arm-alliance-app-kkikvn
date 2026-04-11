@@ -3,7 +3,14 @@ import { colors } from '@/styles/commonStyles';
 import { Modal } from '@/components/ui/Modal';
 import { apiPost } from '@/utils/api';
 import { IconSymbol } from '@/components/IconSymbol';
-import * as Haptics from 'expo-haptics';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 import React, { useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import {

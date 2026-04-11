@@ -1,78 +1,16 @@
 import React from "react";
-import * as Haptics from "expo-haptics";
-import { Pressable, StyleSheet, useColorScheme, View, Text, Platform, Animated as RNAnimated } from "react-native";
-import { appleRed, borderColor } from "@/constants/Colors";
-import { IconSymbol } from "./IconSymbol";
-
-// react-native-reanimated and gesture-handler are native-only — guard against web crash
-let Animated: any = { View: RNAnimated.View };
-let FadeIn: any = undefined;
-let useAnimatedStyle: any = () => ({});
-let ReanimatedSwipeable: any = null;
-if (Platform.OS !== "web") {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Reanimated = require("react-native-reanimated");
-    Animated = Reanimated.default ?? Reanimated;
-    FadeIn = Reanimated.FadeIn;
-    useAnimatedStyle = Reanimated.useAnimatedStyle;
-  } catch { /* ignore */ }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    ReanimatedSwipeable = require("react-native-gesture-handler/ReanimatedSwipeable").default;
-  } catch { /* ignore */ }
-}
-
-function RightAction({ drag, listId }: { drag: any; listId: string }) {
-  const styleAnimation = useAnimatedStyle(() => ({
-    transform: [{ translateX: (drag?.value ?? 0) + 200 }],
-  }));
-
-  return (
-    <Pressable
-      onPress={() => {
-        if (Platform.OS !== "web") {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        }
-        console.log("[ListItem] Delete pressed for:", listId);
-      }}
-    >
-      <Animated.View style={[styleAnimation, styles.rightAction]}>
-        <IconSymbol ios_icon_name="trash.fill" android_material_icon_name="delete" size={24} color="white" />
-      </Animated.View>
-    </Pressable>
-  );
-}
+import { StyleSheet, useColorScheme, View, Text } from "react-native";
+import { borderColor } from "@/constants/Colors";
 
 export default function ListItem({ listId }: { listId: string }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-
-  // On web, render a simple non-swipeable list item
-  if (Platform.OS === "web" || !ReanimatedSwipeable) {
-    return (
-      <View style={styles.listItemContainer}>
-        <Text style={[styles.listItemText, { color: isDark ? "#FFFFFF" : "#000000" }]}>{listId}</Text>
-      </View>
-    );
-  }
+  const textColor = isDark ? "#FFFFFF" : "#000000";
 
   return (
-    <Animated.View entering={FadeIn}>
-      <ReanimatedSwipeable
-        key={listId}
-        friction={2}
-        enableTrackpadTwoFingerGesture
-        rightThreshold={40}
-        renderRightActions={(_prog: any, drag: any) => <RightAction drag={drag} listId={listId} />}
-        overshootRight={false}
-        enableContextMenu
-      >
-        <View style={styles.listItemContainer}>
-          <Text style={[styles.listItemText, { color: isDark ? "#FFFFFF" : "#000000" }]}>{listId}</Text>
-        </View>
-      </ReanimatedSwipeable>
-    </Animated.View>
+    <View style={styles.listItemContainer}>
+      <Text style={[styles.listItemText, { color: textColor }]}>{listId}</Text>
+    </View>
   );
 }
 

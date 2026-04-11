@@ -19,8 +19,15 @@ import { Modal } from '@/components/ui/Modal';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
 import { BACKEND_URL, getBearerToken, apiGet, apiDelete } from '@/utils/api';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 
 interface MediaFile {
   id: string;

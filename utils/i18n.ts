@@ -2,7 +2,7 @@
 import { I18n } from 'i18n-js';
 import { getLocales } from 'expo-localization';
 import { translations, Language } from '@/constants/translations';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/async-storage';
 
 // Map device language to supported languages
 const languageMap: Record<string, Language> = {

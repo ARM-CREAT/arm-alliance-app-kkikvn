@@ -16,8 +16,8 @@ import {
   Platform,
   Linking,
   ScrollView,
+  StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useNotifications } from "@/contexts/NotificationContext";
 
@@ -92,7 +92,7 @@ export default function NotificationPreferencesScreen() {
 
   if (isWeb) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: StatusBar.currentHeight || 44 }]}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.backButton}>← Back</Text>
@@ -105,12 +105,12 @@ export default function NotificationPreferencesScreen() {
             Push notifications are available in the mobile app.
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: StatusBar.currentHeight || 44 }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backButton}>← Back</Text>
@@ -176,7 +176,7 @@ export default function NotificationPreferencesScreen() {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

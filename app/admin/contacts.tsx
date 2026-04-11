@@ -14,10 +14,17 @@ import {
   Platform,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { colors } from '@/styles/commonStyles';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 import { BACKEND_URL } from '@/utils/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/async-storage';
 
 interface Contact {
   id: string;

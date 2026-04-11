@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/async-storage';
 
 export const ADMIN_AUTH_KEY = 'admin_authenticated';
 

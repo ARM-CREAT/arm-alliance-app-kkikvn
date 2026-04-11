@@ -15,8 +15,15 @@ import { Stack, useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import { BACKEND_URL } from "@/utils/api";
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 
 const GENDER_OPTIONS = [
   { label: "Homme", value: "male" },

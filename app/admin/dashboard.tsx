@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Stack, useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@/lib/async-storage';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import {
   View,
@@ -15,8 +15,15 @@ import {
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
-import * as Haptics from 'expo-haptics';
 import { BACKEND_URL } from '@/utils/api-helpers';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 
 const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'x-admin-password': 'admin123' };
 

@@ -2,16 +2,8 @@ import React from "react";
 import { StyleProp, ViewStyle, OpaqueColorValue, StyleSheet, TextStyle } from "react-native";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
-// expo-symbols requires a native build (not available in Expo Go).
-// We try to load it at runtime and fall back to MaterialIcons if unavailable.
-let SymbolView: any = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const expoSymbols = require("expo-symbols");
-  SymbolView = expoSymbols.SymbolView;
-} catch {
-  SymbolView = null;
-}
+// expo-symbols requires a native dev build — always use MaterialIcons fallback.
+const SymbolView: any = null;
 
 // Map arbitrary weight strings to valid SymbolWeight values
 const VALID_WEIGHTS = [

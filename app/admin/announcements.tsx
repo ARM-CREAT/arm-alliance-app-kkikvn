@@ -14,7 +14,14 @@ import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/styles/commonStyles';
 import { BACKEND_URL } from '@/utils/api';
-import * as Haptics from 'expo-haptics';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 
 const ADMIN_HEADERS = {
   'Content-Type': 'application/json',

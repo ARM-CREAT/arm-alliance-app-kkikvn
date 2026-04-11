@@ -41,9 +41,6 @@ module.exports = function (api) {
       ],
       ...EDITABLE_COMPONENTS,
       "@babel/plugin-proposal-export-namespace-from",
-      // react-native-reanimated/plugin must only run on native — it injects
-      // worklet code that crashes the web bundle at parse time.
-      ...(process.env.EXPO_PLATFORM === "web" ? [] : ["react-native-reanimated/plugin"]),
     ],
   };
 };

@@ -5,8 +5,8 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { PROGRAM_POINTS } from '@/constants/programData';
@@ -37,7 +37,7 @@ export default function ProgramScreen() {
     const accentColor = point.color;
 
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.container}>
         <View style={[styles.header, { backgroundColor: accentColor }]}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -76,13 +76,13 @@ export default function ProgramScreen() {
 
           <View style={{ height: 40 }} />
         </ScrollView>
-      </SafeAreaView>
+      </View>
     );
   }
 
   // List view — all 16 points
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -148,7 +148,7 @@ export default function ProgramScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

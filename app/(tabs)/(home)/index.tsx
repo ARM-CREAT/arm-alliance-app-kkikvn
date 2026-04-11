@@ -3,7 +3,6 @@ import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 const menuItems = [
@@ -50,7 +49,7 @@ export default function HomeScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.container}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.content}
@@ -105,7 +104,7 @@ export default function HomeScreen() {
             })}
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </View>
     </>
   );
 }

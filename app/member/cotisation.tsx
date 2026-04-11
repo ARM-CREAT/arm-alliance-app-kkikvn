@@ -16,7 +16,14 @@ import { Modal } from '@/components/ui/Modal';
 import { colors } from '@/styles/commonStyles';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { authenticatedPost, authenticatedGet } from '@/utils/api';
-import * as Haptics from 'expo-haptics';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 
 const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 

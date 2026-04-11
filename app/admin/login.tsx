@@ -12,8 +12,15 @@ import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
-import * as Haptics from 'expo-haptics';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 
 const ADMIN_PASSWORD = 'admin123';
 

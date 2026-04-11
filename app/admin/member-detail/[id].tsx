@@ -12,7 +12,10 @@ import {
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BACKEND_URL } from '@/utils/api-helpers';
-import * as Haptics from 'expo-haptics';
+const Haptics = {
+  notificationAsync: async (_type?: unknown) => {},
+  NotificationFeedbackType: { Success: 'success', Error: 'error', Warning: 'warning' } as const,
+};
 
 const ADMIN_HEADERS = {
   'Content-Type': 'application/json',

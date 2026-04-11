@@ -8,23 +8,14 @@ import {
   Dimensions,
   Animated,
 } from 'react-native';
+
 import { useRouter, usePathname } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useTheme } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Href } from 'expo-router';
 
-// BlurView is native-only — lazy require inside Platform guard
-let BlurView: React.ComponentType<{ intensity?: number; style?: object; children?: React.ReactNode }> | null = null;
-if (Platform.OS !== 'web') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    BlurView = require('expo-blur').BlurView;
-  } catch {
-    BlurView = null;
-  }
-}
+
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -208,27 +199,18 @@ export default function FloatingTabBar({
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+    <View style={[styles.safeArea, { paddingBottom: 34 }]}>
       <View
         style={[
           styles.container,
           { width: containerWidth, marginBottom: bottomMargin ?? 20 },
         ]}
       >
-        {BlurView ? (
-          <BlurView
-            intensity={80}
-            style={[blurContainerStyle, { borderRadius }]}
-          >
-            {tabsContent}
-          </BlurView>
-        ) : (
-          <View style={[blurContainerStyle, { borderRadius }]}>
-            {tabsContent}
-          </View>
-        )}
+        <View style={[blurContainerStyle, { borderRadius }]}>
+          {tabsContent}
+        </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
