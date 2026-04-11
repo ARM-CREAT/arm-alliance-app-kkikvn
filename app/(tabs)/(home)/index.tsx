@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const ARM_LOGO = require('../../../assets/images/e97792f8-db87-47a2-a255-29e780e8a073.jpeg');
+const ARM_LOGO = require('../../../assets/images/64266d0b-d3c9-48ba-a184-30883aa2b0fa.jpeg');
 
 const DIRECTION_MEMBERS = [
   { name: 'Lassine Diakité', role: 'Président', location: 'Spain', phone: '0034632607101' },
