@@ -1,4 +1,15 @@
 
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
+import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { Modal } from '@/components/ui/Modal';
 import { apiPost } from '@/utils/api';
@@ -11,17 +22,6 @@ const Haptics = {
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 };
-import React, { useState } from 'react';
-import { Stack, useRouter } from 'expo-router';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
 
 const styles = StyleSheet.create({
   container: {

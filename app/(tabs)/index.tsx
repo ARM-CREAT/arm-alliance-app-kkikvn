@@ -19,7 +19,7 @@ function resolveImageSource(source: string | number | ImageSourcePropType | unde
   return source as ImageSourcePropType;
 }
 
-const ARM_LOGO = require('../../../assets/images/64266d0b-d3c9-48ba-a184-30883aa2b0fa.jpeg');
+const ARM_LOGO = require('../../assets/images/64266d0b-d3c9-48ba-a184-30883aa2b0fa.jpeg');
 
 const CARD_COLORS = [
   '#1B5E20',

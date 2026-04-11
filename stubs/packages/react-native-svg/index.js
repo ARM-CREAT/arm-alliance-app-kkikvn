@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 const React = require('react');
 const { View } = require('react-native');
 const Svg = ({ children, width, height, style }) => React.createElement(View, { style: [{ width, height }, style] }, children);

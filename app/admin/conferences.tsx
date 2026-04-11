@@ -16,6 +16,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import AsyncStorage from '@/lib/async-storage';
 import { colors } from '@/styles/commonStyles';
+import { BACKEND_URL } from '@/utils/api-helpers';
 
 const Haptics = {
   impactAsync: async () => {},
@@ -24,7 +25,6 @@ const Haptics = {
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 };
-import { BACKEND_URL } from '@/utils/api-helpers';
 
 interface Conference {
   id: string;

@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 const React = require('react');
 const { TextInput } = require('react-native');
 const DateTimePicker = ({ value, onChange, style }) => {

@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 const React = require('react');
 const { View, StatusBar } = require('react-native');
 const SafeAreaView = ({ children, style, ...props }) =>

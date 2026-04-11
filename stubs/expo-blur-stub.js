@@ -1,4 +1,5 @@
 // Stub for expo-blur
+/* eslint-disable react/prop-types */
 const React = require('react');
 const { View } = require('react-native');
 

@@ -1,4 +1,5 @@
 // Stub for react-native-screens — no-op on web/preview
+/* eslint-disable react/prop-types */
 const React = require('react');
 const { View } = require('react-native');
 const Screen = ({ children, style, ...props }) => React.createElement(View, { style, ...props }, children);

@@ -1,12 +1,13 @@
 import React from 'react';
-import { View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
 import FloatingTabBar, { TabBarItem } from '@/components/FloatingTabBar';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 const TABS: TabBarItem[] = [
   {
-    name: '(home)',
-    route: '/(tabs)/(home)',
+    name: 'index',
+    route: '/(tabs)',
     icon: 'home',
     label: 'Accueil',
   },
@@ -18,14 +19,32 @@ const TABS: TabBarItem[] = [
   },
 ];
 
+function renderTabBar(_props: BottomTabBarProps) {
+  return <FloatingTabBar tabs={TABS} />;
+}
+
 export default function TabLayout() {
+  if (Platform.OS === 'web') {
+    return (
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: { display: 'none' },
+        }}
+      >
+        <Tabs.Screen name="index" options={{ title: 'Accueil' }} />
+        <Tabs.Screen name="profile" options={{ title: 'Adhésion' }} />
+      </Tabs>
+    );
+  }
+
   return (
-    <View style={{ flex: 1, position: 'relative' }}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(home)" />
-        <Stack.Screen name="profile" />
-      </Stack>
-      <FloatingTabBar tabs={TABS} />
-    </View>
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      tabBar={renderTabBar}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Accueil' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Adhésion' }} />
+    </Tabs>
   );
 }

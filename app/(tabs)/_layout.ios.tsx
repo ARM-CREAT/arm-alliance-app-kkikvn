@@ -6,8 +6,8 @@ import FloatingTabBar, { TabBarItem } from '@/components/FloatingTabBar';
 
 const TABS: TabBarItem[] = [
   {
-    name: '(home)',
-    route: '/(tabs)/(home)',
+    name: 'index',
+    route: '/(tabs)',
     icon: 'home',
     label: 'Accueil',
   },
@@ -21,9 +21,9 @@ const TABS: TabBarItem[] = [
 
 export default function TabLayout() {
   return (
-    <View style={{ flex: 1, position: 'relative' }}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(home)" />
+    <View style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { flex: 1 } }}>
+        <Stack.Screen name="index" />
         <Stack.Screen name="profile" />
       </Stack>
       <FloatingTabBar tabs={TABS} />

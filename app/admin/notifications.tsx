@@ -18,6 +18,7 @@ import { Stack } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@/lib/async-storage';
 
 const Haptics = {
   impactAsync: async () => {},
@@ -26,7 +27,6 @@ const Haptics = {
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 };
-import AsyncStorage from '@/lib/async-storage';
 
 interface NotificationItem {
   id: string;

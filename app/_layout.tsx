@@ -55,9 +55,13 @@ export default function RootLayout() {
     console.log('[RootLayout] mounted, splash hidden');
   }, []);
 
+  const rootStyle = Platform.OS === 'web'
+    ? { flex: 1, width: '100%' as const, height: '100%' as const }
+    : { flex: 1 };
+
   return (
     <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={rootStyle}>
         <LocalizationProvider>
           <AuthProvider>
             <NotificationProvider>
@@ -65,7 +69,7 @@ export default function RootLayout() {
                 <WidgetProvider>
                   <ThemeProvider value={ARMTheme}>
                     <AdminAutoLogout />
-                    <Stack screenOptions={{ headerShown: false }}>
+                    <Stack screenOptions={{ headerShown: false, contentStyle: { flex: 1 } }}>
                       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                       <Stack.Screen name="admin" options={{ headerShown: false }} />
                       <Stack.Screen name="donation" options={{ presentation: 'modal', headerShown: false }} />

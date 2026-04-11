@@ -1,18 +1,5 @@
 
-import { Stack } from 'expo-router';
-import { Modal } from '@/components/ui/Modal';
-
-const Haptics = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
-  selectionAsync: async () => {},
-  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
-  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
-};
 import React, { useState, useEffect, useCallback } from 'react';
-import { IconSymbol } from '@/components/IconSymbol';
-import { BACKEND_URL } from '@/utils/api';
-import AsyncStorage from '@/lib/async-storage';
 import {
   View,
   Text,
@@ -26,7 +13,20 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import { Stack } from 'expo-router';
+import { Modal } from '@/components/ui/Modal';
+import { IconSymbol } from '@/components/IconSymbol';
+import { BACKEND_URL } from '@/utils/api';
+import AsyncStorage from '@/lib/async-storage';
 import { colors } from '@/styles/commonStyles';
+
+const Haptics = {
+  impactAsync: async () => {},
+  notificationAsync: async () => {},
+  selectionAsync: async () => {},
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+};
 
 interface LeadershipMember {
   id: string;

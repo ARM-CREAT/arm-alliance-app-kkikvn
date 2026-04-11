@@ -1,4 +1,5 @@
 // Stub for expo-video — no-op on web/preview
+/* eslint-disable react/prop-types */
 const React = require('react');
 const { View, Text } = require('react-native');
 const VideoView = ({ style }) =>

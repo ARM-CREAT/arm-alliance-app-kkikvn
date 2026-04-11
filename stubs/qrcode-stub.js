@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 const React = require('react');
 const { View, Text } = require('react-native');
 const QRCode = ({ value, size = 100, color = '#000', backgroundColor = '#fff' }) =>
