@@ -27,7 +27,7 @@ function toSymbolWeight(w?: string): string {
 }
 
 // Map common MaterialIcons / generic names to valid SF Symbol names
-const ICON_MAP: Record<string, SymbolViewProps["name"]> = {
+const ICON_MAP: Record<string, string> = {
   home: "house.fill",
   person: "person.fill",
   settings: "gearshape.fill",
