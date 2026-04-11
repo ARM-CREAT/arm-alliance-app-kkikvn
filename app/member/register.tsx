@@ -30,7 +30,8 @@ export default function RegisterScreen() {
   const [success, setSuccess] = useState(false);
 
   // Form fields
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [commune, setCommune] = useState('');
@@ -41,10 +42,12 @@ export default function RegisterScreen() {
   const [typePickerVisible, setTypePickerVisible] = useState(false);
 
   // Validation errors
-  const [fullNameError, setFullNameError] = useState('');
+  const [firstNameError, setFirstNameError] = useState('');
+  const [lastNameError, setLastNameError] = useState('');
   const [emailError, setEmailError] = useState('');
 
   // Refs for keyboard navigation
+  const lastNameRef = useRef<TextInputType>(null);
   const emailRef = useRef<TextInputType>(null);
   const phoneRef = useRef<TextInputType>(null);
   const communeRef = useRef<TextInputType>(null);
@@ -54,11 +57,17 @@ export default function RegisterScreen() {
 
   const validate = (): boolean => {
     let valid = true;
-    if (!fullName.trim()) {
-      setFullNameError('Le nom complet est requis');
+    if (!firstName.trim()) {
+      setFirstNameError('Le prénom est requis');
       valid = false;
     } else {
-      setFullNameError('');
+      setFirstNameError('');
+    }
+    if (!lastName.trim()) {
+      setLastNameError('Le nom est requis');
+      valid = false;
+    } else {
+      setLastNameError('');
     }
     if (!email.trim()) {
       setEmailError('L\'email est requis');
@@ -80,11 +89,20 @@ export default function RegisterScreen() {
       return;
     }
 
+    const trimmedFirst = firstName.trim();
+    const trimmedLast = lastName.trim();
+    const fullName = `${trimmedFirst} ${trimmedLast}`.trim();
+
     const payload: Record<string, string> = {
-      full_name: fullName.trim(),
+      firstName: trimmedFirst,
+      lastName: trimmedLast,
+      // also send snake_case variants for backend compatibility
+      first_name: trimmedFirst,
+      last_name: trimmedLast,
+      full_name: fullName,
       email: email.trim(),
     };
-    if (phone.trim()) payload.phone = phone.trim();
+    if (phone.trim()) payload.phone = String(phone.trim());
     if (commune.trim()) payload.commune = commune.trim();
     if (region.trim()) payload.region = region.trim();
     if (profession.trim()) payload.profession = profession.trim();
@@ -137,6 +155,9 @@ export default function RegisterScreen() {
   };
 
   const selectedTypeLabel = MEMBERSHIP_TYPES.find((t) => t.value === membershipType)?.label ?? 'Standard';
+  const firstNameErrorText = firstNameError;
+  const lastNameErrorText = lastNameError;
+  const emailErrorText = emailError;
 
   if (success) {
     return (
@@ -259,20 +280,37 @@ export default function RegisterScreen() {
         <View style={styles.formCard}>
           <Text style={styles.sectionLabel}>INFORMATIONS REQUISES</Text>
 
-          {/* Prénom et Nom */}
+          {/* Prénom */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Prénom et Nom *</Text>
+            <Text style={styles.label}>Prénom *</Text>
             <TextInput
-              style={[styles.input, !!fullNameError && styles.inputError]}
-              value={fullName}
-              onChangeText={(v) => { setFullName(v); if (v.trim()) setFullNameError(''); }}
-              placeholder="Votre prénom et nom"
+              style={[styles.input, !!firstNameErrorText && styles.inputError]}
+              value={firstName}
+              onChangeText={(v) => { setFirstName(v); if (v.trim()) setFirstNameError(''); }}
+              placeholder="Votre prénom"
+              placeholderTextColor="#aaa"
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => lastNameRef.current?.focus()}
+            />
+            {!!firstNameErrorText && <Text style={styles.fieldError}>{firstNameErrorText}</Text>}
+          </View>
+
+          {/* Nom */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Nom *</Text>
+            <TextInput
+              ref={lastNameRef}
+              style={[styles.input, !!lastNameErrorText && styles.inputError]}
+              value={lastName}
+              onChangeText={(v) => { setLastName(v); if (v.trim()) setLastNameError(''); }}
+              placeholder="Votre nom de famille"
               placeholderTextColor="#aaa"
               autoCapitalize="words"
               returnKeyType="next"
               onSubmitEditing={() => emailRef.current?.focus()}
             />
-            {!!fullNameError && <Text style={styles.fieldError}>{fullNameError}</Text>}
+            {!!lastNameErrorText && <Text style={styles.fieldError}>{lastNameErrorText}</Text>}
           </View>
 
           {/* Email */}
@@ -280,7 +318,7 @@ export default function RegisterScreen() {
             <Text style={styles.label}>Email *</Text>
             <TextInput
               ref={emailRef}
-              style={[styles.input, !!emailError && styles.inputError]}
+              style={[styles.input, !!emailErrorText && styles.inputError]}
               value={email}
               onChangeText={(v) => { setEmail(v); if (v.trim()) setEmailError(''); }}
               placeholder="votre@email.com"
@@ -290,7 +328,7 @@ export default function RegisterScreen() {
               returnKeyType="next"
               onSubmitEditing={() => phoneRef.current?.focus()}
             />
-            {!!emailError && <Text style={styles.fieldError}>{emailError}</Text>}
+            {!!emailErrorText && <Text style={styles.fieldError}>{emailErrorText}</Text>}
           </View>
 
           <View style={styles.divider} />
