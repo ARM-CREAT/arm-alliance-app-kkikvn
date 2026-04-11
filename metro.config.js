@@ -7,6 +7,29 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = false;
 
+// On web, native modules crash at import time. Alias them to safe stubs.
+// Metro picks these up for ALL platforms; the stubs are no-ops that match
+// the real module's export shape so native builds are unaffected.
+const nativeStubs = {
+  '@react-native-firebase/app': path.resolve(__dirname, 'stubs/firebase-app-stub.js'),
+  '@react-native-firebase/firestore': path.resolve(__dirname, 'stubs/firebase-firestore-stub.js'),
+  'react-native-onesignal': path.resolve(__dirname, 'stubs/onesignal-stub.js'),
+  'react-native-reanimated': path.resolve(__dirname, 'stubs/worklets-stub.js'),
+  'react-native-reanimated/plugin': path.resolve(__dirname, 'stubs/worklets-stub.js'),
+};
+
+// Only apply stubs on web to avoid breaking native builds
+const originalResolver = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === 'web' && nativeStubs[moduleName]) {
+    return { filePath: nativeStubs[moduleName], type: 'sourceFile' };
+  }
+  if (originalResolver) {
+    return originalResolver(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
     new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),

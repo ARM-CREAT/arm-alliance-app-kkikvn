@@ -51,6 +51,12 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety net: never block rendering for more than 1.5s waiting on AsyncStorage
+    const safetyTimer = setTimeout(() => {
+      console.warn('[Localization] Safety timer fired — forcing loading=false');
+      setLoading(false);
+    }, 1500);
+
     const loadPreferences = async () => {
       console.log('[Localization] Loading preferences from AsyncStorage...');
       try {
@@ -72,11 +78,14 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
       } catch (err) {
         console.error('[Localization] Failed to load preferences:', err);
       } finally {
+        clearTimeout(safetyTimer);
         setLoading(false);
       }
     };
 
     loadPreferences();
+
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const setLanguage = useCallback(async (lang: Language) => {
