@@ -25,6 +25,10 @@ export const members = pgTable('members', {
   dateOfBirth: text('date_of_birth'),
   gender: text('gender'),
   address: text('address'),
+  city: text('city'),
+  country: text('country'),
+  membershipType: text('membership_type').default('standard'), // standard, actif, sympathisant
+  message: text('message'),
   status: text('status').notNull().default('pending'), // pending, approved, rejected
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -526,4 +530,14 @@ export const armMessages = pgTable('arm_messages', {
   imageUrl: text('image_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Inbox Messages table - Contact/inbox messages from users
+export const inboxMessages = pgTable('inbox_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  authorName: text('author_name').notNull(),
+  authorEmail: text('author_email'),
+  content: text('content').notNull(),
+  isRead: boolean('is_read').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
