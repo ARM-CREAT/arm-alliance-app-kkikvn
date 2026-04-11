@@ -1,84 +1,99 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Platform,
+  RefreshControl,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { useAdminAuth } from '@/contexts/AdminAuthContext';
+import { BACKEND_URL } from '@/utils/api';
 
-const Haptics = {
-  impactAsync: async () => {},
-  notificationAsync: async () => {},
-  selectionAsync: async () => {},
-  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
-  NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
-};
+interface AdminStats {
+  total_members: number;
+  pending_members: number;
+  approved_members: number;
+  total_messages: number;
+  unread_messages: number;
+}
 
-interface NavCard {
+interface StatCardProps {
   icon: string;
   label: string;
-  description: string;
-  path: string;
+  value: number;
   color: string;
 }
 
-const NAV_CARDS: NavCard[] = [
-  {
-    icon: '👥',
-    label: 'Adhérents',
-    description: 'Consulter et gérer les membres',
-    path: '/admin/memberships',
-    color: colors.primary,
-  },
-  {
-    icon: '📣',
-    label: 'Messages ARM',
-    description: 'Publier des messages officiels',
-    path: '/admin/arm-messages',
-    color: '#7C3AED',
-  },
-  {
-    icon: '📊',
-    label: 'Statistiques',
-    description: 'Statistiques des militants',
-    path: '/admin/stats',
-    color: '#0369A1',
-  },
-  {
-    icon: '📰',
-    label: 'Actualités',
-    description: 'Gérer les articles et publications',
-    path: '/admin/news',
-    color: '#2563EB',
-  },
-  {
-    icon: '📢',
-    label: 'Annonces',
-    description: 'Publier des annonces urgentes',
-    path: '/admin/announcements',
-    color: '#D97706',
-  },
-  {
-    icon: '💬',
-    label: 'Messages politiques',
-    description: 'Communiqués et messages officiels',
-    path: '/admin/political-messages',
-    color: '#DC2626',
-  },
-];
+function StatCard({ icon, label, value, color }: StatCardProps) {
+  const displayValue = String(value ?? 0);
+  return (
+    <View style={[styles.statCard, { borderLeftColor: color }]}>
+      <Text style={styles.statIcon}>{icon}</Text>
+      <Text style={[styles.statValue, { color }]}>{displayValue}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
 
 export default function AdminIndexScreen() {
   const router = useRouter();
+  const { logout } = useAdminAuth();
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleNav = (card: NavCard) => {
-    console.log('[AdminIndex] Navigation vers', card.label, card.path);
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push(card.path as any);
+  const loadStats = useCallback(async (isRefresh = false) => {
+    console.log('[AdminIndex] GET /api/admin/stats');
+    if (!isRefresh) setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/stats`);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[AdminIndex] Erreur HTTP stats', res.status, text.slice(0, 120));
+        throw new Error(`Erreur ${res.status}`);
+      }
+      const data: AdminStats = await res.json();
+      console.log('[AdminIndex] Stats chargées:', JSON.stringify(data));
+      setStats(data);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[AdminIndex] Erreur chargement stats:', msg);
+      setError(msg);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStats(false);
+    }, [loadStats])
+  );
+
+  const onRefresh = useCallback(() => {
+    console.log('[AdminIndex] Pull-to-refresh');
+    setRefreshing(true);
+    loadStats(true);
+  }, [loadStats]);
+
+  const handleLogout = async () => {
+    console.log('[AdminIndex] Bouton Déconnexion appuyé');
+    await logout();
+    router.replace('/admin/login');
   };
+
+  const totalMembers = stats?.total_members ?? 0;
+  const pendingMembers = stats?.pending_members ?? 0;
+  const approvedMembers = stats?.approved_members ?? 0;
+  const totalMessages = stats?.total_messages ?? 0;
+  const unreadMessages = stats?.unread_messages ?? 0;
 
   return (
     <>
@@ -89,35 +104,111 @@ export default function AdminIndexScreen() {
           headerStyle: { backgroundColor: colors.primary },
           headerTintColor: '#FFFFFF',
           headerTitleStyle: { fontWeight: 'bold' },
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={styles.headerLogoutBtn}
+            >
+              <Text style={styles.headerLogoutText}>Déconnexion</Text>
+            </TouchableOpacity>
+          ),
         }}
       />
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.welcomeBox}>
-            <Text style={styles.welcomeTitle}>Tableau de bord</Text>
-            <Text style={styles.welcomeSubtitle}>Gestion du contenu Alliance ARM</Text>
-          </View>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        {/* Welcome banner */}
+        <View style={styles.welcomeBox}>
+          <Text style={styles.welcomeTitle}>Tableau de bord Admin</Text>
+          <Text style={styles.welcomeSubtitle}>Alliance pour le Rassemblement Malien</Text>
+        </View>
 
-          <View style={styles.grid}>
-            {NAV_CARDS.map((card) => (
-              <AnimatedPressable
-                key={card.path}
-                style={styles.card}
-                onPress={() => handleNav(card)}
-              >
-                <View style={[styles.cardIconWrap, { backgroundColor: card.color + '18' }]}>
-                  <Text style={styles.cardIcon}>{card.icon}</Text>
-                </View>
-                <Text style={styles.cardLabel}>{card.label}</Text>
-                <Text style={styles.cardDesc}>{card.description}</Text>
-                <View style={[styles.cardArrow, { backgroundColor: card.color }]}>
-                  <Text style={styles.cardArrowText}>›</Text>
-                </View>
-              </AnimatedPressable>
-            ))}
+        {/* Stats section */}
+        <Text style={styles.sectionTitle}>Statistiques</Text>
+
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Chargement des statistiques...</Text>
           </View>
-        </ScrollView>
-      </View>
+        ) : error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={() => {
+                console.log('[AdminIndex] Bouton Réessayer appuyé');
+                loadStats(false);
+              }}
+            >
+              <Text style={styles.retryBtnText}>Réessayer</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.statsGrid}>
+            <StatCard icon="👥" label="Total membres" value={totalMembers} color={colors.primary} />
+            <StatCard icon="⏳" label="En attente" value={pendingMembers} color="#D97706" />
+            <StatCard icon="✅" label="Approuvés" value={approvedMembers} color="#16a34a" />
+            <StatCard icon="📨" label="Messages" value={totalMessages} color="#2563EB" />
+            <StatCard icon="🔔" label="Non lus" value={unreadMessages} color="#DC2626" />
+          </View>
+        )}
+
+        {/* Navigation buttons */}
+        <Text style={styles.sectionTitle}>Gestion</Text>
+
+        <TouchableOpacity
+          style={styles.navCard}
+          onPress={() => {
+            console.log('[AdminIndex] Navigation vers /admin/memberships');
+            router.push('/admin/memberships');
+          }}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.navIconWrap, { backgroundColor: colors.primary + '18' }]}>
+            <Text style={styles.navIcon}>👥</Text>
+          </View>
+          <View style={styles.navInfo}>
+            <Text style={styles.navLabel}>Adhésions</Text>
+            <Text style={styles.navDesc}>Consulter et gérer les membres</Text>
+          </View>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.navCard}
+          onPress={() => {
+            console.log('[AdminIndex] Navigation vers /admin/messages');
+            router.push('/admin/messages');
+          }}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.navIconWrap, { backgroundColor: '#7C3AED18' }]}>
+            <Text style={styles.navIcon}>📣</Text>
+          </View>
+          <View style={styles.navInfo}>
+            <Text style={styles.navLabel}>Messages ARM</Text>
+            <Text style={styles.navDesc}>Gérer les messages de l'organisation</Text>
+          </View>
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+
+        {/* Logout button */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+          <Text style={styles.logoutBtnText}>🚪 Se déconnecter</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </>
   );
 }
@@ -125,16 +216,26 @@ export default function AdminIndexScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#f5f5f5',
   },
   content: {
     padding: 20,
     paddingBottom: 40,
   },
+  headerLogoutBtn: {
+    marginRight: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  headerLogoutText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   welcomeBox: {
     backgroundColor: colors.primary,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    padding: 22,
     marginBottom: 24,
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 6 },
@@ -143,71 +244,150 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   welcomeTitle: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '900',
     color: '#FFFFFF',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   welcomeSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 4,
     fontWeight: '500',
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-  },
-  card: {
-    width: '47%',
-    backgroundColor: colors.card,
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
-    gap: 8,
-  },
-  cardIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  cardIcon: {
-    fontSize: 26,
-  },
-  cardLabel: {
-    fontSize: 15,
+  sectionTitle: {
+    fontSize: 13,
     fontWeight: '800',
-    color: colors.text,
-    letterSpacing: -0.2,
-  },
-  cardDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    lineHeight: 17,
-  },
-  cardArrow: {
-    alignSelf: 'flex-end',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
+    color: '#666',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 12,
     marginTop: 4,
   },
-  cardArrowText: {
+  loadingBox: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  retryBtnText: {
     color: '#FFFFFF',
-    fontSize: 18,
     fontWeight: '700',
-    lineHeight: 22,
+    fontSize: 14,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 24,
+  },
+  statCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    width: '47%',
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    gap: 4,
+  },
+  statIcon: {
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '600',
+  },
+  navCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  navIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  navIcon: {
+    fontSize: 22,
+  },
+  navInfo: {
+    flex: 1,
+  },
+  navLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 2,
+  },
+  navDesc: {
+    fontSize: 13,
+    color: '#666',
+  },
+  navArrow: {
+    fontSize: 24,
+    color: '#999',
+    fontWeight: '300',
+  },
+  logoutBtn: {
+    marginTop: 16,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  logoutBtnText: {
+    fontSize: 15,
+    color: '#DC2626',
+    fontWeight: '700',
   },
 });

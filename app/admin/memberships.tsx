@@ -430,13 +430,13 @@ export default function AdminMembershipsScreen() {
   };
 
   const handleApprove = async (member: Member) => {
-    console.log('[AdminMemberships] PUT /api/members/' + member.id + ' -> status: active');
+    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> approved');
     setActionLoading('approve');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
-        method: 'PUT',
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
+        method: 'PATCH',
         headers: ADMIN_HEADERS,
-        body: JSON.stringify({ status: 'active' }),
+        body: JSON.stringify({ status: 'approved' }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -456,13 +456,13 @@ export default function AdminMembershipsScreen() {
   };
 
   const handleReject = async (member: Member) => {
-    console.log('[AdminMemberships] PUT /api/members/' + member.id + ' -> status: suspended');
+    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> rejected');
     setActionLoading('reject');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
-        method: 'PUT',
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
+        method: 'PATCH',
         headers: ADMIN_HEADERS,
-        body: JSON.stringify({ status: 'suspended' }),
+        body: JSON.stringify({ status: 'rejected' }),
       });
       if (!res.ok) {
         const text = await res.text();

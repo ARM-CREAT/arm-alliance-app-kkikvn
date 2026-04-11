@@ -16,6 +16,9 @@ export const BACKEND_URL: string =
   Constants.expoConfig?.extra?.backendUrl ||
   PRODUCTION_BACKEND_URL;
 
+/** Alias for BACKEND_URL — use either name */
+export const API_BASE = BACKEND_URL;
+
 console.log('[API] BACKEND_URL resolved to:', BACKEND_URL);
 
 /**

@@ -1,20 +1,17 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  RefreshControl,
   FlatList,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
+  TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
   Alert,
+  Modal,
   ScrollView,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 import { BACKEND_URL } from '@/utils/api';
 
 const PRIMARY = '#4CAF50';
@@ -29,76 +26,69 @@ interface ArmMessage {
 }
 
 function formatDateFr(dateString?: string): string {
-  if (!dateString) return '';
+  if (!dateString) return '—';
   try {
     return new Date(dateString).toLocaleDateString('fr-FR', {
       day: '2-digit',
-      month: 'long',
+      month: 'short',
       year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   } catch {
     return String(dateString);
   }
 }
 
-export default function ArmMessageScreen() {
-  const [messages, setMessages] = useState<ArmMessage[]>([]);
+export default function AdminMessagesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [messages, setMessages] = useState<ArmMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-  // Detail modal
   const [selectedMsg, setSelectedMsg] = useState<ArmMessage | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
-
-  // New message modal
-  const [newMsgVisible, setNewMsgVisible] = useState(false);
-  const [authorName, setAuthorName] = useState('');
-  const [authorEmail, setAuthorEmail] = useState('');
-  const [content, setContent] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-
-  const contentRef = useRef<TextInput>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadMessages = useCallback(async (isRefresh = false) => {
-    console.log('[ArmMessage] GET /api/arm-messages');
+    console.log('[AdminMessages] GET /api/arm-messages');
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
       const res = await fetch(`${BACKEND_URL}/api/arm-messages`);
       if (!res.ok) {
         const text = await res.text();
-        console.error('[ArmMessage] Erreur HTTP', res.status, text.slice(0, 120));
+        console.error('[AdminMessages] Erreur HTTP', res.status, text.slice(0, 120));
         throw new Error(`Erreur ${res.status}`);
       }
       const data = await res.json();
       const list: ArmMessage[] = Array.isArray(data) ? data : (data.messages ?? []);
-      console.log('[ArmMessage] Messages chargés:', list.length);
+      console.log('[AdminMessages] Messages chargés:', list.length);
       setMessages(list);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[ArmMessage] Erreur chargement:', msg);
-      setError('Impossible de charger les messages. Vérifiez votre connexion.');
+      console.error('[AdminMessages] Erreur chargement:', msg);
+      setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadMessages(false);
-  }, [loadMessages]);
+  useFocusEffect(
+    useCallback(() => {
+      loadMessages(false);
+    }, [loadMessages])
+  );
 
   const onRefresh = useCallback(() => {
-    console.log('[ArmMessage] Pull-to-refresh');
+    console.log('[AdminMessages] Pull-to-refresh');
     setRefreshing(true);
     loadMessages(true);
   }, [loadMessages]);
 
   const handleMarkRead = async (msg: ArmMessage) => {
     if (msg.is_read) return;
-    console.log('[ArmMessage] PATCH /api/arm-messages/' + msg.id + '/read');
+    console.log('[AdminMessages] PATCH /api/arm-messages/' + msg.id + '/read');
     try {
       const res = await fetch(`${BACKEND_URL}/api/arm-messages/${msg.id}/read`, {
         method: 'PATCH',
@@ -106,10 +96,10 @@ export default function ArmMessageScreen() {
       });
       if (!res.ok) {
         const text = await res.text();
-        console.error('[ArmMessage] Erreur mark-read', res.status, text.slice(0, 120));
+        console.error('[AdminMessages] Erreur mark-read', res.status, text.slice(0, 120));
         return;
       }
-      console.log('[ArmMessage] Message marqué comme lu:', msg.id);
+      console.log('[AdminMessages] Message marqué comme lu:', msg.id);
       setMessages((prev) =>
         prev.map((m) => (m.id === msg.id ? { ...m, is_read: true } : m))
       );
@@ -118,81 +108,64 @@ export default function ArmMessageScreen() {
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error('[ArmMessage] Erreur réseau mark-read:', errMsg);
+      console.error('[AdminMessages] Erreur réseau mark-read:', errMsg);
     }
   };
 
   const handleOpenDetail = (msg: ArmMessage) => {
-    console.log('[ArmMessage] Ouverture message:', msg.id, msg.author_name);
+    console.log('[AdminMessages] Ouverture message:', msg.id, msg.author_name);
     setSelectedMsg(msg);
     setDetailVisible(true);
     handleMarkRead(msg);
   };
 
-  const handleOpenNewMsg = () => {
-    console.log('[ArmMessage] Bouton Nouveau message appuyé');
-    setAuthorName('');
-    setAuthorEmail('');
-    setContent('');
-    setFormError('');
-    setNewMsgVisible(true);
-  };
-
-  const handleSubmitNewMsg = async () => {
-    console.log('[ArmMessage] Bouton Envoyer message appuyé');
-    const trimName = authorName.trim();
-    const trimContent = content.trim();
-
-    if (!trimName) {
-      setFormError('Le nom est requis.');
-      return;
-    }
-    if (!trimContent) {
-      setFormError('Le message est requis.');
-      return;
-    }
-
-    const payload: Record<string, string> = {
-      author_name: trimName,
-      content: trimContent,
-    };
-    if (authorEmail.trim()) payload.author_email = authorEmail.trim();
-
-    console.log('[ArmMessage] POST /api/arm-messages', JSON.stringify(payload));
-    setSubmitting(true);
-    setFormError('');
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/arm-messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error('[ArmMessage] Erreur création message', res.status, text.slice(0, 120));
-        throw new Error(`Erreur ${res.status}`);
-      }
-      const created = await res.json();
-      console.log('[ArmMessage] Message envoyé:', created?.id ?? '?');
-      setNewMsgVisible(false);
-      loadMessages(true);
-      Alert.alert('Message envoyé', 'Votre message a été envoyé avec succès.');
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.error('[ArmMessage] Erreur envoi message:', errMsg);
-      setFormError('Impossible d\'envoyer le message. Réessayez.');
-    } finally {
-      setSubmitting(false);
-    }
+  const handleDelete = (msg: ArmMessage) => {
+    console.log('[AdminMessages] Demande suppression message:', msg.id);
+    Alert.alert(
+      'Supprimer ce message',
+      `Voulez-vous vraiment supprimer le message de "${msg.author_name}" ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            console.log('[AdminMessages] DELETE /api/arm-messages/' + msg.id);
+            setDeletingId(msg.id);
+            try {
+              const res = await fetch(`${BACKEND_URL}/api/arm-messages/${msg.id}`, {
+                method: 'DELETE',
+              });
+              if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`Erreur ${res.status}: ${text.slice(0, 120)}`);
+              }
+              console.log('[AdminMessages] Message supprimé:', msg.id);
+              setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+              if (selectedMsg?.id === msg.id) {
+                setDetailVisible(false);
+                setSelectedMsg(null);
+              }
+            } catch (err: unknown) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              console.error('[AdminMessages] Erreur suppression:', errMsg);
+              Alert.alert('Erreur', errMsg);
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const unreadCount = messages.filter((m) => !m.is_read).length;
+  const unreadLabel = unreadCount > 0 ? `${unreadCount} non lu${unreadCount > 1 ? 's' : ''}` : 'Tous lus';
 
   const renderItem = ({ item }: { item: ArmMessage }) => {
     const dateStr = formatDateFr(item.created_at);
+    const isDeleting = deletingId === item.id;
     const isUnread = !item.is_read;
-    const initial = (item.author_name || '?').charAt(0).toUpperCase();
 
     return (
       <TouchableOpacity
@@ -204,7 +177,9 @@ export default function ArmMessageScreen() {
           <View style={styles.cardLeft}>
             {isUnread && <View style={styles.unreadDot} />}
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>{initial}</Text>
+              <Text style={styles.avatarText}>
+                {(item.author_name || '?').charAt(0).toUpperCase()}
+              </Text>
             </View>
           </View>
           <View style={styles.cardBody}>
@@ -214,21 +189,46 @@ export default function ArmMessageScreen() {
               </Text>
               <Text style={styles.cardDate}>{dateStr}</Text>
             </View>
+            {item.author_email ? (
+              <Text style={styles.authorEmail} numberOfLines={1}>{item.author_email}</Text>
+            ) : null}
             <Text style={styles.contentPreview} numberOfLines={2}>{item.content}</Text>
           </View>
+        </View>
+        <View style={styles.cardActions}>
+          {isUnread && (
+            <TouchableOpacity
+              style={styles.readBtn}
+              onPress={() => {
+                console.log('[AdminMessages] Bouton Marquer lu appuyé:', item.id);
+                handleMarkRead(item);
+              }}
+            >
+              <Text style={styles.readBtnText}>Marquer lu</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => handleDelete(item)}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <ActivityIndicator size="small" color="#DC2626" />
+            ) : (
+              <Text style={styles.deleteBtnText}>Supprimer</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
   };
 
-  const unreadText = unreadCount > 0 ? `${unreadCount} non lu${unreadCount > 1 ? 's' : ''}` : 'Tous lus';
-
   return (
     <>
       <Stack.Screen
         options={{
-          title: "Messages ARM",
-          headerBackTitle: 'Retour',
+          title: 'Messages reçus',
+          headerShown: true,
           headerStyle: { backgroundColor: PRIMARY },
           headerTintColor: '#FFFFFF',
           headerTitleStyle: { fontWeight: 'bold' },
@@ -241,7 +241,7 @@ export default function ArmMessageScreen() {
         animationType="slide"
         transparent
         onRequestClose={() => {
-          console.log('[ArmMessage] Fermeture modal détail');
+          console.log('[AdminMessages] Fermeture modal détail');
           setDetailVisible(false);
         }}
       >
@@ -252,7 +252,7 @@ export default function ArmMessageScreen() {
               {selectedMsg && (
                 <>
                   <View style={styles.modalHeader}>
-                    <View style={styles.modalHeaderLeft}>
+                    <View>
                       <Text style={styles.modalAuthor}>{selectedMsg.author_name}</Text>
                       {selectedMsg.author_email ? (
                         <Text style={styles.modalEmail}>{selectedMsg.author_email}</Text>
@@ -267,108 +267,28 @@ export default function ArmMessageScreen() {
                   </View>
                   <View style={styles.modalDivider} />
                   <Text style={styles.modalContent}>{selectedMsg.content}</Text>
-                  <TouchableOpacity
-                    style={styles.modalCloseBtn}
-                    onPress={() => {
-                      console.log('[ArmMessage] Bouton Fermer modal détail appuyé');
-                      setDetailVisible(false);
-                    }}
-                  >
-                    <Text style={styles.modalCloseBtnText}>Fermer</Text>
-                  </TouchableOpacity>
-                  <View style={{ height: 16 }} />
+                  <View style={styles.modalActions}>
+                    <TouchableOpacity
+                      style={styles.modalDeleteBtn}
+                      onPress={() => handleDelete(selectedMsg)}
+                    >
+                      <Text style={styles.modalDeleteBtnText}>Supprimer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.modalCloseBtn}
+                      onPress={() => {
+                        console.log('[AdminMessages] Bouton Fermer modal appuyé');
+                        setDetailVisible(false);
+                      }}
+                    >
+                      <Text style={styles.modalCloseBtnText}>Fermer</Text>
+                    </TouchableOpacity>
+                  </View>
                 </>
               )}
             </ScrollView>
           </View>
         </View>
-      </Modal>
-
-      {/* New message modal */}
-      <Modal
-        visible={newMsgVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => {
-          console.log('[ArmMessage] Fermeture modal nouveau message');
-          setNewMsgVisible(false);
-        }}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.newMsgTitle}>Nouveau message</Text>
-
-            <Text style={styles.fieldLabel}>Votre nom *</Text>
-            <TextInput
-              style={styles.input}
-              value={authorName}
-              onChangeText={setAuthorName}
-              placeholder="Prénom et nom"
-              placeholderTextColor="#aaa"
-              autoCapitalize="words"
-              returnKeyType="next"
-              onSubmitEditing={() => contentRef.current?.focus()}
-            />
-
-            <Text style={styles.fieldLabel}>Email (optionnel)</Text>
-            <TextInput
-              style={styles.input}
-              value={authorEmail}
-              onChangeText={setAuthorEmail}
-              placeholder="votre@email.com"
-              placeholderTextColor="#aaa"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              returnKeyType="next"
-            />
-
-            <Text style={styles.fieldLabel}>Message *</Text>
-            <TextInput
-              ref={contentRef}
-              style={[styles.input, styles.textArea]}
-              value={content}
-              onChangeText={setContent}
-              placeholder="Écrivez votre message..."
-              placeholderTextColor="#aaa"
-              multiline
-              numberOfLines={5}
-              textAlignVertical="top"
-            />
-
-            {!!formError && (
-              <Text style={styles.formError}>{formError}</Text>
-            )}
-
-            <View style={styles.formActions}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => {
-                  console.log('[ArmMessage] Bouton Annuler nouveau message appuyé');
-                  setNewMsgVisible(false);
-                }}
-                disabled={submitting}
-              >
-                <Text style={styles.cancelBtnText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.sendBtn, submitting && styles.sendBtnDisabled]}
-                onPress={handleSubmitNewMsg}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.sendBtnText}>Envoyer</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-            <View style={{ height: 16 }} />
-          </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       <View style={styles.container}>
@@ -379,7 +299,7 @@ export default function ArmMessageScreen() {
           </Text>
           <View style={[styles.unreadBadge, unreadCount > 0 ? styles.unreadBadgeActive : styles.unreadBadgeInactive]}>
             <Text style={[styles.unreadBadgeText, unreadCount > 0 ? styles.unreadBadgeTextActive : styles.unreadBadgeTextInactive]}>
-              {unreadText}
+              {unreadLabel}
             </Text>
           </View>
         </View>
@@ -395,7 +315,7 @@ export default function ArmMessageScreen() {
             <TouchableOpacity
               style={styles.retryBtn}
               onPress={() => {
-                console.log('[ArmMessage] Bouton Réessayer appuyé');
+                console.log('[AdminMessages] Bouton Réessayer appuyé');
                 loadMessages(false);
               }}
             >
@@ -423,17 +343,12 @@ export default function ArmMessageScreen() {
               <View style={styles.centerBox}>
                 <Text style={styles.emptyIcon}>📭</Text>
                 <Text style={styles.emptyTitle}>Aucun message</Text>
-                <Text style={styles.emptySubtitle}>Soyez le premier à envoyer un message.</Text>
+                <Text style={styles.emptySubtitle}>Les messages reçus apparaîtront ici.</Text>
               </View>
             }
             showsVerticalScrollIndicator={false}
           />
         )}
-
-        {/* New message FAB */}
-        <TouchableOpacity style={styles.fab} onPress={handleOpenNewMsg}>
-          <Text style={styles.fabText}>+ Nouveau message</Text>
-        </TouchableOpacity>
       </View>
     </>
   );
@@ -464,14 +379,25 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 20,
   },
-  unreadBadgeActive: { backgroundColor: '#FEF2F2' },
-  unreadBadgeInactive: { backgroundColor: '#F0FDF4' },
-  unreadBadgeText: { fontSize: 12, fontWeight: '700' },
-  unreadBadgeTextActive: { color: '#DC2626' },
-  unreadBadgeTextInactive: { color: '#16a34a' },
+  unreadBadgeActive: {
+    backgroundColor: '#FEF2F2',
+  },
+  unreadBadgeInactive: {
+    backgroundColor: '#F0FDF4',
+  },
+  unreadBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  unreadBadgeTextActive: {
+    color: '#DC2626',
+  },
+  unreadBadgeTextInactive: {
+    color: '#16a34a',
+  },
   listContent: {
     padding: 12,
-    paddingBottom: 100,
+    paddingBottom: 40,
   },
   listContentEmpty: {
     flex: 1,
@@ -496,6 +422,7 @@ const styles = StyleSheet.create({
   cardRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    marginBottom: 10,
   },
   cardLeft: {
     flexDirection: 'row',
@@ -529,7 +456,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   authorName: {
     fontSize: 15,
@@ -546,10 +473,46 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flexShrink: 0,
   },
+  authorEmail: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
   contentPreview: {
     fontSize: 13,
     color: '#555',
     lineHeight: 18,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 10,
+  },
+  readBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: PRIMARY + '15',
+    borderRadius: 8,
+  },
+  readBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: PRIMARY,
+  },
+  deleteBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    minWidth: 36,
+    alignItems: 'center',
+  },
+  deleteBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#DC2626',
   },
   centerBox: {
     flex: 1,
@@ -558,39 +521,40 @@ const styles = StyleSheet.create({
     padding: 32,
     gap: 12,
   },
-  loadingText: { fontSize: 14, color: '#666' },
-  errorText: { fontSize: 14, color: '#DC2626', textAlign: 'center' },
+  loadingText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    textAlign: 'center',
+  },
   retryBtn: {
     backgroundColor: PRIMARY,
     borderRadius: 10,
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
-  retryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-  emptyIcon: { fontSize: 48 },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#1a1a1a' },
-  emptySubtitle: { fontSize: 14, color: '#666', textAlign: 'center' },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    left: 20,
-    right: 20,
-    backgroundColor: PRIMARY,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  fabText: {
+  retryBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
     fontWeight: '700',
+    fontSize: 14,
   },
-  // Modals
+  emptyIcon: {
+    fontSize: 48,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  // Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -600,7 +564,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '85%',
+    maxHeight: '80%',
     padding: 20,
     paddingTop: 12,
   },
@@ -617,10 +581,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     marginBottom: 12,
-  },
-  modalHeaderLeft: {
-    flex: 1,
-    marginRight: 12,
   },
   modalAuthor: {
     fontSize: 18,
@@ -641,13 +601,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
-    flexShrink: 0,
   },
-  readBadgeRead: { backgroundColor: '#F0FDF4' },
-  readBadgeUnread: { backgroundColor: '#FEF2F2' },
-  readBadgeText: { fontSize: 12, fontWeight: '700' },
-  readBadgeTextRead: { color: '#16a34a' },
-  readBadgeTextUnread: { color: '#DC2626' },
+  readBadgeRead: {
+    backgroundColor: '#F0FDF4',
+  },
+  readBadgeUnread: {
+    backgroundColor: '#FEF2F2',
+  },
+  readBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  readBadgeTextRead: {
+    color: '#16a34a',
+  },
+  readBadgeTextUnread: {
+    color: '#DC2626',
+  },
   modalDivider: {
     height: 1,
     backgroundColor: '#f0f0f0',
@@ -659,80 +629,33 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
   },
-  modalCloseBtn: {
-    backgroundColor: PRIMARY,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  modalCloseBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  // New message form
-  newMsgTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1a1a1a',
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: '#f8f8f8',
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#1a1a1a',
-    marginBottom: 14,
-  },
-  textArea: {
-    minHeight: 110,
-    paddingTop: 12,
-  },
-  formError: {
-    fontSize: 13,
-    color: '#DC2626',
-    marginBottom: 12,
-    fontWeight: '500',
-  },
-  formActions: {
+  modalActions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 4,
+    marginBottom: 8,
   },
-  cancelBtn: {
+  modalDeleteBtn: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#e0e0e0',
+    backgroundColor: '#FEF2F2',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
-  cancelBtnText: {
+  modalDeleteBtnText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: '700',
+    color: '#DC2626',
   },
-  sendBtn: {
-    flex: 2,
+  modalCloseBtn: {
+    flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: PRIMARY,
     alignItems: 'center',
   },
-  sendBtnDisabled: {
-    opacity: 0.6,
-  },
-  sendBtnText: {
+  modalCloseBtnText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
