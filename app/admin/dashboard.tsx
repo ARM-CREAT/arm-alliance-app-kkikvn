@@ -36,11 +36,15 @@ interface Stats {
 
 interface RecentMember {
   id: string;
-  member_number: string;
-  full_name: string;
-  commune: string;
+  member_number?: string;
+  membership_number?: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  commune?: string;
+  region?: string;
   status: string;
-  created_at: string;
+  created_at?: string;
 }
 
 function getStatusColor(status: string) {
@@ -101,10 +105,23 @@ export default function AdminDashboardScreen() {
       ]);
 
       console.log('[AdminDashboard] Stats chargées:', JSON.stringify(statsData));
-      console.log('[AdminDashboard] Derniers adhérents chargés:', membersData?.members?.length ?? 0);
 
-      setStats(statsData);
-      setRecentMembers(membersData?.members ?? []);
+      // Stats: handle both flat object and nested shapes
+      setStats({
+        total: Number(statsData?.total ?? statsData?.count ?? 0),
+        active: Number(statsData?.active ?? statsData?.approved ?? 0),
+        pending: Number(statsData?.pending ?? 0),
+        suspended: Number(statsData?.suspended ?? statsData?.rejected ?? 0),
+      });
+
+      // Members list: handle array or { members: [...] } or { data: [...] }
+      const rawList: RecentMember[] = Array.isArray(membersData)
+        ? membersData
+        : (membersData?.members ?? membersData?.data ?? []);
+      // Filter out empty objects (backend may return {} placeholders)
+      const validList = rawList.filter((m) => m && (m.id || m.full_name || m.first_name));
+      console.log('[AdminDashboard] Derniers adhérents chargés:', validList.length);
+      setRecentMembers(validList);
     } catch (err: any) {
       console.error('[AdminDashboard] Erreur chargement:', err.message);
       setError(err.message || 'Impossible de charger les statistiques.');
@@ -220,20 +237,26 @@ export default function AdminDashboardScreen() {
                       <Text style={styles.sectionLink}>Voir tous →</Text>
                     </AnimatedPressable>
                   </View>
-                  {recentMembers.map((member) => {
+                  {recentMembers.map((member, idx) => {
                     const statusColor = getStatusColor(member.status);
                     const statusLabel = getStatusLabel(member.status);
                     const dateStr = formatDate(member.created_at);
-                    const initial = (member.full_name || '?').charAt(0).toUpperCase();
+                    const displayName = member.full_name
+                      || [member.first_name, member.last_name].filter(Boolean).join(' ')
+                      || '—';
+                    const memberNum = member.member_number || member.membership_number || '';
+                    const location = member.commune || member.region || '—';
+                    const initial = displayName.charAt(0).toUpperCase();
+                    const rowKey = member.id || String(idx);
                     return (
-                      <View key={member.id} style={styles.memberRow}>
+                      <View key={rowKey} style={styles.memberRow}>
                         <View style={styles.memberAvatar}>
                           <Text style={styles.memberAvatarText}>{initial}</Text>
                         </View>
                         <View style={styles.memberInfo}>
-                          <Text style={styles.memberName} numberOfLines={1}>{member.full_name}</Text>
-                          <Text style={styles.memberNumber}>{member.member_number}</Text>
-                          <Text style={styles.memberMeta}>{member.commune || '—'}</Text>
+                          <Text style={styles.memberName} numberOfLines={1}>{displayName}</Text>
+                          <Text style={styles.memberNumber}>{memberNum}</Text>
+                          <Text style={styles.memberMeta}>{location}</Text>
                           <Text style={styles.memberDate}>{dateStr}</Text>
                         </View>
                         <View style={[styles.statusBadge, { backgroundColor: statusColor + '22' }]}>

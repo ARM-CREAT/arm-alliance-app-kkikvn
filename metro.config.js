@@ -7,14 +7,6 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = true;
 
-// Redirect AdMob packages to a no-op stub so they never crash the app
-config.resolver.extraNodeModules = {
-  ...config.resolver.extraNodeModules,
-  'react-native-google-mobile-ads': require.resolve('./stubs/admob-stub.js'),
-  '@react-native-google-mobile-ads': require.resolve('./stubs/admob-stub.js'),
-  'expo-ads-admob': require.resolve('./stubs/admob-stub.js'),
-};
-
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
     new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),

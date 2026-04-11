@@ -33,9 +33,9 @@ export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [country, setCountry] = useState('');
+  const [commune, setCommune] = useState('');
+  const [region, setRegion] = useState('');
+  const [profession, setProfession] = useState('');
   const [membershipType, setMembershipType] = useState('standard');
   const [message, setMessage] = useState('');
   const [typePickerVisible, setTypePickerVisible] = useState(false);
@@ -47,9 +47,9 @@ export default function RegisterScreen() {
   // Refs for keyboard navigation
   const emailRef = useRef<TextInputType>(null);
   const phoneRef = useRef<TextInputType>(null);
-  const addressRef = useRef<TextInputType>(null);
-  const cityRef = useRef<TextInputType>(null);
-  const countryRef = useRef<TextInputType>(null);
+  const communeRef = useRef<TextInputType>(null);
+  const regionRef = useRef<TextInputType>(null);
+  const professionRef = useRef<TextInputType>(null);
   const messageRef = useRef<TextInputType>(null);
 
   const validate = (): boolean => {
@@ -83,12 +83,12 @@ export default function RegisterScreen() {
     const payload: Record<string, string> = {
       full_name: fullName.trim(),
       email: email.trim(),
-      membership_type: membershipType,
     };
     if (phone.trim()) payload.phone = phone.trim();
-    if (address.trim()) payload.address = address.trim();
-    if (city.trim()) payload.city = city.trim();
-    if (country.trim()) payload.country = country.trim();
+    if (commune.trim()) payload.commune = commune.trim();
+    if (region.trim()) payload.region = region.trim();
+    if (profession.trim()) payload.profession = profession.trim();
+    if (membershipType) payload.membership_type = membershipType;
     if (message.trim()) payload.message = message.trim();
 
     console.log('[Register] POST /api/members/register', JSON.stringify(payload));
@@ -308,51 +308,51 @@ export default function RegisterScreen() {
               placeholderTextColor="#aaa"
               keyboardType="phone-pad"
               returnKeyType="next"
-              onSubmitEditing={() => addressRef.current?.focus()}
+              onSubmitEditing={() => communeRef.current?.focus()}
             />
           </View>
 
-          {/* Adresse */}
+          {/* Commune */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Adresse</Text>
+            <Text style={styles.label}>Commune</Text>
             <TextInput
-              ref={addressRef}
+              ref={communeRef}
               style={styles.input}
-              value={address}
-              onChangeText={setAddress}
-              placeholder="Votre adresse"
-              placeholderTextColor="#aaa"
-              autoCapitalize="sentences"
-              returnKeyType="next"
-              onSubmitEditing={() => cityRef.current?.focus()}
-            />
-          </View>
-
-          {/* Ville */}
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Ville</Text>
-            <TextInput
-              ref={cityRef}
-              style={styles.input}
-              value={city}
-              onChangeText={setCity}
-              placeholder="Votre ville"
+              value={commune}
+              onChangeText={setCommune}
+              placeholder="Votre commune"
               placeholderTextColor="#aaa"
               autoCapitalize="words"
               returnKeyType="next"
-              onSubmitEditing={() => countryRef.current?.focus()}
+              onSubmitEditing={() => regionRef.current?.focus()}
             />
           </View>
 
-          {/* Pays */}
+          {/* Région */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Pays</Text>
+            <Text style={styles.label}>Région</Text>
             <TextInput
-              ref={countryRef}
+              ref={regionRef}
               style={styles.input}
-              value={country}
-              onChangeText={setCountry}
-              placeholder="Votre pays"
+              value={region}
+              onChangeText={setRegion}
+              placeholder="Votre région"
+              placeholderTextColor="#aaa"
+              autoCapitalize="words"
+              returnKeyType="next"
+              onSubmitEditing={() => professionRef.current?.focus()}
+            />
+          </View>
+
+          {/* Profession */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Profession</Text>
+            <TextInput
+              ref={professionRef}
+              style={styles.input}
+              value={profession}
+              onChangeText={setProfession}
+              placeholder="Votre profession"
               placeholderTextColor="#aaa"
               autoCapitalize="words"
               returnKeyType="next"
