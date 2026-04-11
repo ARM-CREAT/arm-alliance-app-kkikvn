@@ -28,6 +28,27 @@ interface NavCard {
 
 const NAV_CARDS: NavCard[] = [
   {
+    icon: '👥',
+    label: 'Adhérents',
+    description: 'Consulter et gérer les membres',
+    path: '/admin/memberships',
+    color: colors.primary,
+  },
+  {
+    icon: '📣',
+    label: 'Messages ARM',
+    description: 'Publier des messages officiels',
+    path: '/admin/arm-messages',
+    color: '#7C3AED',
+  },
+  {
+    icon: '📊',
+    label: 'Statistiques',
+    description: 'Statistiques des militants',
+    path: '/admin/stats',
+    color: '#0369A1',
+  },
+  {
     icon: '📰',
     label: 'Actualités',
     description: 'Gérer les articles et publications',
@@ -46,21 +67,7 @@ const NAV_CARDS: NavCard[] = [
     label: 'Messages politiques',
     description: 'Communiqués et messages officiels',
     path: '/admin/political-messages',
-    color: '#7C3AED',
-  },
-  {
-    icon: '👥',
-    label: 'Adhérents',
-    description: 'Consulter et gérer les membres',
-    path: '/admin/memberships',
-    color: colors.primary,
-  },
-  {
-    icon: '📊',
-    label: 'Statistiques',
-    description: 'Statistiques des militants',
-    path: '/admin/stats',
-    color: '#0369A1',
+    color: '#DC2626',
   },
 ];
 

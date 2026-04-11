@@ -1,12 +1,21 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Image, ImageSourcePropType } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Image, ImageSourcePropType, TouchableOpacity, RefreshControl } from 'react-native';
 import { Stack } from 'expo-router';
 import BodyScrollView from '@/components/BodyScrollView';
-import { subscribeToArmMessages, ArmMessageDoc } from '@/lib/firebase';
+import { BACKEND_URL } from '@/utils/api';
 
 const ARM_GREEN = '#1B5E20';
 const ARM_GOLD = '#C8A84B';
 const BG = '#0A1A0F';
+
+interface ArmMessageDoc {
+  id: string;
+  title: string;
+  content: string;
+  image_url?: string;
+  created_at: string;
+  updated_at: string;
+}
 
 function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
   if (!source) return { uri: '' };
@@ -30,28 +39,46 @@ function formatDateFr(dateString?: string): string {
 export default function ArmMessageScreen() {
   const [messages, setMessages] = useState<ArmMessageDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    console.log('[ArmMessage] Démarrage listener Firestore arm_messages');
-    const unsubscribe = subscribeToArmMessages(
-      (docs) => {
-        console.log('[ArmMessage] Messages reçus:', docs.length);
-        setMessages(docs);
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        console.error('[ArmMessage] Erreur Firestore:', err.message);
-        setError('Impossible de charger les messages. Vérifiez votre connexion.');
-        setLoading(false);
+  const loadMessages = useCallback(async (isRefresh = false) => {
+    console.log('[ArmMessage] GET /api/arm-messages');
+    if (!isRefresh) setLoading(true);
+    setError(null);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(`${BACKEND_URL}/api/arm-messages`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[ArmMessage] Erreur HTTP', res.status, text.slice(0, 120));
+        throw new Error(`Erreur ${res.status}`);
       }
-    );
-    return () => {
-      console.log('[ArmMessage] Désabonnement listener Firestore');
-      unsubscribe();
-    };
+      const data = await res.json();
+      const list: ArmMessageDoc[] = Array.isArray(data) ? data : (data.messages ?? []);
+      console.log('[ArmMessage] Messages chargés:', list.length);
+      setMessages(list);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[ArmMessage] Erreur chargement:', msg);
+      setError('Impossible de charger les messages. Vérifiez votre connexion.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadMessages(false);
+  }, [loadMessages]);
+
+  const onRefresh = useCallback(() => {
+    console.log('[ArmMessage] Pull-to-refresh');
+    setRefreshing(true);
+    loadMessages(true);
+  }, [loadMessages]);
 
   return (
     <>
@@ -59,10 +86,23 @@ export default function ArmMessageScreen() {
         options={{
           title: "Messages de l'ARM",
           headerBackTitle: 'Retour',
+          headerStyle: { backgroundColor: ARM_GREEN },
+          headerTintColor: ARM_GOLD,
+          headerTitleStyle: { fontWeight: 'bold', color: ARM_GOLD },
         }}
       />
       <View style={styles.container}>
-        <BodyScrollView contentContainerStyle={styles.content}>
+        <BodyScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={ARM_GOLD}
+              colors={[ARM_GOLD]}
+            />
+          }
+        >
           {loading ? (
             <View style={styles.centerBox}>
               <ActivityIndicator size="large" color={ARM_GOLD} />
@@ -71,6 +111,15 @@ export default function ArmMessageScreen() {
           ) : error ? (
             <View style={styles.centerBox}>
               <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => {
+                  console.log('[ArmMessage] Bouton Réessayer appuyé');
+                  loadMessages(false);
+                }}
+              >
+                <Text style={styles.retryBtnText}>Réessayer</Text>
+              </TouchableOpacity>
             </View>
           ) : messages.length === 0 ? (
             <View style={styles.centerBox}>
@@ -137,6 +186,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'rgba(232,245,238,0.5)',
     textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: 16,
+    backgroundColor: ARM_GOLD,
+    borderRadius: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  retryBtnText: {
+    color: '#0A1A0F',
+    fontWeight: '700',
+    fontSize: 15,
   },
   messageCard: {
     marginBottom: 32,

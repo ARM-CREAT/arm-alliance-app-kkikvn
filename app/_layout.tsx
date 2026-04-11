@@ -99,6 +99,12 @@ export default function RootLayout() {
                       <Stack.Screen name="admin/political-messages" options={{ headerShown: false }} />
                       <Stack.Screen name="admin/political-messages/[id]" options={{ headerShown: false }} />
                       <Stack.Screen name="admin/stats" options={{ headerShown: false }} />
+                      <Stack.Screen name="admin/arm-messages" options={{ headerShown: false }} />
+                      <Stack.Screen name="admin/news" options={{ headerShown: false }} />
+                      <Stack.Screen name="admin/events" options={{ headerShown: false }} />
+                      <Stack.Screen name="admin/media" options={{ headerShown: false }} />
+                      <Stack.Screen name="admin/notifications" options={{ headerShown: false }} />
+                      <Stack.Screen name="admin/member-detail/[id]" options={{ headerShown: false }} />
                       <Stack.Screen name="arm-message" options={{ headerShown: false }} />
                       <Stack.Screen name="members-list" options={{ headerShown: false }} />
                       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />

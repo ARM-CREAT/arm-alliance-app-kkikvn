@@ -57,6 +57,21 @@ export default function SettingsScreen() {
     router.push('/admin/login');
   };
 
+  const handleMembership = () => {
+    console.log('[Settings] Bouton Adhésion appuyé');
+    router.push('/(tabs)/profile');
+  };
+
+  const handleMessages = () => {
+    console.log('[Settings] Bouton Messages ARM appuyé');
+    router.push('/arm-message');
+  };
+
+  const handleMembersList = () => {
+    console.log('[Settings] Bouton Liste des membres appuyé');
+    router.push('/members-list');
+  };
+
   const handleBack = () => {
     console.log('[Settings] Bouton Retour appuyé');
     router.back();
@@ -182,6 +197,40 @@ export default function SettingsScreen() {
               <Text style={styles.optionLabel}>Parti</Text>
               <Text style={styles.optionValue}>Alliance pour le Rassemblement Malien</Text>
             </View>
+          </View>
+        </View>
+
+        {/* Quick Links Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Navigation rapide</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={[styles.optionRow, styles.optionRowBorder]}
+              onPress={handleMembership}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.optionFlag}>👥</Text>
+              <Text style={styles.optionLabel}>Adhésion ARM</Text>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.optionRow, styles.optionRowBorder]}
+              onPress={handleMessages}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.optionFlag}>📣</Text>
+              <Text style={styles.optionLabel}>Messages ARM</Text>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={handleMembersList}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.optionFlag}>📋</Text>
+              <Text style={styles.optionLabel}>Liste des membres</Text>
+              <Text style={styles.chevron}>›</Text>
+            </TouchableOpacity>
           </View>
         </View>
 

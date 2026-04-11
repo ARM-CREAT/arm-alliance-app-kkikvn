@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 const menuItems = [
   {
     title: 'Programme',
-    subtitle: 'Notre vision pour la France',
+    subtitle: 'Notre vision pour le Mali',
     route: '/program',
     icon: 'document-text' as const,
     color: colors.primary,
@@ -26,6 +26,20 @@ const menuItems = [
     route: '/(tabs)/profile',
     icon: 'people' as const,
     color: colors.primary,
+  },
+  {
+    title: 'Messages ARM',
+    subtitle: 'Communications officielles',
+    route: '/arm-message',
+    icon: 'megaphone' as const,
+    color: '#7C3AED',
+  },
+  {
+    title: 'Liste des membres',
+    subtitle: 'Voir les adhérents',
+    route: '/members-list',
+    icon: 'people-circle' as const,
+    color: '#0369A1',
   },
   {
     title: 'Contact',
