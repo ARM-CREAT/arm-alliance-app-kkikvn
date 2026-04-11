@@ -34,6 +34,9 @@ const DIRECTION_MEMBERS = [
   { name: 'Lassine Diakité', role: 'Président', location: 'Spain', phone: '0034632607101' },
   { name: 'Dadou Sangare', role: 'Premier Vice-Président', location: 'Milan, Italie', phone: '' },
   { name: 'Oumar Keita', role: 'Deuxième Vice-Président', location: 'Koutiala, Mali', phone: '0022376304869' },
+  { name: 'Karifa Keita', role: 'Secrétaire Général', location: 'Bamako, Mali', phone: '' },
+  { name: 'Modibo Keita', role: 'Secrétaire Administratif', location: 'Bamako, Mali', phone: '' },
+  { name: 'Sokona Keita', role: 'Trésorière', location: 'Bamako, Mali', phone: '0022375179920' },
 ];
 
 export default function HomeScreen() {
@@ -306,6 +309,21 @@ export default function HomeScreen() {
               {index < DIRECTION_MEMBERS.length - 1 && <View style={styles.separator} />}
             </View>
           ))}
+        </View>
+      </View>
+
+      {/* ── 7. Siège du Parti ── */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionHeaderLeft}>
+            <Ionicons name="business" size={22} color="#2E7D32" />
+            <Text style={styles.sectionTitle}>Siège du Parti</Text>
+          </View>
+        </View>
+        <View style={styles.siegeCard}>
+          <Text style={styles.siegeText}>Rue 530, Porte 245</Text>
+          <Text style={styles.siegeText}>Sebenikoro, Bamako</Text>
+          <Text style={styles.siegeText}>Mali</Text>
         </View>
       </View>
     </ScrollView>
@@ -630,5 +648,26 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F0F0F0',
     marginLeft: 84,
+  },
+
+  // Siège du Parti
+  siegeCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  siegeText: {
+    fontSize: 16,
+    color: '#1A1A1A',
+    textAlign: 'center',
+    lineHeight: 26,
+    fontWeight: '500',
   },
 });
