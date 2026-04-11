@@ -5,12 +5,73 @@ const fs = require('fs');
 
 const config = getDefaultConfig(__dirname);
 
-config.resolver.unstable_enablePackageExports = true;
+// CRITICAL: Must be false on web to prevent native package exports from resolving
+// native-only entry points (which crash/hang the web preview).
+config.resolver.unstable_enablePackageExports = false;
 
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
     new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
   ];
+
+// ---------------------------------------------------------------------------
+// Stub redirects — redirect native-only packages to web-safe stubs.
+// This runs for ALL platforms; stubs are designed to be no-ops on native too.
+// ---------------------------------------------------------------------------
+const STUB_DIR = path.join(__dirname, 'stubs');
+
+const NATIVE_PACKAGE_STUBS = {
+  // Firebase
+  '@react-native-firebase/app': path.join(STUB_DIR, 'firebase-app-stub.js'),
+  '@react-native-firebase/firestore': path.join(STUB_DIR, 'firebase-firestore-stub.js'),
+  // OneSignal
+  'react-native-onesignal': path.join(STUB_DIR, 'onesignal-stub.js'),
+  // Date picker
+  '@react-native-community/datetimepicker': path.join(STUB_DIR, 'datetimepicker-stub.js'),
+  // Maps
+  'react-native-maps': path.join(STUB_DIR, 'maps-stub.js'),
+  // QR Code
+  'react-native-qrcode-svg': path.join(STUB_DIR, 'qrcode-stub.js'),
+  // Worklets / Reanimated
+  'react-native-worklets': path.join(STUB_DIR, 'worklets-stub.js'),
+  'react-native-worklets-core': path.join(STUB_DIR, 'worklets-stub.js'),
+  // Gesture handler
+  'react-native-gesture-handler': path.join(STUB_DIR, 'gesture-handler-stub.js'),
+  // Edge to edge
+  'react-native-edge-to-edge': path.join(STUB_DIR, 'edge-to-edge-stub.js'),
+  // Safe area / screens / svg / webview / css-interop
+  'react-native-screens': path.join(STUB_DIR, 'react-native-screens-stub.js'),
+  'react-native-safe-area-context': path.join(STUB_DIR, 'react-native-safe-area-context-stub.js'),
+  'react-native-svg': path.join(STUB_DIR, 'react-native-svg-stub.js'),
+  'react-native-webview': path.join(STUB_DIR, 'react-native-webview-stub.js'),
+  'react-native-css-interop': path.join(STUB_DIR, 'react-native-css-interop-stub.js'),
+  // Expo native-only
+  'expo-blur': path.join(STUB_DIR, 'expo-blur-stub.js'),
+  'expo-symbols': path.join(STUB_DIR, 'expo-symbols-stub.js'),
+  'expo-haptics': path.join(STUB_DIR, 'expo-haptics-stub.js'),
+  'expo-camera': path.join(STUB_DIR, 'expo-camera-stub.js'),
+  'expo-media-library': path.join(STUB_DIR, 'expo-media-library-stub.js'),
+  'expo-notifications': path.join(STUB_DIR, 'expo-notifications-stub.js'),
+  'expo-video': path.join(STUB_DIR, 'expo-video-stub.js'),
+  'expo-glass-effect': path.join(STUB_DIR, 'expo-glass-effect-stub.js'),
+  // Google AdMob — disabled completely
+  '@react-native-google-mobile-ads': path.join(STUB_DIR, 'admob-stub.js'),
+  'expo-ads-admob': path.join(STUB_DIR, 'admob-stub.js'),
+  // AsyncStorage — use our web-safe implementation
+  '@react-native-async-storage/async-storage': path.join(__dirname, 'lib', 'async-storage.ts'),
+};
+
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Only redirect on web platform
+  if (platform === 'web' && NATIVE_PACKAGE_STUBS[moduleName]) {
+    const stubPath = NATIVE_PACKAGE_STUBS[moduleName];
+    if (fs.existsSync(stubPath)) {
+      return { filePath: stubPath, type: 'sourceFile' };
+    }
+  }
+  // Fall through to default resolution
+  return context.resolveRequest(context, moduleName, platform);
+};
 
 // Custom server middleware to receive console.log messages from the app
 const LOG_FILE_PATH = path.join(__dirname, '.natively', 'app_console.log');

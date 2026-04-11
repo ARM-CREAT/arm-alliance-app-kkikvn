@@ -12,11 +12,13 @@ import { NotificationProvider } from '@/contexts/NotificationContext';
 import { colors } from '@/styles/commonStyles';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
-// Hide splash screen immediately — never let it block the web preview
-try { SplashScreen.preventAutoHideAsync(); } catch {}
-// Belt-and-suspenders: force hide after 200ms even if the effect never fires
-if (typeof setTimeout !== 'undefined') {
-  setTimeout(() => { try { SplashScreen.hideAsync(); } catch {} }, 200);
+// On native: prevent auto-hide so we can control when it disappears.
+// On web: skip entirely — SplashScreen is a no-op on web and calling it
+// can cause the preview to hang waiting for a native module that never resolves.
+if (typeof navigator === 'undefined' || navigator.product !== 'ReactNative') {
+  // web — do nothing
+} else {
+  try { SplashScreen.preventAutoHideAsync(); } catch {}
 }
 
 const GestureHandlerRootView = View;
