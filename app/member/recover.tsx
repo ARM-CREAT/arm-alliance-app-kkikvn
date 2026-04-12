@@ -43,34 +43,27 @@ export default function RecoverScreen() {
 
       if (response.status === 404) {
         console.log('[Recover] Aucun adhérent trouvé pour:', phone);
-        setError('Aucun adhérent trouvé avec ce numéro');
+        setError('Aucun adhérent trouvé avec ce numéro de téléphone.');
         return;
       }
 
       if (!response.ok) {
         const text = await response.text();
-        console.error('[Recover] Erreur HTTP', response.status, text);
-        let errMsg = `Erreur ${response.status}`;
-        try {
-          const json = JSON.parse(text);
-          errMsg = json.message || json.error || errMsg;
-        } catch {
-          if (text && text.length < 300) errMsg = text;
-        }
-        throw new Error(errMsg);
+        console.error('[Recover] Erreur HTTP', response.status, text.slice(0, 200));
+        setError('Une erreur est survenue. Veuillez réessayer.');
+        return;
       }
 
       const data = await response.json();
-      console.log('[Recover] Membre trouvé:', data.member_number, JSON.stringify(data));
+      console.log('[Recover] Membre trouvé:', data.member_number || data.membership_number);
 
       router.push({
         pathname: '/member/card',
         params: { member: JSON.stringify(data) },
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('[Recover] Erreur:', message, err);
-      setError(message || 'Erreur de connexion. Vérifiez votre connexion internet.');
+      console.error('[Recover] Erreur réseau:', err instanceof Error ? err.message : String(err));
+      setError('Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
     } finally {
       setLoading(false);
     }

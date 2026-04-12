@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Modal,
-  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
@@ -25,7 +24,7 @@ const GENDER_OPTIONS = [
 
 interface FormErrors {
   fullName?: string;
-  phone?: string;
+  email?: string;
 }
 
 export default function MembershipScreen() {
@@ -47,16 +46,11 @@ export default function MembershipScreen() {
   const [errorBanner, setErrorBanner] = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // Duplicate (409) modal
-  const [duplicateModal, setDuplicateModal] = useState(false);
-  const [duplicateMemberNumber, setDuplicateMemberNumber] = useState('');
-  const [duplicateFullName, setDuplicateFullName] = useState('');
-
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
     if (!fullName.trim()) newErrors.fullName = 'Le nom complet est requis';
-    if (!phone.trim()) newErrors.phone = 'Le numéro de téléphone est requis';
-    else if (phone.trim().length < 8) newErrors.phone = 'Le numéro doit contenir au moins 8 caractères';
+    if (!email.trim()) newErrors.email = "L'email est requis";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) newErrors.email = 'Email invalide';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -82,70 +76,62 @@ export default function MembershipScreen() {
     const payload: Record<string, string> = {
       first_name: firstName,
       last_name: lastName,
-      phone: phone.trim(),
+      email: email.trim(),
     };
-    if (email.trim()) payload.email = email.trim();
+    if (phone.trim()) payload.phone = phone.trim();
     if (region.trim()) payload.region = region.trim();
-    if (commune.trim()) payload.address = commune.trim();
+    if (commune.trim()) payload.commune = commune.trim();
     if (gender) payload.gender = gender;
 
-    console.log('[Profile] POST /api/members/register', JSON.stringify(payload));
+    console.log('[Profile] POST /api/members', JSON.stringify(payload));
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/members/register`, {
+      const response = await fetch(`${BACKEND_URL}/api/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
+      const text = await response.text();
+
       if (!response.ok) {
-        const text = await response.text();
-        console.log('[Profile] Erreur HTTP', response.status, text);
+        console.log('[Profile] Erreur HTTP', response.status, text.slice(0, 200));
 
         if (response.status === 409) {
-          let dupNumber = '';
-          let dupName = '';
+          let errorCode = '';
           try {
             const json = JSON.parse(text);
-            dupNumber = json.membership_number ?? json.member_number ?? '';
-            dupName = json.member_name ?? json.full_name ?? '';
-            console.log('[Profile] 409 doublon — membre existant:', dupNumber, dupName);
+            errorCode = json.error || '';
           } catch {
-            console.log('[Profile] 409 — impossible de parser la réponse');
+            // ignore
           }
-          setDuplicateMemberNumber(dupNumber);
-          setDuplicateFullName(dupName);
-          setDuplicateModal(true);
+          if (errorCode === 'phone_exists') {
+            console.log('[Profile] 409 — numéro de téléphone déjà utilisé');
+            setErrorBanner('Ce numéro de téléphone est déjà utilisé.');
+          } else {
+            console.log('[Profile] 409 — email déjà utilisé');
+            setErrorBanner('Cet email est déjà utilisé.');
+          }
           return;
         }
 
-        let message = `Erreur ${response.status}. Veuillez réessayer.`;
-        try {
-          const json = JSON.parse(text);
-          message = json.error || json.message || message;
-        } catch {
-          message = text || message;
-        }
-        setErrorBanner(message);
+        setErrorBanner('Une erreur est survenue. Veuillez réessayer.');
         return;
       }
 
-      const data = await response.json();
-      const membershipNumber = data.membership_number ?? data.membershipNumber ?? '';
-      const returnedName = data.member_name ?? data.full_name ?? fullName.trim();
+      let data: Record<string, unknown> = {};
+      try { data = JSON.parse(text); } catch { /* ignore */ }
+      const membershipNumber = String(data.membership_number ?? data.member_number ?? '');
       console.log('[Profile] Inscription réussie:', membershipNumber);
 
       router.push({
-        pathname: '/member/success',
-        params: {
-          membership_number: membershipNumber,
-          full_name: returnedName,
-        },
+        pathname: '/member/card',
+        params: { member: JSON.stringify(data) },
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('[Profile] Erreur réseau:', message);
-      setErrorBanner('Erreur réseau. Vérifiez votre connexion.');
+      setErrorBanner('Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
     } finally {
       setLoading(false);
     }
@@ -157,69 +143,8 @@ export default function MembershipScreen() {
     hasError && styles.inputError,
   ];
 
-  const monoFont = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
-
   return (
     <>
-      {/* Duplicate member modal (409) */}
-      <Modal
-        visible={duplicateModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDuplicateModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.duplicateSheet}>
-            <View style={styles.duplicateIconRow}>
-              <Ionicons name="person-circle" size={48} color={colors.primary} />
-            </View>
-            <Text style={styles.duplicateTitle}>Numéro déjà inscrit</Text>
-            <Text style={styles.duplicateBody}>Ce numéro de téléphone est déjà inscrit.</Text>
-            {duplicateFullName ? (
-              <View style={styles.duplicateInfoBox}>
-                <Text style={styles.duplicateInfoLabel}>NOM</Text>
-                <Text style={styles.duplicateInfoValue}>{duplicateFullName}</Text>
-                {duplicateMemberNumber ? (
-                  <>
-                    <View style={styles.duplicateInfoDivider} />
-                    <Text style={styles.duplicateInfoLabel}>NUMÉRO DE MEMBRE</Text>
-                    <Text style={[styles.duplicateMemberNumber, { fontFamily: monoFont }]}>{duplicateMemberNumber}</Text>
-                  </>
-                ) : null}
-              </View>
-            ) : null}
-            <TouchableOpacity
-              style={styles.duplicatePrimaryBtn}
-              activeOpacity={0.85}
-              onPress={() => {
-                console.log("[Profile] Modal 409 — 'Voir ma carte' appuyé, member_number:", duplicateMemberNumber);
-                setDuplicateModal(false);
-                router.push({
-                  pathname: '/member/card',
-                  params: {
-                    member_number: duplicateMemberNumber,
-                    full_name: duplicateFullName,
-                  },
-                });
-              }}
-            >
-              <Ionicons name="card" size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.duplicatePrimaryBtnText}>Voir ma carte</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.duplicateSecondaryBtn}
-              activeOpacity={0.7}
-              onPress={() => {
-                console.log("[Profile] Modal 409 — 'Fermer' appuyé");
-                setDuplicateModal(false);
-              }}
-            >
-              <Text style={styles.duplicateSecondaryBtnText}>Fermer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Gender picker modal */}
       <Modal
         visible={genderPickerVisible}
@@ -316,44 +241,44 @@ export default function MembershipScreen() {
             {errors.fullName ? <Text style={styles.errorText}>{errors.fullName}</Text> : null}
           </View>
 
-          {/* Téléphone */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Téléphone <Text style={styles.required}>*</Text>
-            </Text>
-            <TextInput
-              style={inputStyle('phone', !!errors.phone)}
-              value={phone}
-              onChangeText={(t) => {
-                setPhone(t);
-                if (errors.phone) setErrors((e) => ({ ...e, phone: undefined }));
-              }}
-              placeholder="+223 XX XX XX XX"
-              placeholderTextColor={colors.textTertiary}
-              keyboardType="phone-pad"
-              editable={!loading}
-              onFocus={() => setFocusedField('phone')}
-              onBlur={() => setFocusedField(null)}
-            />
-            {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
-          </View>
-
-          <View style={styles.divider} />
-          <Text style={styles.sectionLabel}>Informations optionnelles</Text>
-
           {/* Email */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>
+              Email <Text style={styles.required}>*</Text>
+            </Text>
             <TextInput
-              style={inputStyle('email')}
+              style={inputStyle('email', !!errors.email)}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(t) => {
+                setEmail(t);
+                if (errors.email) setErrors((e) => ({ ...e, email: undefined }));
+              }}
               placeholder="votre@email.com"
               placeholderTextColor={colors.textTertiary}
               keyboardType="email-address"
               autoCapitalize="none"
               editable={!loading}
               onFocus={() => setFocusedField('email')}
+              onBlur={() => setFocusedField(null)}
+            />
+            {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+          </View>
+
+          <View style={styles.divider} />
+          <Text style={styles.sectionLabel}>Informations optionnelles</Text>
+
+          {/* Téléphone */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Téléphone</Text>
+            <TextInput
+              style={inputStyle('phone')}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="+223 XX XX XX XX"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="phone-pad"
+              editable={!loading}
+              onFocus={() => setFocusedField('phone')}
               onBlur={() => setFocusedField(null)}
             />
           </View>
@@ -613,96 +538,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
-  },
-  duplicateSheet: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    marginHorizontal: 24,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  duplicateIconRow: {
-    marginBottom: 12,
-  },
-  duplicateTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: colors.text,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  duplicateBody: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 22,
-  },
-  duplicateInfoBox: {
-    backgroundColor: colors.primaryMuted,
-    borderRadius: 14,
-    padding: 16,
-    width: '100%',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  duplicateInfoLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  duplicateInfoValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  duplicateInfoDivider: {
-    height: 1,
-    backgroundColor: colors.divider,
-    marginVertical: 12,
-  },
-  duplicateMemberNumber: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: 2,
-  },
-  duplicatePrimaryBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    marginBottom: 10,
-  },
-  duplicatePrimaryBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  duplicateSecondaryBtn: {
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    borderRadius: 14,
-    backgroundColor: colors.surfaceSecondary,
-  },
-  duplicateSecondaryBtnText: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    fontWeight: '600',
   },
   pickerSheet: {
     backgroundColor: colors.surface,

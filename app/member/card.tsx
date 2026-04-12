@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,11 @@ import {
   Dimensions,
   ImageSourcePropType,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BACKEND_URL } from '@/utils/api';
 
 const PRIMARY = '#2E7D32';
 const DARK_GREEN = '#1a5c2a';
@@ -62,32 +64,77 @@ export default function MemberCardScreen() {
   const params = useLocalSearchParams<{
     member?: string;
     member_number?: string;
+    email?: string;
     full_name?: string;
     commune?: string;
     status?: string;
     created_at?: string;
   }>();
 
-  let member: MemberData | null = null;
+  const [member, setMember] = useState<MemberData | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchError, setFetchError] = useState('');
 
-  if (params.member) {
-    try {
-      member = JSON.parse(params.member) as MemberData;
-      const num = member.membership_number || member.member_number;
-      console.log('[MemberCard] Données reçues via param member:', num);
-    } catch {
-      console.log('[MemberCard] Erreur parsing param member');
+  useEffect(() => {
+    // 1. Try to parse the full member JSON param
+    if (params.member) {
+      try {
+        const parsed = JSON.parse(params.member) as MemberData;
+        const num = parsed.membership_number || parsed.member_number;
+        console.log('[MemberCard] Données reçues via param member:', num);
+        setMember(parsed);
+        return;
+      } catch {
+        console.log('[MemberCard] Erreur parsing param member, tentative fallback');
+      }
     }
-  } else if (params.member_number) {
-    member = {
-      member_number: params.member_number,
-      full_name: params.full_name,
-      commune: params.commune,
-      status: params.status,
-      created_at: params.created_at,
-    };
-    console.log('[MemberCard] Données reçues via params individuels:', member.member_number);
-  }
+
+    // 2. Try individual flat params
+    if (params.member_number) {
+      const m: MemberData = {
+        member_number: params.member_number,
+        full_name: params.full_name,
+        commune: params.commune,
+        status: params.status,
+        created_at: params.created_at,
+      };
+      console.log('[MemberCard] Données reçues via params individuels:', m.member_number);
+      setMember(m);
+      return;
+    }
+
+    // 3. Fallback: fetch by email if provided
+    if (params.email) {
+      const email = params.email;
+      console.log('[MemberCard] Fallback fetch par email:', email);
+      setFetchLoading(true);
+      const encoded = encodeURIComponent(email);
+      fetch(`${BACKEND_URL}/api/members/lookup?email=${encoded}`, {
+        headers: { Accept: 'application/json' },
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const text = await res.text();
+            console.error('[MemberCard] Erreur fetch fallback', res.status, text.slice(0, 200));
+            throw new Error('not_found');
+          }
+          return res.json();
+        })
+        .then((data: MemberData) => {
+          console.log('[MemberCard] Membre récupéré via API:', data.membership_number || data.member_number);
+          setMember(data);
+        })
+        .catch((err: unknown) => {
+          console.error('[MemberCard] Impossible de récupérer la carte:', err);
+          setFetchError('Impossible de charger votre carte. Veuillez réessayer.');
+        })
+        .finally(() => setFetchLoading(false));
+      return;
+    }
+
+    // 4. No data at all — show error state
+    console.log('[MemberCard] Aucun paramètre disponible pour afficher la carte');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleHome = () => {
     console.log('[MemberCard] Bouton Retour à l\'accueil appuyé');
@@ -98,6 +145,24 @@ export default function MemberCardScreen() {
     console.log('[MemberCard] Bouton Partager ma carte appuyé');
     Alert.alert('Partager', 'Fonctionnalité de partage bientôt disponible.');
   };
+
+  if (fetchLoading) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Stack.Screen
+          options={{
+            title: 'Carte de Membre',
+            headerShown: true,
+            headerBackTitle: 'Retour',
+            headerStyle: { backgroundColor: PRIMARY },
+            headerTintColor: '#fff',
+          }}
+        />
+        <ActivityIndicator size="large" color={PRIMARY} />
+        <Text style={styles.emptyText}>Chargement de votre carte...</Text>
+      </View>
+    );
+  }
 
   if (!member) {
     return (
@@ -112,7 +177,9 @@ export default function MemberCardScreen() {
           }}
         />
         <Ionicons name="card-outline" size={64} color="#ccc" />
-        <Text style={styles.emptyText}>Aucune donnée de carte disponible</Text>
+        <Text style={styles.emptyText}>
+          {fetchError || 'Aucune donnée de carte disponible'}
+        </Text>
         <TouchableOpacity style={styles.homeButton} onPress={handleHome} activeOpacity={0.85}>
           <Text style={styles.homeButtonText}>Retour à l'accueil</Text>
         </TouchableOpacity>

@@ -27,7 +27,6 @@ export default function RegisterScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState('');
-  const [success, setSuccess] = useState(false);
 
   // Form fields
   const [firstName, setFirstName] = useState('');
@@ -91,72 +90,69 @@ export default function RegisterScreen() {
 
     const trimmedFirst = firstName.trim();
     const trimmedLast = lastName.trim();
-    const fullName = `${trimmedFirst} ${trimmedLast}`.trim();
 
     const payload: Record<string, string> = {
       first_name: trimmedFirst,
-      firstName: trimmedFirst,
       last_name: trimmedLast,
-      lastName: trimmedLast,
-      full_name: fullName,
       email: email.trim(),
-      membership_type: membershipType,
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(commune.trim() ? { commune: commune.trim() } : {}),
+      ...(region.trim() ? { region: region.trim() } : {}),
+      ...(profession.trim() ? { profession: profession.trim() } : {}),
+      ...(membershipType ? { membership_type: membershipType } : {}),
+      ...(message.trim() ? { message: message.trim() } : {}),
     };
-    if (phone.trim()) payload.phone = phone.trim();
-    if (commune.trim()) payload.commune = commune.trim();
-    if (region.trim()) payload.region = region.trim();
-    if (profession.trim()) payload.profession = profession.trim();
-    if (message.trim()) payload.message = message.trim();
 
-    console.log('[Register] POST /api/members/register', JSON.stringify(payload));
+    console.log('[Register] POST /api/members', JSON.stringify(payload));
     setLoading(true);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/register`, {
+      const res = await fetch(`${BACKEND_URL}/api/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
+      const text = await res.text();
+
       if (!res.ok) {
-        const text = await res.text();
         console.error('[Register] Erreur HTTP', res.status, text.slice(0, 200));
 
         if (res.status === 409) {
-          let parsedMsg = '';
+          let errorCode = '';
           try {
             const json = JSON.parse(text);
-            parsedMsg = json.error || json.message || '';
+            errorCode = json.error || '';
           } catch {
-            parsedMsg = text;
+            // ignore parse error
           }
-          const lowerMsg = parsedMsg.toLowerCase();
-          if (lowerMsg.includes('téléphone') || lowerMsg.includes('telephone') || lowerMsg.includes('phone')) {
-            console.log('[Register] 409 — numéro de téléphone déjà enregistré');
-            setErrorBanner('Ce numéro de téléphone est déjà enregistré. Veuillez en utiliser un autre.');
+          if (errorCode === 'phone_exists') {
+            console.log('[Register] 409 — numéro de téléphone déjà utilisé');
+            setErrorBanner('Ce numéro de téléphone est déjà utilisé.');
           } else {
-            console.log('[Register] 409 — email déjà enregistré');
-            setErrorBanner('Cet email est déjà enregistré.');
+            console.log('[Register] 409 — email déjà utilisé');
+            setErrorBanner('Cet email est déjà utilisé.');
           }
           setLoading(false);
           return;
         }
 
-        let msg = `Erreur ${res.status}. Veuillez réessayer.`;
-        try {
-          const json = JSON.parse(text);
-          msg = json.message || json.error || msg;
-        } catch {
-          if (text && text.length < 300) msg = text;
-        }
-        setErrorBanner(msg);
+        console.error('[Register] Erreur inattendue', res.status);
+        setErrorBanner('Une erreur est survenue. Veuillez réessayer.');
         setLoading(false);
         return;
       }
 
-      const data = await res.json();
+      let data: Record<string, unknown> = {};
+      try { data = JSON.parse(text); } catch { /* ignore */ }
       console.log('[Register] Inscription réussie:', JSON.stringify(data));
-      setSuccess(true);
+
+      // Navigate to member card with returned data
+      const memberParam = JSON.stringify(data);
+      router.replace({
+        pathname: '/member/card',
+        params: { member: memberParam },
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[Register] Erreur réseau:', msg);
@@ -170,42 +166,6 @@ export default function RegisterScreen() {
   const firstNameErrorText = firstNameError;
   const lastNameErrorText = lastNameError;
   const emailErrorText = emailError;
-
-  if (success) {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            title: 'Adhésion ARM',
-            headerStyle: { backgroundColor: PRIMARY },
-            headerTintColor: '#fff',
-            headerTitleStyle: { fontWeight: '700' },
-          }}
-        />
-        <View style={styles.successContainer}>
-          <View style={styles.successIconCircle}>
-            <Text style={styles.successIcon}>✅</Text>
-          </View>
-          <Text style={styles.successTitle}>Demande soumise !</Text>
-          <Text style={styles.successBody}>
-            Votre demande d'adhésion a été soumise avec succès !
-          </Text>
-          <Text style={styles.successSubBody}>
-            Vous recevrez une confirmation par email une fois votre demande traitée.
-          </Text>
-          <TouchableOpacity
-            style={styles.successBtn}
-            onPress={() => {
-              console.log('[Register] Bouton Retour à l\'accueil appuyé');
-              router.back();
-            }}
-          >
-            <Text style={styles.successBtnText}>Retour à l'accueil</Text>
-          </TouchableOpacity>
-        </View>
-      </>
-    );
-  }
 
   return (
     <KeyboardAvoidingView
