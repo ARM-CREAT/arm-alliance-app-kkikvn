@@ -19,8 +19,6 @@ export const BACKEND_URL: string =
 /** Alias for BACKEND_URL — use either name */
 export const API_BASE = BACKEND_URL;
 
-console.log('[API] BACKEND_URL resolved to:', BACKEND_URL);
-
 /**
  * Check if backend is properly configured
  */

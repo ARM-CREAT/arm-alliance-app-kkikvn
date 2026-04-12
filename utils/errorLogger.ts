@@ -289,7 +289,7 @@ const attemptMetroReconnect = () => {
 
 export const setupErrorLogging = () => {
   // Don't initialize in production builds - no need for log forwarding
-  if (!__DEV__) {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
     return;
   }
 
@@ -379,6 +379,8 @@ export const setupErrorLogging = () => {
 
 // Auto-initialize logging when this module is imported
 // Only run in development mode - production apps don't need log forwarding
-if (__DEV__) {
+// Use typeof guard so this never throws a ReferenceError on web where __DEV__
+// may not be injected into the global scope before this module is evaluated.
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
   setupErrorLogging();
 }

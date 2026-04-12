@@ -2,8 +2,13 @@ import * as React from "react";
 import { createContext, useCallback, useContext } from "react";
 import { Platform } from "react-native";
 
+// @bacons/apple-targets is iOS-native only. Lazy-require inside a try/catch
+// so any module-resolution failure is silently swallowed on all platforms.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const appleTargets = Platform.OS === "ios" ? (() => { try { return require("@bacons/apple-targets"); } catch { return null; } })() : null;
+const appleTargets: any = (() => {
+  if (Platform.OS !== "ios") return null;
+  try { return require("@bacons/apple-targets"); } catch { return null; }
+})();
 
 type WidgetContextType = {
   refreshWidget: () => void;
