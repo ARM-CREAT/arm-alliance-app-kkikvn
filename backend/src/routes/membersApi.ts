@@ -4,14 +4,23 @@ import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
 interface RegisterMemberBody {
-  first_name: string;
-  last_name: string;
-  email: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
   phone?: string;
-  region: string;
-  gender: string;
-  date_of_birth: string;
+  region?: string;
+  gender?: string;
+  date_of_birth?: string;
   address?: string;
+  city?: string;
+  country?: string;
+  profession?: string;
+  membership_type?: string;
+  message?: string;
+  nina?: string;
+  commune?: string;
+  cercle?: string;
+  motivation?: string;
 }
 
 interface UpdateMemberBody {
@@ -36,12 +45,9 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 }
 
 function generateMembershipNumber(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
+  const year = new Date().getFullYear();
   const randomFourDigits = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `ARM-${year}${month}${day}-${randomFourDigits}`;
+  return `ARM-${year}-${randomFourDigits}`;
 }
 
 export function register(app: App, fastify: FastifyInstance) {
@@ -138,7 +144,7 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/members/register - Register new member (NO admin password required)
+  // POST /api/members/register - Register new member (maximally permissive)
   fastify.post<{ Body: RegisterMemberBody }>(
     '/api/members/register',
     {
@@ -147,7 +153,7 @@ export function register(app: App, fastify: FastifyInstance) {
         tags: ['members'],
         body: {
           type: 'object',
-          required: ['first_name', 'last_name', 'email', 'region', 'gender', 'date_of_birth'],
+          required: ['first_name', 'last_name', 'email'],
           properties: {
             first_name: { type: 'string' },
             last_name: { type: 'string' },
@@ -157,38 +163,83 @@ export function register(app: App, fastify: FastifyInstance) {
             gender: { type: 'string' },
             date_of_birth: { type: 'string' },
             address: { type: 'string' },
+            city: { type: 'string' },
+            country: { type: 'string' },
+            profession: { type: 'string' },
+            membership_type: { type: 'string' },
+            message: { type: 'string' },
+            nina: { type: 'string' },
+            commune: { type: 'string' },
+            cercle: { type: 'string' },
+            motivation: { type: 'string' },
           },
         },
         response: {
           201: { type: 'object' },
+          400: { type: 'object' },
           409: { type: 'object' },
+          500: { type: 'object' },
         },
       },
     },
     async (request: FastifyRequest<{ Body: RegisterMemberBody }>, reply: FastifyReply) => {
-      const { first_name, last_name, email, phone, region, gender, date_of_birth, address } = request.body;
-
-      // Normalize phone: trim and convert empty string to null
-      const normalizedPhone = phone && phone.trim() ? phone.trim() : null;
-
-      app.logger.info({ email, phone: normalizedPhone }, 'Registering new member');
-
       try {
-        // Check for duplicate email
-        const existingMember = await app.db
+        const body = request.body;
+        const first_name = (body.first_name || '').trim();
+        const last_name = (body.last_name || '').trim();
+        const email = (body.email || '').trim().toLowerCase();
+
+        // Validate required fields
+        if (!first_name || !last_name || !email) {
+          app.logger.warn({ first_name, last_name, email }, 'Validation error: missing required fields');
+          reply.status(400);
+          return {
+            error: 'validation_error',
+            message: 'first_name, last_name et email sont obligatoires',
+          };
+        }
+
+        // Normalize phone
+        let normalizedPhone: string | null = null;
+        if (body.phone && typeof body.phone === 'string') {
+          const trimmedPhone = body.phone.trim();
+          if (trimmedPhone.length > 0) {
+            normalizedPhone = trimmedPhone;
+          }
+        }
+
+        app.logger.info({ email, phone: normalizedPhone }, 'Registering new member');
+
+        // Check for duplicate email (case-insensitive)
+        const existingByEmail = await app.db
           .select()
           .from(schema.members)
           .where(eq(schema.members.email, email));
 
-        if (existingMember.length > 0) {
-          app.logger.warn({ email }, 'Email already registered');
+        if (existingByEmail.length > 0) {
+          app.logger.warn({ email }, 'Email already exists');
           reply.status(409);
           return {
-            membership_number: existingMember[0].memberNumber,
-            member_number: existingMember[0].memberNumber,
-            member_name: `${existingMember[0].firstName} ${existingMember[0].lastName}`,
-            message: 'Member already registered',
+            error: 'email_exists',
+            message: 'Cet email est déjà utilisé',
           };
+        }
+
+        // Check for duplicate phone (only if phone is not null)
+        if (normalizedPhone) {
+          const existingByPhone = await app.db
+            .select()
+            .from(schema.members)
+            .where(eq(schema.members.phone, normalizedPhone));
+
+          if (existingByPhone.length > 0) {
+            app.logger.warn({ phone: normalizedPhone }, 'Phone already exists');
+            reply.status(409);
+            return {
+              error: 'phone_exists',
+              message: 'Ce numéro est déjà utilisé',
+            };
+          }
         }
 
         // Generate membership number
@@ -196,77 +247,103 @@ export function register(app: App, fastify: FastifyInstance) {
         const fullName = `${first_name} ${last_name}`;
         const now = new Date();
 
-        const result = await app.db
+        // Insert into members table
+        const membersResult = await app.db
           .insert(schema.members)
           .values({
+            id: undefined as any,
             memberNumber: membershipNumber,
-            membershipNumber: membershipNumber,
+            membershipNumber,
             fullName,
             firstName: first_name,
             lastName: last_name,
             email,
             phone: normalizedPhone,
-            region,
-            gender,
-            dateOfBirth: date_of_birth,
-            address: address || null,
+            region: body.region || null,
+            profession: body.profession || null,
+            dateOfBirth: body.date_of_birth || null,
+            gender: body.gender || null,
+            address: body.address || null,
+            city: body.city || null,
+            country: body.country || null,
+            membershipType: body.membership_type || 'standard',
+            message: body.message || null,
             status: 'pending',
             createdAt: now,
             updatedAt: now,
           })
           .returning();
 
-        const member = result[0];
-        app.logger.info({ memberId: member.id, membershipNumber }, 'Member registered');
+        const member = membersResult[0];
+        app.logger.info({ memberId: member.id, membershipNumber }, 'Member inserted into members table');
 
-        // Also insert into member_profiles (non-blocking if it fails)
+        // Insert into member_profiles (non-blocking if it fails)
         try {
           await app.db
             .insert(schema.memberProfiles)
             .values({
-              fullName,
+              id: undefined as any,
+              userId: null,
               firstName: first_name,
               lastName: last_name,
+              fullName,
               email,
               phone: normalizedPhone,
-              commune: '',
-              profession: '',
-              region,
-              motivation: address || null,
+              nina: body.nina || null,
+              commune: body.commune || null,
+              profession: body.profession || null,
               membershipNumber,
               qrCode: membershipNumber,
-              status: 'active',
+              status: 'pending',
               role: 'member',
-              userId: null,
-              nina: null,
-              cercle: null,
-              createdAt: new Date(),
-              updatedAt: new Date(),
+              region: body.region || null,
+              cercle: body.cercle || null,
+              motivation: body.motivation || null,
+              createdAt: now,
+              updatedAt: now,
             });
-          app.logger.info({ memberId: member.id, membershipNumber }, 'Member profile created');
+          app.logger.info({ memberId: member.id, membershipNumber }, 'Member inserted into member_profiles table');
         } catch (profileError) {
-          // Non-blocking error - don't fail the registration if profile insert fails
-          app.logger.warn({ err: profileError, memberId: member.id }, 'Failed to create member profile');
+          // Non-blocking error - log but don't fail the registration
+          app.logger.warn({ err: profileError, memberId: member.id }, 'Failed to insert into member_profiles');
         }
 
         reply.status(201);
         return {
-          membership_number: member.memberNumber,
-          member_number: member.memberNumber,
-          member_name: fullName,
-          status: 'pending',
-          message: 'Registration successful',
+          success: true,
+          member: {
+            id: member.id,
+            first_name: member.firstName,
+            last_name: member.lastName,
+            full_name: member.fullName,
+            email: member.email,
+            phone: member.phone,
+            region: member.region,
+            cercle: member.commune,
+            commune: member.commune,
+            profession: member.profession,
+            membership_number: member.memberNumber,
+            member_number: member.memberNumber,
+            status: member.status,
+            date_of_birth: member.dateOfBirth,
+            gender: member.gender,
+            address: member.address,
+            city: member.city,
+            country: member.country,
+            membership_type: member.membershipType,
+            message: member.message,
+            created_at: member.createdAt.toISOString(),
+            updated_at: member.updatedAt.toISOString(),
+          },
+          membership_number: membershipNumber,
         };
       } catch (error: any) {
-        // Handle unique constraint violation on phone field
-        if (error.code === '23505' && error.constraint && error.constraint.includes('phone')) {
-          app.logger.warn({ phone: normalizedPhone }, 'Phone number already registered');
-          reply.status(409);
-          return { error: 'Ce numéro de téléphone est déjà enregistré.' };
-        }
-
-        app.logger.error({ err: error, email }, 'Failed to register member');
-        throw error;
+        app.logger.error({ err: error }, 'Unexpected error during member registration');
+        reply.status(500);
+        return {
+          error: 'server_error',
+          message: 'Une erreur est survenue, réessayez',
+        };
       }
     }
   );
