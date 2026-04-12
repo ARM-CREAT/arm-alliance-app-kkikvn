@@ -7,6 +7,23 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = true;
 
+// Map native-only packages to web-safe stubs so the web bundle never
+// tries to resolve modules that require native build infrastructure.
+const STUB_MAP = {
+  '@react-native-async-storage/async-storage': path.resolve(__dirname, 'stubs/async-storage-stub.js'),
+};
+
+const originalResolveRequest = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === 'web' && STUB_MAP[moduleName]) {
+    return { filePath: STUB_MAP[moduleName], type: 'sourceFile' };
+  }
+  if (originalResolveRequest) {
+    return originalResolveRequest(context, moduleName, platform);
+  }
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
     new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
