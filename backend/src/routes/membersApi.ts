@@ -36,9 +36,12 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 }
 
 function generateMembershipNumber(): string {
-  const year = new Date().getFullYear();
-  const randomDigits = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-  return `ARM-${year}-${randomDigits}`;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const randomFourDigits = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `ARM-${year}${month}${day}-${randomFourDigits}`;
 }
 
 export function register(app: App, fastify: FastifyInstance) {
@@ -72,14 +75,25 @@ export function register(app: App, fastify: FastifyInstance) {
           id: m.id,
           first_name: m.firstName,
           last_name: m.lastName,
+          full_name: m.fullName,
           email: m.email,
           phone: m.phone,
           region: m.region,
-          gender: m.gender,
-          date_of_birth: m.dateOfBirth,
+          cercle: m.commune, // cercle field (using commune value)
+          commune: m.commune,
+          profession: m.profession,
           membership_number: m.memberNumber,
+          member_number: m.memberNumber,
           status: m.status,
+          date_of_birth: m.dateOfBirth,
+          gender: m.gender,
+          address: m.address,
+          city: m.city,
+          country: m.country,
+          membership_type: m.membershipType,
+          message: m.message,
           created_at: m.createdAt.toISOString(),
+          updated_at: m.updatedAt.toISOString(),
         }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch members');
@@ -214,15 +228,15 @@ export function register(app: App, fastify: FastifyInstance) {
               firstName: first_name,
               lastName: last_name,
               email,
-              phone: normalizedPhone || '',
+              phone: normalizedPhone,
               commune: '',
               profession: '',
               region,
               motivation: address || null,
-              membershipNumber: membershipNumber,
+              membershipNumber,
               qrCode: membershipNumber,
-              status: 'pending',
-              role: 'militant',
+              status: 'active',
+              role: 'member',
               userId: null,
               nina: null,
               cercle: null,
@@ -611,59 +625,48 @@ export function register(app: App, fastify: FastifyInstance) {
   );
 
   // GET /api/member-profiles - Get all member profiles
-  fastify.get<{ Querystring: { status?: string } }>(
+  fastify.get(
     '/api/member-profiles',
     {
       schema: {
-        description: 'Get all member profiles with optional status filter',
+        description: 'Get all member profiles',
         tags: ['member-profiles'],
-        querystring: {
-          type: 'object',
-          properties: {
-            status: { type: 'string', description: 'Filter by status (e.g., approved, pending)' },
-          },
-        },
         response: {
           200: { type: 'array', items: { type: 'object' } },
         },
       },
     },
-    async (request: FastifyRequest<{ Querystring: { status?: string } }>, reply: FastifyReply) => {
-      app.logger.info({ status: request.query.status }, 'Fetching member profiles');
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      app.logger.info('Fetching all member profiles');
 
       try {
-        let profiles;
-
-        if (request.query.status) {
-          profiles = await app.db
-            .select()
-            .from(schema.memberProfiles)
-            .where(eq(schema.memberProfiles.status, request.query.status))
-            .orderBy(desc(schema.memberProfiles.createdAt));
-        } else {
-          profiles = await app.db
-            .select()
-            .from(schema.memberProfiles)
-            .orderBy(desc(schema.memberProfiles.createdAt));
-        }
+        const profiles = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .orderBy(desc(schema.memberProfiles.createdAt));
 
         app.logger.info({ count: profiles.length }, 'Member profiles retrieved');
 
         return profiles.map(p => ({
           id: p.id,
-          full_name: p.fullName,
           first_name: p.firstName,
           last_name: p.lastName,
-          membership_number: p.membershipNumber,
-          commune: p.commune,
-          region: p.region,
-          profession: p.profession,
-          phone: p.phone,
+          full_name: p.fullName,
           email: p.email,
-          status: p.status,
+          phone: p.phone,
+          region: p.region,
+          cercle: p.cercle,
+          commune: p.commune,
+          profession: p.profession,
+          membership_number: p.membershipNumber,
           role: p.role,
+          status: p.status,
+          nina: p.nina,
           qr_code: p.qrCode,
+          motivation: p.motivation,
+          user_id: p.userId,
           created_at: p.createdAt.toISOString(),
+          updated_at: p.updatedAt.toISOString(),
         }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch member profiles');
@@ -911,6 +914,79 @@ export async function seedMembers(app: App) {
 
       await app.db.insert(schema.members).values(seedData);
       app.logger.info({ count: seedData.length }, 'Members seeded');
+    }
+
+    // Seed member_profiles if it has fewer than 3 rows
+    const existingProfiles = await app.db.select().from(schema.memberProfiles);
+    if (existingProfiles.length < 3) {
+      app.logger.info('Seeding member_profiles table');
+
+      const now = new Date();
+      const profileSeedData = [
+        {
+          firstName: 'Amadou',
+          lastName: 'Coulibaly',
+          fullName: 'Amadou Coulibaly',
+          email: 'amadou.coulibaly@example.com',
+          phone: '+22376543210',
+          region: 'Bamako',
+          cercle: 'Bamako',
+          commune: 'Commune I',
+          profession: 'Enseignant',
+          membershipNumber: 'ARM-20240101-0001',
+          qrCode: 'ARM-20240101-0001',
+          status: 'active',
+          role: 'member',
+          userId: null,
+          nina: null,
+          motivation: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          firstName: 'Fatoumata',
+          lastName: 'Diallo',
+          fullName: 'Fatoumata Diallo',
+          email: 'fatoumata.diallo@example.com',
+          phone: '+22365432109',
+          region: 'Sikasso',
+          cercle: 'Sikasso',
+          commune: 'Sikasso',
+          profession: 'Commerçante',
+          membershipNumber: 'ARM-20240102-0002',
+          qrCode: 'ARM-20240102-0002',
+          status: 'active',
+          role: 'member',
+          userId: null,
+          nina: null,
+          motivation: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          firstName: 'Ibrahim',
+          lastName: 'Traoré',
+          fullName: 'Ibrahim Traoré',
+          email: 'ibrahim.traore@example.com',
+          phone: '+22354321098',
+          region: 'Mopti',
+          cercle: 'Mopti',
+          commune: 'Mopti',
+          profession: 'Médecin',
+          membershipNumber: 'ARM-20240103-0003',
+          qrCode: 'ARM-20240103-0003',
+          status: 'active',
+          role: 'coordinator',
+          userId: null,
+          nina: null,
+          motivation: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+
+      await app.db.insert(schema.memberProfiles).values(profileSeedData);
+      app.logger.info({ count: profileSeedData.length }, 'Member profiles seeded');
     }
   } catch (error) {
     app.logger.error({ err: error }, 'Failed to seed members');
