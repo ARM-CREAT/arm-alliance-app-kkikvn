@@ -1,8 +1,7 @@
-
 import React from 'react';
-import { View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Tabs } from 'expo-router';
 import FloatingTabBar, { TabBarItem } from '@/components/FloatingTabBar';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 const TABS: TabBarItem[] = [
   {
@@ -19,14 +18,18 @@ const TABS: TabBarItem[] = [
   },
 ];
 
+function renderTabBar(_props: BottomTabBarProps) {
+  return <FloatingTabBar tabs={TABS} />;
+}
+
 export default function TabLayout() {
   return (
-    <View style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { flex: 1 } }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="profile" />
-      </Stack>
-      <FloatingTabBar tabs={TABS} />
-    </View>
+    <Tabs
+      screenOptions={{ headerShown: false }}
+      tabBar={renderTabBar}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Accueil' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Adhésion' }} />
+    </Tabs>
   );
 }
