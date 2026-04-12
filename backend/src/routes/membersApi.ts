@@ -205,6 +205,36 @@ export function register(app: App, fastify: FastifyInstance) {
         const member = result[0];
         app.logger.info({ memberId: member.id, membershipNumber }, 'Member registered');
 
+        // Also insert into member_profiles (non-blocking if it fails)
+        try {
+          await app.db
+            .insert(schema.memberProfiles)
+            .values({
+              fullName,
+              firstName: first_name,
+              lastName: last_name,
+              email,
+              phone: normalizedPhone || '',
+              commune: '',
+              profession: '',
+              region,
+              motivation: address || null,
+              membershipNumber: membershipNumber,
+              qrCode: membershipNumber,
+              status: 'pending',
+              role: 'militant',
+              userId: null,
+              nina: null,
+              cercle: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          app.logger.info({ memberId: member.id, membershipNumber }, 'Member profile created');
+        } catch (profileError) {
+          // Non-blocking error - don't fail the registration if profile insert fails
+          app.logger.warn({ err: profileError, memberId: member.id }, 'Failed to create member profile');
+        }
+
         reply.status(201);
         return {
           membership_number: member.memberNumber,
@@ -575,6 +605,217 @@ export function register(app: App, fastify: FastifyInstance) {
         return { success: true, message: 'Member deleted' };
       } catch (error) {
         app.logger.error({ err: error, memberId: id }, 'Failed to delete member');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/member-profiles - Get all member profiles
+  fastify.get<{ Querystring: { status?: string } }>(
+    '/api/member-profiles',
+    {
+      schema: {
+        description: 'Get all member profiles with optional status filter',
+        tags: ['member-profiles'],
+        querystring: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', description: 'Filter by status (e.g., approved, pending)' },
+          },
+        },
+        response: {
+          200: { type: 'array', items: { type: 'object' } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { status?: string } }>, reply: FastifyReply) => {
+      app.logger.info({ status: request.query.status }, 'Fetching member profiles');
+
+      try {
+        let profiles;
+
+        if (request.query.status) {
+          profiles = await app.db
+            .select()
+            .from(schema.memberProfiles)
+            .where(eq(schema.memberProfiles.status, request.query.status))
+            .orderBy(desc(schema.memberProfiles.createdAt));
+        } else {
+          profiles = await app.db
+            .select()
+            .from(schema.memberProfiles)
+            .orderBy(desc(schema.memberProfiles.createdAt));
+        }
+
+        app.logger.info({ count: profiles.length }, 'Member profiles retrieved');
+
+        return profiles.map(p => ({
+          id: p.id,
+          full_name: p.fullName,
+          first_name: p.firstName,
+          last_name: p.lastName,
+          membership_number: p.membershipNumber,
+          commune: p.commune,
+          region: p.region,
+          profession: p.profession,
+          phone: p.phone,
+          email: p.email,
+          status: p.status,
+          role: p.role,
+          qr_code: p.qrCode,
+          created_at: p.createdAt.toISOString(),
+        }));
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch member profiles');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/member-profiles/lookup - Look up member profile by phone
+  fastify.get<{ Querystring: { phone: string } }>(
+    '/api/member-profiles/lookup',
+    {
+      schema: {
+        description: 'Look up member profile by phone number',
+        tags: ['member-profiles'],
+        querystring: {
+          type: 'object',
+          required: ['phone'],
+          properties: {
+            phone: { type: 'string', description: 'Phone number to search for' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { phone: string } }>, reply: FastifyReply) => {
+      const { phone } = request.query;
+
+      app.logger.info({ phone }, 'Looking up member profile by phone');
+
+      try {
+        const profiles = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.phone, phone));
+
+        if (profiles.length === 0) {
+          app.logger.info({ phone }, 'Member profile not found');
+          reply.status(404);
+          return { error: 'Member not found' };
+        }
+
+        const profile = profiles[0];
+        app.logger.info({ phone, profileId: profile.id }, 'Member profile found');
+
+        return {
+          id: profile.id,
+          full_name: profile.fullName,
+          first_name: profile.firstName,
+          last_name: profile.lastName,
+          membership_number: profile.membershipNumber,
+          commune: profile.commune,
+          region: profile.region,
+          profession: profile.profession,
+          phone: profile.phone,
+          email: profile.email,
+          status: profile.status,
+          role: profile.role,
+          qr_code: profile.qrCode,
+          created_at: profile.createdAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, phone }, 'Failed to look up member profile');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/members/lookup - Look up member by phone (searches both members and member_profiles)
+  fastify.get<{ Querystring: { phone: string } }>(
+    '/api/members/lookup',
+    {
+      schema: {
+        description: 'Look up member by phone number (searches members and member_profiles)',
+        tags: ['members'],
+        querystring: {
+          type: 'object',
+          required: ['phone'],
+          properties: {
+            phone: { type: 'string', description: 'Phone number to search for' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { phone: string } }>, reply: FastifyReply) => {
+      const { phone } = request.query;
+
+      app.logger.info({ phone }, 'Looking up member by phone');
+
+      try {
+        // First search in members table
+        const members = await app.db
+          .select()
+          .from(schema.members)
+          .where(eq(schema.members.phone, phone));
+
+        if (members.length > 0) {
+          const m = members[0];
+          app.logger.info({ phone, memberId: m.id }, 'Member found in members table');
+          return {
+            id: m.id,
+            member_number: m.memberNumber,
+            full_name: m.fullName,
+            first_name: m.firstName,
+            last_name: m.lastName,
+            commune: m.commune,
+            region: m.region,
+            status: m.status,
+            created_at: m.createdAt.toISOString(),
+            phone: m.phone,
+            email: m.email,
+            membership_number: m.memberNumber,
+          };
+        }
+
+        // If not found in members, search in member_profiles
+        const profiles = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.phone, phone));
+
+        if (profiles.length > 0) {
+          const p = profiles[0];
+          app.logger.info({ phone, profileId: p.id }, 'Member found in member_profiles table');
+          return {
+            id: p.id,
+            member_number: p.membershipNumber,
+            full_name: p.fullName,
+            first_name: p.firstName,
+            last_name: p.lastName,
+            commune: p.commune,
+            region: p.region,
+            status: p.status,
+            created_at: p.createdAt.toISOString(),
+            phone: p.phone,
+            email: p.email,
+            membership_number: p.membershipNumber,
+          };
+        }
+
+        app.logger.info({ phone }, 'Member not found in either table');
+        reply.status(404);
+        return { error: 'Member not found' };
+      } catch (error) {
+        app.logger.error({ err: error, phone }, 'Failed to look up member');
         throw error;
       }
     }
