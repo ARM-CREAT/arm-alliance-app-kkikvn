@@ -23,9 +23,17 @@ const CARD_WIDTH = width - 40;
 interface MemberData {
   id?: string;
   member_number?: string;
+  membership_number?: string;
   full_name?: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
+  email?: string;
   commune?: string;
+  region?: string;
+  profession?: string;
+  role?: string;
+  qr_code?: string;
   status?: string;
   created_at?: string;
 }
@@ -65,7 +73,8 @@ export default function MemberCardScreen() {
   if (params.member) {
     try {
       member = JSON.parse(params.member) as MemberData;
-      console.log('[MemberCard] Données reçues via param member:', member.member_number);
+      const num = member.membership_number || member.member_number;
+      console.log('[MemberCard] Données reçues via param member:', num);
     } catch {
       console.log('[MemberCard] Erreur parsing param member');
     }
@@ -111,12 +120,17 @@ export default function MemberCardScreen() {
     );
   }
 
-  const memberNumber = member.member_number || '—';
-  const fullName = member.full_name || '—';
+  const memberNumber = member.membership_number || member.member_number || '—';
+  const fullName = member.full_name || [member.first_name, member.last_name].filter(Boolean).join(' ') || '—';
   const commune = member.commune || '—';
+  const region = member.region || '';
+  const profession = member.profession || '';
+  const role = member.role || '';
+  const qrCode = member.qr_code || '';
+  const locationDisplay = [commune, region].filter((v) => v && v !== '—').join(', ') || commune;
   const statusRaw = member.status || 'active';
-  const statusLabel = statusRaw === 'active' ? 'Actif' : statusRaw === 'pending' ? 'En attente' : statusRaw;
-  const statusColor = statusRaw === 'active' ? '#34C759' : statusRaw === 'pending' ? '#FF9500' : '#8E8E93';
+  const statusLabel = statusRaw === 'active' || statusRaw === 'approved' ? 'Actif' : statusRaw === 'pending' ? 'En attente' : statusRaw;
+  const statusColor = statusRaw === 'active' || statusRaw === 'approved' ? '#34C759' : statusRaw === 'pending' ? '#FF9500' : '#8E8E93';
   const joinDate = formatDate(member.created_at);
   const monoFont = Platform.OS === 'ios' ? 'Courier' : 'monospace';
 
@@ -184,14 +198,37 @@ export default function MemberCardScreen() {
                 <Text style={styles.infoValue}>{fullName}</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>COMMUNE / VILLE</Text>
-                <Text style={styles.infoValue}>{commune}</Text>
+                <Text style={styles.infoLabel}>COMMUNE / RÉGION</Text>
+                <Text style={styles.infoValue}>{locationDisplay}</Text>
               </View>
+              {!!profession && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>PROFESSION</Text>
+                  <Text style={styles.infoValue}>{profession}</Text>
+                </View>
+              )}
+              {!!role && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>RÔLE</Text>
+                  <Text style={styles.infoValue}>{role}</Text>
+                </View>
+              )}
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>DATE D'ADHÉSION</Text>
                 <Text style={styles.infoValue}>{joinDate}</Text>
               </View>
             </View>
+
+            {/* QR Code */}
+            {!!qrCode && (
+              <View style={styles.qrSection}>
+                <Image
+                  source={resolveImageSource(qrCode)}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
 
             {/* Card Footer */}
             <View style={styles.cardFooter}>
@@ -367,6 +404,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#fff',
+  },
+  qrSection: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  qrImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    backgroundColor: '#fff',
   },
   cardFooter: {
     backgroundColor: 'rgba(0,0,0,0.25)',

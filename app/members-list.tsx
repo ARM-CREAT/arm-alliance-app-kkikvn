@@ -16,21 +16,22 @@ const PRIMARY = '#4CAF50';
 interface Member {
   id: string;
   full_name?: string;
+  first_name?: string;
+  last_name?: string;
   name?: string;
   email?: string;
+  phone?: string;
+  membership_number?: string;
+  commune?: string;
+  region?: string;
+  profession?: string;
+  role?: string;
+  qr_code?: string;
   city?: string;
   country?: string;
   membership_type?: string;
   status: string;
   created_at: string;
-}
-
-interface MembersResponse {
-  members?: Member[];
-  data?: Member[];
-  total?: number;
-  pending?: number;
-  approved?: number;
 }
 
 function getStatusColor(status: string): string {
@@ -80,35 +81,23 @@ export default function MembersListScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadMembers = useCallback(async (isRefresh = false) => {
-    console.log('[MembersList] GET /api/members');
+    console.log('[MembersList] GET /api/member-profiles');
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members`);
+      const res = await fetch(`${BACKEND_URL}/api/member-profiles`);
       if (!res.ok) {
         const text = await res.text();
         console.error('[MembersList] Erreur HTTP', res.status, text.slice(0, 120));
         throw new Error(`Erreur ${res.status}`);
       }
-      const data: MembersResponse | Member[] = await res.json();
+      const data: Member[] = await res.json();
       console.log('[MembersList] Réponse reçue');
 
-      let list: Member[];
-      let totalCount = 0;
-      let pendingCount = 0;
-      let approvedCount = 0;
-
-      if (Array.isArray(data)) {
-        list = data;
-        totalCount = data.length;
-        pendingCount = data.filter((m) => (m.status || '').toLowerCase() === 'pending').length;
-        approvedCount = data.filter((m) => (m.status || '').toLowerCase() === 'approved').length;
-      } else {
-        list = data.members ?? data.data ?? [];
-        totalCount = data.total ?? list.length;
-        pendingCount = data.pending ?? list.filter((m) => (m.status || '').toLowerCase() === 'pending').length;
-        approvedCount = data.approved ?? list.filter((m) => (m.status || '').toLowerCase() === 'approved').length;
-      }
+      const list: Member[] = Array.isArray(data) ? data : [];
+      const totalCount = list.length;
+      const pendingCount = list.filter((m) => (m.status || '').toLowerCase() === 'pending').length;
+      const approvedCount = list.filter((m) => (m.status || '').toLowerCase() === 'approved').length;
 
       console.log('[MembersList] Membres chargés:', list.length, '| total:', totalCount, '| pending:', pendingCount, '| approved:', approvedCount);
       setMembers(list);
@@ -135,7 +124,10 @@ export default function MembersListScreen() {
     loadMembers(true);
   }, [loadMembers]);
 
-  const approvedMembers = members.filter((m) => (m.status || '').toLowerCase() === 'approved');
+  const approvedMembers = members.filter((m) => {
+    const s = (m.status || '').toLowerCase();
+    return s === 'approved' || s === 'active';
+  });
 
   const totalStr = String(total);
   const pendingStr = String(pending);
@@ -147,7 +139,7 @@ export default function MembersListScreen() {
     const statusColor = getStatusColor(item.status);
     const statusLabel = getStatusLabel(item.status);
     const membershipLabel = getMembershipTypeLabel(item.membership_type);
-    const locationParts = [item.city, item.country].filter(Boolean);
+    const locationParts = [item.commune, item.region].filter(Boolean);
     const locationText = locationParts.join(', ');
 
     return (

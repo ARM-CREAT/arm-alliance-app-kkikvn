@@ -45,9 +45,9 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const fetchMemberCount = async () => {
-      console.log('[Home] Fetching member count from API');
+      console.log('[Home] GET /api/member-profiles (member count)');
       try {
-        const response = await fetch(`${BACKEND_URL}/api/members/count`);
+        const response = await fetch(`${BACKEND_URL}/api/member-profiles`);
         if (!response.ok) {
           const text = await response.text();
           console.warn('[Home] Member count API error:', response.status, text);
@@ -55,21 +55,9 @@ export default function HomeScreen() {
           return;
         }
         const data = await response.json();
-        console.log('[Home] Member count response:', data);
-        let raw: unknown;
-        if (typeof data === 'number') {
-          raw = data;
-        } else if (data !== null && typeof data === 'object') {
-          raw = (data as Record<string, unknown>).count
-            ?? (data as Record<string, unknown>).total
-            ?? (data as Record<string, unknown>).memberCount
-            ?? (data as Record<string, unknown>).members
-            ?? 0;
-        } else {
-          raw = 0;
-        }
-        const count = Number(raw);
-        setMemberCount(isNaN(count) ? 0 : count);
+        const count = Array.isArray(data) ? data.length : 0;
+        console.log('[Home] Member count:', count);
+        setMemberCount(count);
       } catch (err) {
         console.warn('[Home] Failed to fetch member count:', err);
         setMemberCount(0);
