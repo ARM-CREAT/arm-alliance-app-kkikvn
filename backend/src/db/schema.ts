@@ -164,7 +164,7 @@ export const memberProfiles = pgTable('member_profiles', {
   region: text('region'),
   cercle: text('cercle'),
   profession: text('profession').notNull(),
-  phone: text('phone').notNull(),
+  phone: text('phone'),
   email: text('email'),
   motivation: text('motivation'),
   membershipNumber: text('membership_number').notNull().unique(), // ARM-YYYY-XXXXX
