@@ -125,27 +125,6 @@ export default function ProgramScreen() {
           })}
         </View>
 
-        <TouchableOpacity
-          style={styles.messageCard}
-          onPress={() => {
-            console.log('[ProgramScreen] Message au Rassemblement Malien appuyé');
-            router.push('/arm-message');
-          }}
-          activeOpacity={0.8}
-        >
-          <View style={styles.messageCardAccent} />
-          <View style={styles.messageCardInner}>
-            <View style={styles.messageCardIconWrap}>
-              <Ionicons name="mail-open-outline" size={22} color={ARM_GOLD} />
-            </View>
-            <View style={styles.messageCardText}>
-              <Text style={styles.messageCardTitle}>Message au Rassemblement Malien</Text>
-              <Text style={styles.messageCardSub}>Lire le message officiel de l'ARM Alliance</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={ARM_GOLD} />
-          </View>
-        </TouchableOpacity>
-
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
@@ -316,51 +295,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#555',
     lineHeight: 21,
-  },
-  // Message card
-  messageCard: {
-    marginHorizontal: 12,
-    marginTop: 10,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.09,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  messageCardAccent: {
-    height: 4,
-    width: '100%',
-    backgroundColor: ARM_GOLD,
-  },
-  messageCardInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
-  },
-  messageCardIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    backgroundColor: ARM_GREEN + '18',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  messageCardText: {
-    flex: 1,
-  },
-  messageCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 3,
-  },
-  messageCardSub: {
-    fontSize: 12,
-    color: '#666',
-    lineHeight: 16,
   },
 });

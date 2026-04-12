@@ -62,11 +62,6 @@ export default function SettingsScreen() {
     router.push('/(tabs)/profile');
   };
 
-  const handleMessages = () => {
-    console.log('[Settings] Bouton Messages ARM appuyé');
-    router.push('/arm-message');
-  };
-
   const handleMembersList = () => {
     console.log('[Settings] Bouton Liste des membres appuyé');
     router.push('/members-list');
@@ -211,15 +206,6 @@ export default function SettingsScreen() {
             >
               <Text style={styles.optionFlag}>👥</Text>
               <Text style={styles.optionLabel}>Adhésion ARM</Text>
-              <Text style={styles.chevron}>›</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.optionRow, styles.optionRowBorder]}
-              onPress={handleMessages}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.optionFlag}>📣</Text>
-              <Text style={styles.optionLabel}>Messages ARM</Text>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
             <TouchableOpacity

@@ -77,7 +77,6 @@ export default function RootLayout() {
                       <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
                       <Stack.Screen name="auth-popup" options={{ headerShown: false }} />
                       <Stack.Screen name="program" options={{ headerShown: false }} />
-                      <Stack.Screen name="arm-message" options={{ headerShown: false }} />
                       <Stack.Screen name="members-list" options={{ headerShown: false }} />
                       <Stack.Screen name="notification-preferences" options={{ headerShown: false }} />
                       <Stack.Screen name="settings" options={{ headerShown: false }} />

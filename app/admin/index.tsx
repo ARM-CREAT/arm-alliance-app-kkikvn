@@ -184,24 +184,6 @@ export default function AdminIndexScreen() {
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.navCard}
-          onPress={() => {
-            console.log('[AdminIndex] Navigation vers /admin/messages');
-            router.push('/admin/messages');
-          }}
-          activeOpacity={0.75}
-        >
-          <View style={[styles.navIconWrap, { backgroundColor: '#7C3AED18' }]}>
-            <Text style={styles.navIcon}>📣</Text>
-          </View>
-          <View style={styles.navInfo}>
-            <Text style={styles.navLabel}>Messages ARM</Text>
-            <Text style={styles.navDesc}>Gérer les messages de l'organisation</Text>
-          </View>
-          <Text style={styles.navArrow}>›</Text>
-        </TouchableOpacity>
-
         {/* Logout button */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
           <Text style={styles.logoutBtnText}>🚪 Se déconnecter</Text>
