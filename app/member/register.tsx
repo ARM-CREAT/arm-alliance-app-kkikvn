@@ -94,19 +94,18 @@ export default function RegisterScreen() {
     const fullName = `${trimmedFirst} ${trimmedLast}`.trim();
 
     const payload: Record<string, string> = {
-      firstName: trimmedFirst,
-      lastName: trimmedLast,
-      // also send snake_case variants for backend compatibility
       first_name: trimmedFirst,
+      firstName: trimmedFirst,
       last_name: trimmedLast,
+      lastName: trimmedLast,
       full_name: fullName,
       email: email.trim(),
+      membership_type: membershipType,
     };
-    if (phone.trim()) payload.phone = String(phone.trim());
+    if (phone.trim()) payload.phone = phone.trim();
     if (commune.trim()) payload.commune = commune.trim();
     if (region.trim()) payload.region = region.trim();
     if (profession.trim()) payload.profession = profession.trim();
-    if (membershipType) payload.membership_type = membershipType;
     if (message.trim()) payload.message = message.trim();
 
     console.log('[Register] POST /api/members/register', JSON.stringify(payload));
@@ -124,8 +123,21 @@ export default function RegisterScreen() {
         console.error('[Register] Erreur HTTP', res.status, text.slice(0, 200));
 
         if (res.status === 409) {
-          console.log('[Register] 409 — email déjà enregistré');
-          setErrorBanner('Cet email est déjà enregistré.');
+          let parsedMsg = '';
+          try {
+            const json = JSON.parse(text);
+            parsedMsg = json.error || json.message || '';
+          } catch {
+            parsedMsg = text;
+          }
+          const lowerMsg = parsedMsg.toLowerCase();
+          if (lowerMsg.includes('téléphone') || lowerMsg.includes('telephone') || lowerMsg.includes('phone')) {
+            console.log('[Register] 409 — numéro de téléphone déjà enregistré');
+            setErrorBanner('Ce numéro de téléphone est déjà enregistré. Veuillez en utiliser un autre.');
+          } else {
+            console.log('[Register] 409 — email déjà enregistré');
+            setErrorBanner('Cet email est déjà enregistré.');
+          }
           setLoading(false);
           return;
         }
