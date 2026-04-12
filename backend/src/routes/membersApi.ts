@@ -7,7 +7,7 @@ interface RegisterMemberBody {
   first_name: string;
   last_name: string;
   email: string;
-  phone: string;
+  phone?: string;
   region: string;
   gender: string;
   date_of_birth: string;
@@ -133,7 +133,7 @@ export function register(app: App, fastify: FastifyInstance) {
         tags: ['members'],
         body: {
           type: 'object',
-          required: ['first_name', 'last_name', 'email', 'phone', 'region', 'gender', 'date_of_birth'],
+          required: ['first_name', 'last_name', 'email', 'region', 'gender', 'date_of_birth'],
           properties: {
             first_name: { type: 'string' },
             last_name: { type: 'string' },
@@ -154,7 +154,10 @@ export function register(app: App, fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Body: RegisterMemberBody }>, reply: FastifyReply) => {
       const { first_name, last_name, email, phone, region, gender, date_of_birth, address } = request.body;
 
-      app.logger.info({ email, phone }, 'Registering new member');
+      // Normalize phone: trim and convert empty string to null
+      const normalizedPhone = phone && phone.trim() ? phone.trim() : null;
+
+      app.logger.info({ email, phone: normalizedPhone }, 'Registering new member');
 
       try {
         // Check for duplicate email
@@ -188,7 +191,7 @@ export function register(app: App, fastify: FastifyInstance) {
             firstName: first_name,
             lastName: last_name,
             email,
-            phone,
+            phone: normalizedPhone,
             region,
             gender,
             dateOfBirth: date_of_birth,
@@ -210,7 +213,14 @@ export function register(app: App, fastify: FastifyInstance) {
           status: 'pending',
           message: 'Registration successful',
         };
-      } catch (error) {
+      } catch (error: any) {
+        // Handle unique constraint violation on phone field
+        if (error.code === '23505' && error.constraint && error.constraint.includes('phone')) {
+          app.logger.warn({ phone: normalizedPhone }, 'Phone number already registered');
+          reply.status(409);
+          return { error: 'Ce numéro de téléphone est déjà enregistré.' };
+        }
+
         app.logger.error({ err: error, email }, 'Failed to register member');
         throw error;
       }

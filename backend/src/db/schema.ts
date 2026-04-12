@@ -17,7 +17,7 @@ export const members = pgTable('members', {
   fullName: text('full_name').notNull(),
   firstName: text('first_name'),
   lastName: text('last_name'),
-  phone: text('phone').notNull().unique(),
+  phone: text('phone').unique(),
   email: text('email').unique(),
   commune: text('commune'),
   region: text('region'),
