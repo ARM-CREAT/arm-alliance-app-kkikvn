@@ -12,60 +12,60 @@ config.cacheStores = [
     new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
   ];
 
-// ---------------------------------------------------------------------------
-// Stub aliases — map native-only packages to web-safe stubs so the preview
-// renderer never tries to load native modules that crash on web.
-// ---------------------------------------------------------------------------
-const STUBS_DIR = path.join(__dirname, 'stubs');
-const PACKAGES_STUBS_DIR = path.join(STUBS_DIR, 'packages');
+// ─── Web-safe stub mappings ───────────────────────────────────────────────────
+// On web, native-only packages are redirected to no-op stubs so the bundler
+// never tries to evaluate native modules that crash the web module graph.
+const STUBS = path.join(__dirname, 'stubs');
 
 config.resolver.extraNodeModules = {
-  // Packages with full stub directories
-  'react-native-safe-area-context': path.join(PACKAGES_STUBS_DIR, 'react-native-safe-area-context'),
-  'react-native-screens': path.join(PACKAGES_STUBS_DIR, 'react-native-screens'),
-  'react-native-svg': path.join(PACKAGES_STUBS_DIR, 'react-native-svg'),
-  'react-native-webview': path.join(PACKAGES_STUBS_DIR, 'react-native-webview'),
-  'react-native-css-interop': path.join(PACKAGES_STUBS_DIR, 'react-native-css-interop'),
-  'react-native-url-polyfill': path.join(PACKAGES_STUBS_DIR, 'react-native-url-polyfill'),
-  '@react-native-async-storage/async-storage': path.join(PACKAGES_STUBS_DIR, '@react-native-async-storage', 'async-storage'),
+  // Auth
+  'better-auth':                          path.join(STUBS, 'better-auth-client-stub.js'),
+  'better-auth/client':                   path.join(STUBS, 'better-auth-client-stub.js'),
+  'better-auth/react':                    path.join(STUBS, 'better-auth-client-stub.js'),
+  '@better-auth/expo':                    path.join(STUBS, 'better-auth-client-stub.js'),
+  '@better-auth/expo/client':             path.join(STUBS, 'better-auth-client-stub.js'),
 
-  // Firebase stubs — must be mapped so any transitive import of firebase/app or
-  // firebase/firestore resolves to a no-op stub instead of crashing the web bundler.
-  'firebase/app': path.join(STUBS_DIR, 'firebase-app-stub.js'),
-  'firebase/firestore': path.join(STUBS_DIR, 'firebase-firestore-stub.js'),
-  'firebase/auth': path.join(STUBS_DIR, 'firebase-app-stub.js'),
-  'firebase/storage': path.join(STUBS_DIR, 'firebase-app-stub.js'),
-  'firebase/functions': path.join(STUBS_DIR, 'firebase-app-stub.js'),
-  'firebase/analytics': path.join(STUBS_DIR, 'firebase-app-stub.js'),
-  'firebase/messaging': path.join(STUBS_DIR, 'firebase-app-stub.js'),
-  'firebase/database': path.join(STUBS_DIR, 'firebase-firestore-stub.js'),
-  '@react-native-firebase/app': path.join(STUBS_DIR, 'firebase-app-stub.js'),
-  '@react-native-firebase/firestore': path.join(STUBS_DIR, 'firebase-firestore-stub.js'),
-  '@react-native-firebase/auth': path.join(STUBS_DIR, 'firebase-app-stub.js'),
+  // Storage
+  '@react-native-async-storage/async-storage': path.join(STUBS, 'async-storage-stub.js'),
 
-  // Single-file stubs
-  'expo-video': path.join(STUBS_DIR, 'expo-video-stub.js'),
-  'expo-haptics': path.join(STUBS_DIR, 'expo-haptics-stub.js'),
-  'expo-camera': path.join(STUBS_DIR, 'expo-camera-stub.js'),
-  'expo-blur': path.join(STUBS_DIR, 'expo-blur-stub.js'),
-  'expo-symbols': path.join(STUBS_DIR, 'expo-symbols-stub.js'),
-  'expo-notifications': path.join(STUBS_DIR, 'expo-notifications-stub.js'),
-  'expo-media-library': path.join(STUBS_DIR, 'expo-media-library-stub.js'),
-  'expo-glass-effect': path.join(STUBS_DIR, 'expo-glass-effect-stub.js'),
-  'react-native-onesignal': path.join(STUBS_DIR, 'onesignal-stub.js'),
-  'react-native-gesture-handler': path.join(STUBS_DIR, 'gesture-handler-stub.js'),
-  'react-native-reanimated': path.join(STUBS_DIR, 'worklets-stub.js'),
-  'react-native-maps': path.join(STUBS_DIR, 'maps-stub.js'),
-  '@react-native-community/datetimepicker': path.join(STUBS_DIR, 'datetimepicker-stub.js'),
-  'react-native-qrcode-svg': path.join(STUBS_DIR, 'qrcode-stub.js'),
-  'react-native-edge-to-edge': path.join(STUBS_DIR, 'edge-to-edge-stub.js'),
-  'react-native-google-mobile-ads': path.join(STUBS_DIR, 'admob-stub.js'),
-  '@react-native-google-mobile-ads': path.join(STUBS_DIR, 'admob-stub.js'),
-  'better-auth': path.join(STUBS_DIR, 'better-auth-client-stub.js'),
-  '@better-auth/expo': path.join(STUBS_DIR, 'better-auth-client-stub.js'),
-  'expo-image-picker': path.join(STUBS_DIR, 'expo-image-picker-stub.js'),
-  'expo-document-picker': path.join(STUBS_DIR, 'expo-document-picker-stub.js'),
-  'expo-clipboard': path.join(STUBS_DIR, 'expo-clipboard-stub.js'),
+  // Firebase
+  'firebase/app':                         path.join(STUBS, 'firebase-app-stub.js'),
+  'firebase/firestore':                   path.join(STUBS, 'firebase-firestore-stub.js'),
+  '@firebase/app':                        path.join(STUBS, 'firebase-app-stub.js'),
+  '@firebase/firestore':                  path.join(STUBS, 'firebase-firestore-stub.js'),
+
+  // Expo native modules
+  'expo-camera':                          path.join(STUBS, 'expo-camera-stub.js'),
+  'expo-clipboard':                       path.join(STUBS, 'expo-clipboard-stub.js'),
+  'expo-document-picker':                 path.join(STUBS, 'expo-document-picker-stub.js'),
+  'expo-haptics':                         path.join(STUBS, 'expo-haptics-stub.js'),
+  'expo-image-picker':                    path.join(STUBS, 'expo-image-picker-stub.js'),
+  'expo-media-library':                   path.join(STUBS, 'expo-media-library-stub.js'),
+  'expo-notifications':                   path.join(STUBS, 'expo-notifications-stub.js'),
+  'expo-video':                           path.join(STUBS, 'expo-video-stub.js'),
+
+  // Maps
+  'react-native-maps':                    path.join(STUBS, 'maps-stub.js'),
+
+  // Push notifications
+  'react-native-onesignal':               path.join(STUBS, 'onesignal-stub.js'),
+  'onesignal-expo-plugin':                path.join(STUBS, 'onesignal-stub.js'),
+
+  // Ads
+  'react-native-google-mobile-ads':       path.join(STUBS, 'admob-stub.js'),
+
+  // Gesture handler / screens / safe area (web has its own implementations,
+  // but stub prevents crashes if the native variant is accidentally imported)
+  'react-native-gesture-handler':         path.join(STUBS, 'gesture-handler-stub.js'),
+  'react-native-safe-area-context':       path.join(STUBS, 'react-native-safe-area-context-stub.js'),
+  'react-native-screens':                 path.join(STUBS, 'react-native-screens-stub.js'),
+
+  // Misc
+  'expo-glass-effect':                    path.join(STUBS, 'expo-glass-effect-stub.js'),
+  'react-native-url-polyfill':            path.join(STUBS, 'url-polyfill-stub.js'),
+  'react-native-svg':                     path.join(STUBS, 'react-native-svg-stub.js'),
+  'react-native-webview':                 path.join(STUBS, 'react-native-webview-stub.js'),
+  'react-native-css-interop':             path.join(STUBS, 'react-native-css-interop-stub.js'),
 };
 
 // Custom server middleware to receive console.log messages from the app
