@@ -19,12 +19,9 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [isChecking, setIsChecking] = useState(false);
 
   const recheck = useCallback(async () => {
-    console.log('[AdminAuthContext] Vérification session admin...');
     try {
       const flag = await AsyncStorage.getItem(ADMIN_AUTH_KEY);
-      const authenticated = flag === 'true';
-      console.log('[AdminAuthContext] admin_authenticated:', flag, '→', authenticated);
-      setIsAdminAuthenticated(authenticated);
+      setIsAdminAuthenticated(flag === 'true');
     } catch (err) {
       console.error('[AdminAuthContext] Erreur lecture AsyncStorage:', err);
       setIsAdminAuthenticated(false);
@@ -34,13 +31,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async () => {
-    console.log('[AdminAuthContext] Enregistrement session admin');
+    console.log('[AdminAuthContext] login');
     await AsyncStorage.setItem(ADMIN_AUTH_KEY, 'true');
     setIsAdminAuthenticated(true);
   }, []);
 
   const logout = useCallback(async () => {
-    console.log('[AdminAuthContext] Déconnexion admin — suppression session');
+    console.log('[AdminAuthContext] logout');
     try {
       await AsyncStorage.removeItem(ADMIN_AUTH_KEY);
     } catch (err) {
@@ -53,7 +50,6 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Safety net: never block on AsyncStorage for more than 500ms
     const safetyTimer = setTimeout(() => {
-      console.warn('[AdminAuthContext] Safety timer fired — forcing isChecking=false');
       setIsChecking(false);
     }, 500);
     recheck().finally(() => clearTimeout(safetyTimer));

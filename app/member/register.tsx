@@ -342,9 +342,11 @@ export default function RegisterScreen() {
               style={styles.input}
               value={phone}
               onChangeText={setPhone}
-              placeholder="+223 XX XX XX XX"
+              placeholder="+34 6XX XX XX XX"
               placeholderTextColor="#aaa"
-              keyboardType="phone-pad"
+              keyboardType="default"
+              autoCorrect={false}
+              autoCapitalize="none"
               returnKeyType="next"
               onSubmitEditing={() => communeRef.current?.focus()}
             />

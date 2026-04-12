@@ -92,12 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // On web: skip session check entirely — auth client is a stub
     if (Platform.OS === 'web') {
-      console.log('[AuthContext] Web platform — skipping session check');
       return () => { isMountedRef.current = false; };
     }
 
     const safetyTimer = setTimeout(() => {
-      console.warn('[AuthContext] Safety timer fired — forcing loading=false');
       if (isMountedRef.current) setLoading(false);
     }, 500);
 
@@ -106,12 +104,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const subscription = Linking.addEventListener('url', (_event) => {
-      console.log('[AuthContext] Deep link received, refreshing user session');
       setTimeout(() => fetchUserSilent(), 500);
     });
 
     const intervalId = setInterval(() => {
-      console.log('[AuthContext] Auto-refreshing user session...');
       fetchUserSilent();
     }, 5 * 60 * 1000);
 
@@ -125,7 +121,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const initAuth = async () => {
-    console.log('[AuthContext] initAuth started');
     try {
       const session = await withTimeout(authClient.getSession(), 400);
       if (!isMountedRef.current) return;
@@ -142,7 +137,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('[AuthContext] initAuth failed:', error);
       if (isMountedRef.current) setUser(null);
     } finally {
-      console.log('[AuthContext] initAuth complete — setting loading=false');
       if (isMountedRef.current) setLoading(false);
     }
   };
@@ -166,15 +160,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchUser = async () => {
-    if (isFetchingRef.current) {
-      console.log('[AuthContext] fetchUser skipped — already in progress');
-      return;
-    }
+    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
-    console.log('[AuthContext] fetchUser called');
 
     const safetyTimer = setTimeout(() => {
-      console.warn('[AuthContext] fetchUser safety timer — forcing loading=false');
       if (isMountedRef.current) setLoading(false);
       isFetchingRef.current = false;
     }, 3000);
@@ -202,9 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithEmail = async (email: string, password: string) => {
-    console.log('[AuthContext] signInWithEmail called for:', email);
+    console.log('[AuthContext] signInWithEmail:', email);
     const result = await authClient.signIn.email({ email, password });
-    console.log('[AuthContext] signIn.email result:', JSON.stringify(result));
     if (result?.error) {
       const msg = result.error.message || result.error.code || 'Échec de la connexion';
       console.error('[AuthContext] signIn.email error:', msg);
@@ -214,9 +202,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    console.log('[AuthContext] signUpWithEmail called for:', email);
+    console.log('[AuthContext] signUpWithEmail:', email);
     const result = await authClient.signUp.email({ email, password, name });
-    console.log('[AuthContext] signUp.email result:', JSON.stringify(result));
     if (result?.error) {
       const msg = result.error.message || result.error.code || 'Échec de la création du compte';
       console.error('[AuthContext] signUp.email error:', msg);
@@ -226,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithSocial = async (provider: 'google' | 'apple' | 'github') => {
-    console.log('[AuthContext] signInWithSocial called for provider:', provider);
+    console.log('[AuthContext] signInWithSocial:', provider);
     try {
       if (Platform.OS === 'web') {
         const token = await openOAuthPopup(provider);
@@ -248,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGitHub = () => signInWithSocial('github');
 
   const signOut = async () => {
-    console.log('[AuthContext] signOut called');
+    console.log('[AuthContext] signOut');
     try {
       await authClient.signOut();
     } catch (error) {

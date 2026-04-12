@@ -35,7 +35,6 @@ const NotificationContext = createContext<NotificationContextType>({
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const requestPermission = useCallback(async (): Promise<boolean> => {
-    console.log("[Notifications] requestPermission called (no-op — native build required)");
     return false;
   }, []);
 

@@ -52,7 +52,6 @@ export default function RootLayout() {
     if (Platform.OS !== 'web') {
       SplashScreen.hideAsync().catch(() => {});
     }
-    console.log('[RootLayout] mounted, splash hidden');
   }, []);
 
   const rootStyle = Platform.OS === 'web'
