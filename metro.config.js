@@ -7,36 +7,10 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.unstable_enablePackageExports = true;
 
-// Map native-only packages to existing stubs so the web/preview bundle never
-// tries to load native modules that aren't available in that environment.
-config.resolver.extraNodeModules = {
-  '@react-native-async-storage/async-storage': require.resolve('./stubs/async-storage-stub.js'),
-  '@react-native-firebase/app': require.resolve('./stubs/firebase-app-stub.js'),
-  '@react-native-firebase/firestore': require.resolve('./stubs/firebase-firestore-stub.js'),
-  '@react-native-google-mobile-ads': require.resolve('./stubs/admob-stub.js'),
-  'react-native-onesignal': require.resolve('./stubs/onesignal-stub.js'),
-  '@react-native-community/datetimepicker': require.resolve('./stubs/datetimepicker-stub.js'),
-  'react-native-maps': require.resolve('./stubs/maps-stub.js'),
-  'react-native-qrcode-svg': require.resolve('./stubs/qrcode-stub.js'),
-  'react-native-worklets': require.resolve('./stubs/worklets-stub.js'),
-  'react-native-worklets-core': require.resolve('./stubs/worklets-stub.js'),
-  'react-native-gesture-handler': require.resolve('./stubs/gesture-handler-stub.js'),
-  'react-native-edge-to-edge': require.resolve('./stubs/edge-to-edge-stub.js'),
-  'react-native-screens': require.resolve('./stubs/react-native-screens-stub.js'),
-  'react-native-safe-area-context': require.resolve('./stubs/react-native-safe-area-context-stub.js'),
-  'react-native-svg': require.resolve('./stubs/react-native-svg-stub.js'),
-  'react-native-webview': require.resolve('./stubs/react-native-webview-stub.js'),
-  'react-native-css-interop': require.resolve('./stubs/react-native-css-interop-stub.js'),
-  'react-native-url-polyfill': require.resolve('./stubs/url-polyfill-stub.js'),
-  'expo-blur': require.resolve('./stubs/expo-blur-stub.js'),
-  'expo-symbols': require.resolve('./stubs/expo-symbols-stub.js'),
-  '@react-navigation/drawer': require.resolve('./stubs/drawer-stub.js'),
-};
-
 // Use turborepo to restore the cache when possible
 config.cacheStores = [
-  new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
-];
+    new FileStore({ root: path.join(__dirname, 'node_modules', '.cache', 'metro') }),
+  ];
 
 // Custom server middleware to receive console.log messages from the app
 const LOG_FILE_PATH = path.join(__dirname, '.natively', 'app_console.log');
@@ -51,11 +25,18 @@ if (!fs.existsSync(logDir)) {
 config.server = config.server || {};
 config.server.enhanceMiddleware = (middleware) => {
   return (req, res, next) => {
+
+    // DEBUG: log all metro bundle requests
+    if (req.url.includes('index.bundle') || req.url.includes('.bundle')) {
+      console.log('[METRO] Request:', req.method, req.url);
+    }
+
     // Extract pathname without query params for matching
     const pathname = req.url.split('?')[0];
 
     // Handle log receiving endpoint
     if (pathname === '/natively-logs' && req.method === 'POST') {
+      console.log('[NATIVELY-LOGS] Received POST request');
       let body = '';
       req.on('data', chunk => {
         body += chunk.toString();
@@ -72,6 +53,8 @@ config.server.enhanceMiddleware = (middleware) => {
           const platformInfo = platform ? `[${platform}] ` : '';
           const sourceInfo = source ? `[${source}] ` : '';
           const logLine = `[${timestamp}] ${platformInfo}[${level}] ${sourceInfo}${message}\n`;
+
+          console.log('[NATIVELY-LOGS] Writing log:', logLine.trim());
 
           // Rotate log file if too large
           try {
@@ -105,6 +88,7 @@ config.server.enhanceMiddleware = (middleware) => {
 
     // Handle CORS preflight for log endpoint
     if (pathname === '/natively-logs' && req.method === 'OPTIONS') {
+      console.log('[NATIVELY-LOGS] Received OPTIONS preflight request');
       res.writeHead(200, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
