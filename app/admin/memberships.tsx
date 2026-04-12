@@ -323,7 +323,7 @@ export default function AdminMembershipsScreen() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const loadMembers = useCallback(async (isRefresh = false) => {
-    console.log('[AdminMemberships] GET /api/members?limit=200 + GET /api/members/stats');
+    console.log('[AdminMemberships] GET /api/member-profiles');
     if (!isRefresh) setLoading(true);
     setError(null);
 
@@ -331,10 +331,7 @@ export default function AdminMembershipsScreen() {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const [membersRes, statsRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/members?limit=200`, { headers: ADMIN_HEADERS, signal: controller.signal }),
-        fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS, signal: controller.signal }),
-      ]);
+      const membersRes = await fetch(`${BACKEND_URL}/api/member-profiles`, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (!membersRes.ok) {
@@ -349,13 +346,15 @@ export default function AdminMembershipsScreen() {
       console.log('[AdminMemberships] Adhérents chargés:', list.length);
       setMembers(list);
 
-      if (statsRes.ok) {
-        const statsData: MemberStats = await statsRes.json();
-        console.log('[AdminMemberships] Stats chargées:', JSON.stringify(statsData));
-        setStats(statsData);
-      } else {
-        console.warn('[AdminMemberships] Stats non disponibles:', statsRes.status);
-      }
+      // Derive stats from the list since member_profiles has no separate stats endpoint
+      const derivedStats: MemberStats = {
+        total: list.length,
+        active: list.filter((m) => (m.status || '').toLowerCase() === 'active').length,
+        pending: list.filter((m) => (m.status || '').toLowerCase() === 'pending').length,
+        suspended: list.filter((m) => (m.status || '').toLowerCase() === 'suspended').length,
+      };
+      console.log('[AdminMemberships] Stats dérivées:', JSON.stringify(derivedStats));
+      setStats(derivedStats);
     } catch (err: unknown) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === 'AbortError') {

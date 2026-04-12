@@ -80,48 +80,33 @@ export default function AdminDashboardScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
-    console.log('[AdminDashboard] GET /api/members/stats + /api/members?limit=5');
+    console.log('[AdminDashboard] GET /api/member-profiles');
     setError(null);
     try {
-      const [statsRes, membersRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/members/stats`, { headers: ADMIN_HEADERS }),
-        fetch(`${BACKEND_URL}/api/members?limit=5`, { headers: ADMIN_HEADERS }),
-      ]);
+      const profilesRes = await fetch(`${BACKEND_URL}/api/member-profiles`);
 
-      if (!statsRes.ok) {
-        const text = await statsRes.text();
-        console.error('[AdminDashboard] Stats erreur:', statsRes.status, text);
-        throw new Error(`Erreur stats ${statsRes.status}`);
-      }
-      if (!membersRes.ok) {
-        const text = await membersRes.text();
-        console.error('[AdminDashboard] Members erreur:', membersRes.status, text);
-        throw new Error(`Erreur membres ${membersRes.status}`);
+      if (!profilesRes.ok) {
+        const text = await profilesRes.text();
+        console.error('[AdminDashboard] Profiles erreur:', profilesRes.status, text);
+        throw new Error(`Erreur profiles ${profilesRes.status}`);
       }
 
-      const [statsData, membersData] = await Promise.all([
-        statsRes.json(),
-        membersRes.json(),
-      ]);
+      const profilesData = await profilesRes.json();
+      const allProfiles: RecentMember[] = Array.isArray(profilesData) ? profilesData : [];
+      console.log('[AdminDashboard] Profils chargés:', allProfiles.length);
 
-      console.log('[AdminDashboard] Stats chargées:', JSON.stringify(statsData));
-
-      // Stats: handle both flat object and nested shapes
+      // Derive stats from the full list
       setStats({
-        total: Number(statsData?.total ?? statsData?.count ?? 0),
-        active: Number(statsData?.active ?? statsData?.approved ?? 0),
-        pending: Number(statsData?.pending ?? 0),
-        suspended: Number(statsData?.suspended ?? statsData?.rejected ?? 0),
+        total: allProfiles.length,
+        active: allProfiles.filter((m) => (m.status || '').toLowerCase() === 'active').length,
+        pending: allProfiles.filter((m) => (m.status || '').toLowerCase() === 'pending').length,
+        suspended: allProfiles.filter((m) => (m.status || '').toLowerCase() === 'suspended').length,
       });
 
-      // Members list: handle array or { members: [...] } or { data: [...] }
-      const rawList: RecentMember[] = Array.isArray(membersData)
-        ? membersData
-        : (membersData?.members ?? membersData?.data ?? []);
-      // Filter out empty objects (backend may return {} placeholders)
-      const validList = rawList.filter((m) => m && (m.id || m.full_name || m.first_name));
-      console.log('[AdminDashboard] Derniers adhérents chargés:', validList.length);
-      setRecentMembers(validList);
+      // Show the 5 most recent members
+      const recentSlice = allProfiles.slice(0, 5).filter((m) => m && (m.id || m.full_name || m.first_name));
+      console.log('[AdminDashboard] Derniers adhérents:', recentSlice.length);
+      setRecentMembers(recentSlice);
     } catch (err: any) {
       console.error('[AdminDashboard] Erreur chargement:', err.message);
       setError(err.message || 'Impossible de charger les statistiques.');

@@ -60,7 +60,10 @@ function getMembershipTypeLabel(type?: string): string {
 }
 
 function getDisplayName(member: Member): string {
-  return member.full_name || member.name || '—';
+  if (member.full_name) return member.full_name;
+  const parts = [member.first_name, member.last_name].filter(Boolean);
+  if (parts.length > 0) return parts.join(' ');
+  return member.name || '—';
 }
 
 function getInitials(name: string): string {
@@ -124,10 +127,8 @@ export default function MembersListScreen() {
     loadMembers(true);
   }, [loadMembers]);
 
-  const approvedMembers = members.filter((m) => {
-    const s = (m.status || '').toLowerCase();
-    return s === 'approved' || s === 'active';
-  });
+  // Show all members — member_profiles has no status gating
+  const approvedMembers = members;
 
   const totalStr = String(total);
   const pendingStr = String(pending);
