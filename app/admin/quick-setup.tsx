@@ -295,7 +295,7 @@ export default function QuickSetupScreen() {
             <View style={styles.successCard}>
               <IconSymbol 
                 ios_icon_name="checkmark.circle.fill" 
-                android_material_icon_name="check-circle" 
+                android_material_icon_name="check_circle" 
                 size={24} 
                 color={colors.background} 
               />
@@ -336,7 +336,7 @@ export default function QuickSetupScreen() {
                   <>
                     <IconSymbol 
                       ios_icon_name="wand.and.stars" 
-                      android_material_icon_name="auto-fix-high" 
+                      android_material_icon_name="auto_fix_high" 
                       size={20} 
                       color={colors.background} 
                     />
@@ -381,7 +381,7 @@ export default function QuickSetupScreen() {
               >
                 <IconSymbol 
                   ios_icon_name="lock.shield" 
-                  android_material_icon_name="admin-panel-settings" 
+                  android_material_icon_name="admin_panel_settings" 
                   size={20} 
                   color={colors.background} 
                 />

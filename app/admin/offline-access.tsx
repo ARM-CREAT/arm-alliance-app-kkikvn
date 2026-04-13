@@ -348,7 +348,7 @@ export default function OfflineAccessScreen() {
               <View style={styles.statusRow}>
                 <IconSymbol
                   ios_icon_name="checkmark.circle.fill"
-                  android_material_icon_name="check-circle"
+                  android_material_icon_name="check_circle"
                   size={24}
                   color="#28A745"
                   style={styles.statusIcon}
@@ -374,7 +374,7 @@ export default function OfflineAccessScreen() {
               <View style={styles.statusRow}>
                 <IconSymbol
                   ios_icon_name="key.fill"
-                  android_material_icon_name="vpn-key"
+                  android_material_icon_name="vpn_key"
                   size={24}
                   color={colors.primary}
                   style={styles.statusIcon}
@@ -434,7 +434,7 @@ export default function OfflineAccessScreen() {
                   >
                     <IconSymbol
                       ios_icon_name={showPassword ? 'eye.slash' : 'eye'}
-                      android_material_icon_name={showPassword ? 'visibility-off' : 'visibility'}
+                      android_material_icon_name={showPassword ? 'visibility_off' : 'visibility'}
                       size={24}
                       color={colors.textSecondary}
                     />

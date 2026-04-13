@@ -469,7 +469,7 @@ export default function AdminNotificationsScreen() {
             <View style={styles.emptyState}>
               <IconSymbol
                 ios_icon_name="bell.slash"
-                android_material_icon_name="notifications-off"
+                android_material_icon_name="notifications_off"
                 size={64}
                 color={colors.textSecondary}
               />

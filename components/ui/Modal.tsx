@@ -8,6 +8,7 @@ import {
   Modal as RNModal,
   Platform,
 } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 
@@ -32,10 +33,10 @@ export function Modal({
   confirmText = 'OK',
   cancelText = 'Annuler',
 }: ModalProps) {
-  const getIconName = () => {
+  const getIconName = (): { ios: string; android: keyof typeof MaterialIcons.glyphMap } => {
     switch (type) {
       case 'success':
-        return { ios: 'checkmark.circle.fill', android: 'check-circle' };
+        return { ios: 'checkmark.circle.fill', android: 'check_circle' };
       case 'error':
         return { ios: 'xmark.circle.fill', android: 'error' };
       case 'warning':

@@ -208,7 +208,7 @@ export default function MemberMessagesScreen() {
               <View style={styles.emptyIconCircle}>
                 <IconSymbol
                   ios_icon_name="envelope.open"
-                  android_material_icon_name="mail-outline"
+                  android_material_icon_name="mail_outline"
                   size={48}
                   color={colors.textSecondary}
                 />
@@ -234,7 +234,7 @@ export default function MemberMessagesScreen() {
                       <View style={[styles.messageIconWrap, isUnread && styles.messageIconWrapUnread]}>
                         <IconSymbol
                           ios_icon_name={isUnread ? 'envelope.fill' : 'envelope.open.fill'}
-                          android_material_icon_name={isUnread ? 'mail' : 'mail-outline'}
+                          android_material_icon_name={isUnread ? 'mail' : 'mail_outline'}
                           size={22}
                           color={isUnread ? colors.primary : colors.textSecondary}
                         />

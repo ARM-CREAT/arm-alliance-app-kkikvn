@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, useColorScheme, View, Text } from "react-native";
-import { borderColor } from "@/constants/Colors";
+import { borderColor, appleRed } from "@/constants/Colors";
 
 export default function ListItem({ listId }: { listId: string }) {
   const colorScheme = useColorScheme();

@@ -95,9 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => { isMountedRef.current = false; };
     }
 
+    // Safety net: always resolve within 5s no matter what
     const safetyTimer = setTimeout(() => {
       if (isMountedRef.current) setLoading(false);
-    }, 500);
+    }, 5000);
 
     initAuth().finally(() => {
       clearTimeout(safetyTimer);
@@ -122,7 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const initAuth = async () => {
     try {
-      const session = await withTimeout(authClient.getSession(), 400);
+      // 3s timeout — generous enough for Android cold start, tight enough to not block
+      const session = await withTimeout(authClient.getSession(), 3000);
       if (!isMountedRef.current) return;
       if (session?.data?.user) {
         setUser(session.data.user as User);
@@ -134,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthTokens();
       }
     } catch (error) {
-      console.error('[AuthContext] initAuth failed:', error);
+      console.warn('[AuthContext] initAuth failed (non-blocking):', error);
       if (isMountedRef.current) setUser(null);
     } finally {
       if (isMountedRef.current) setLoading(false);
@@ -155,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthTokens();
       }
     } catch (error) {
-      console.error('[AuthContext] Silent session refresh failed:', error);
+      console.warn('[AuthContext] Silent session refresh failed (non-blocking):', error);
     }
   };
 
@@ -181,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthTokens();
       }
     } catch (error) {
-      console.error('[AuthContext] Failed to fetch user:', error);
+      console.warn('[AuthContext] Failed to fetch user (non-blocking):', error);
       if (isMountedRef.current) setUser(null);
     } finally {
       clearTimeout(safetyTimer);
@@ -239,7 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authClient.signOut();
     } catch (error) {
-      console.error('[AuthContext] Sign out failed (API):', error);
+      console.warn('[AuthContext] Sign out failed (API):', error);
     } finally {
       setUser(null);
       await clearAuthTokens();

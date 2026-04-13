@@ -122,7 +122,7 @@ export default function AdminLoginScreen() {
               >
                 <IconSymbol
                   ios_icon_name={showPassword ? 'eye.slash' : 'eye'}
-                  android_material_icon_name={showPassword ? 'visibility-off' : 'visibility'}
+                  android_material_icon_name={showPassword ? 'visibility_off' : 'visibility'}
                   size={22}
                   color={colors.textSecondary}
                 />

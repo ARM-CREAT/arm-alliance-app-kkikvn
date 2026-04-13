@@ -298,7 +298,7 @@ export default function AdminEventsScreen() {
                     <Text style={styles.eventMetaText}>{formattedDate}</Text>
                   </View>
                   <View style={styles.eventMeta}>
-                    <IconSymbol ios_icon_name="location" android_material_icon_name="location-on" size={16} color={colors.textSecondary} />
+                    <IconSymbol ios_icon_name="location" android_material_icon_name="location_on" size={16} color={colors.textSecondary} />
                     <Text style={styles.eventMetaText}>{event.location}</Text>
                   </View>
                   <View style={styles.eventActions}>

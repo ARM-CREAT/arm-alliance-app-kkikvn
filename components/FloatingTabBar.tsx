@@ -5,8 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  Animated,
-  useWindowDimensions,
 } from 'react-native';
 
 import { useRouter, usePathname } from 'expo-router';
@@ -14,8 +12,6 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { useTheme } from '@react-navigation/native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Href } from 'expo-router';
-
-const isWeb = Platform.OS === 'web';
 
 export interface TabBarItem {
   name: string;
@@ -30,50 +26,6 @@ interface FloatingTabBarProps {
   bottomMargin?: number;
 }
 
-function TabIndicator({
-  activeTabIndex,
-  tabWidth,
-  tabCount,
-  indicatorColor,
-}: {
-  activeTabIndex: number;
-  tabWidth: number;
-  tabCount: number;
-  indicatorColor: string;
-}) {
-  const translateX = React.useRef(new Animated.Value(0)).current;
-
-  React.useEffect(() => {
-    if (isWeb) {
-      // On web, useNativeDriver:false is unsupported — just set value directly
-      translateX.setValue(tabWidth * activeTabIndex);
-      return;
-    }
-    Animated.spring(translateX, {
-      toValue: tabWidth * activeTabIndex,
-      useNativeDriver: false,
-      damping: 20,
-      stiffness: 120,
-      mass: 1,
-    }).start();
-  }, [activeTabIndex, tabWidth, translateX]);
-
-  const tabWidthPct = ((100 / tabCount) - 1).toFixed(2);
-
-  return (
-    <Animated.View
-      style={[
-        styles.indicator,
-        {
-          backgroundColor: indicatorColor,
-          width: `${tabWidthPct}%` as any,
-          transform: [{ translateX }],
-        },
-      ]}
-    />
-  );
-}
-
 export default function FloatingTabBar({
   tabs,
   borderRadius = 35,
@@ -82,10 +34,6 @@ export default function FloatingTabBar({
   const router = useRouter();
   const pathname = usePathname();
   const theme = useTheme();
-  const { width: screenWidth } = useWindowDimensions();
-
-  // Compute container width reactively so it's correct on web from first render
-  const containerWidth = Math.max(screenWidth / 2.5, 160);
 
   const activeTabIndex = React.useMemo(() => {
     let bestMatch = -1;
@@ -121,57 +69,31 @@ export default function FloatingTabBar({
     router.push(route);
   };
 
-  const tabWidth = (containerWidth - 8) / tabs.length;
-  const tabCount = tabs.length;
   const isDark = theme.dark;
 
-  const indicatorColor = isDark
-    ? 'rgba(255, 255, 255, 0.08)'
-    : 'rgba(0, 0, 0, 0.04)';
-
-  const blurContainerStyle = {
-    ...styles.blurContainer,
-    borderWidth: 1.2,
-    borderColor: 'rgba(255, 255, 255, 1)' as const,
-    ...Platform.select({
-      ios: {
-        backgroundColor: isDark
-          ? 'rgba(28, 28, 30, 0.8)'
-          : 'rgba(255, 255, 255, 0.6)',
-      },
-      android: {
-        backgroundColor: isDark
-          ? 'rgba(28, 28, 30, 0.95)'
-          : 'rgba(255, 255, 255, 0.6)',
-      },
-      web: {
-        backgroundColor: isDark
-          ? 'rgba(28, 28, 30, 0.95)'
-          : 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(10px)',
-      },
-    }),
-  };
+  const containerBg = Platform.select({
+    ios: isDark ? 'rgba(28, 28, 30, 0.8)' : 'rgba(255, 255, 255, 0.6)',
+    android: isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+    default: isDark ? 'rgba(28, 28, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+  });
 
   // On web there is no safe-area bottom inset
-  const safeAreaPaddingBottom = isWeb ? 0 : 34;
+  const safeAreaPaddingBottom = Platform.OS === 'web' ? 0 : 34;
 
   return (
     <View style={[styles.safeArea, { paddingBottom: safeAreaPaddingBottom }]}>
-      <View
-        style={[
-          styles.container,
-          { width: containerWidth, marginBottom: bottomMargin ?? 20 },
-        ]}
-      >
-        <View style={[blurContainerStyle, { borderRadius }]}>
-          <View style={styles.background} />
-          <TabIndicator
-            activeTabIndex={activeTabIndex}
-            tabWidth={tabWidth}
-            tabCount={tabCount}
-            indicatorColor={indicatorColor}
-          />
+      <View style={[styles.container, { marginBottom: bottomMargin ?? 20 }]}>
+        <View
+          style={[
+            styles.blurContainer,
+            {
+              borderRadius,
+              backgroundColor: containerBg,
+              borderWidth: 1.2,
+              borderColor: 'rgba(255, 255, 255, 1)',
+            },
+          ]}
+        >
           <View style={styles.tabsContainer}>
             {tabs.map((tab, index) => {
               const isActive = activeTabIndex === index;
@@ -191,7 +113,7 @@ export default function FloatingTabBar({
               return (
                 <TouchableOpacity
                   key={tabKey}
-                  style={styles.tab}
+                  style={[styles.tab, isActive && styles.tabActive]}
                   onPress={() => handleTabPress(tab.route)}
                   activeOpacity={0.7}
                 >
@@ -227,19 +149,10 @@ const styles = StyleSheet.create({
   },
   container: {
     alignSelf: 'center',
+    minWidth: 160,
   },
   blurContainer: {
     overflow: 'hidden',
-  },
-  background: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  indicator: {
-    position: 'absolute',
-    top: 4,
-    left: 2,
-    bottom: 4,
-    borderRadius: 27,
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -252,6 +165,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
+    borderRadius: 27,
+  },
+  tabActive: {
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
   },
   tabContent: {
     alignItems: 'center',

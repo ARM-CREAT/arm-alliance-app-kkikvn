@@ -320,7 +320,7 @@ export default function ElectionResultsScreen() {
                   <Text style={styles.submitButtonText}>Soumettre</Text>
                   <IconSymbol
                     ios_icon_name="arrow.right"
-                    android_material_icon_name="arrow-forward"
+                    android_material_icon_name="arrow_forward"
                     size={20}
                     color={colors.background}
                   />

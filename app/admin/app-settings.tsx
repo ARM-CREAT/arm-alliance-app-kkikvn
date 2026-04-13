@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import AsyncStorage from '@/lib/async-storage';
 import { colors } from '@/styles/commonStyles';
 import { BACKEND_URL } from '@/utils/api';

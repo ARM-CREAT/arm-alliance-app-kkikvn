@@ -164,7 +164,7 @@ export default function AuthScreen() {
             >
               <IconSymbol
                 ios_icon_name={showPassword ? "eye.slash.fill" : "eye.fill"}
-                android_material_icon_name={showPassword ? "visibility-off" : "visibility"}
+                android_material_icon_name={showPassword ? "visibility_off" : "visibility"}
                 size={24}
                 color={colors.textSecondary}
               />

@@ -184,7 +184,7 @@ export default function MembershipStatsScreen() {
                 />
                 <StatCard
                   icon_ios="checkmark.circle.fill"
-                  icon_android="check-circle"
+                  icon_android="check_circle"
                   label="Actifs"
                   value={stats.active}
                   iconColor="#34C759"
@@ -198,7 +198,7 @@ export default function MembershipStatsScreen() {
                 />
                 <StatCard
                   icon_ios="calendar"
-                  icon_android="calendar-today"
+                  icon_android="calendar_today"
                   label="Nouveaux ce mois"
                   value={stats.thisMonth}
                   iconColor="#007AFF"
@@ -240,7 +240,7 @@ export default function MembershipStatsScreen() {
               <View style={styles.listContainer}>
                 <View style={styles.listRow}>
                   <View style={styles.listRowLeft}>
-                    <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={20} color="#34C759" />
+                    <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check_circle" size={20} color="#34C759" />
                     <Text style={styles.listRowLabel}>Actifs</Text>
                   </View>
                   <Text style={[styles.listRowValue, { color: '#34C759' }]}>{String(stats.active)}</Text>

@@ -170,7 +170,7 @@ export default function DonationScreen() {
               >
                 <IconSymbol 
                   ios_icon_name="gift.fill" 
-                  android_material_icon_name="card-giftcard" 
+                  android_material_icon_name="card_giftcard" 
                   size={24} 
                   color={contributionType === 'one-time' ? colors.background : colors.primary} 
                 />
@@ -185,7 +185,7 @@ export default function DonationScreen() {
               >
                 <IconSymbol 
                   ios_icon_name="calendar" 
-                  android_material_icon_name="event" 
+                  android_material_icon_name="calendar_today" 
                   size={24} 
                   color={contributionType === 'monthly' ? colors.background : colors.primary} 
                 />
@@ -200,7 +200,7 @@ export default function DonationScreen() {
               >
                 <IconSymbol 
                   ios_icon_name="calendar.badge.clock" 
-                  android_material_icon_name="date-range" 
+                  android_material_icon_name="date_range" 
                   size={24} 
                   color={contributionType === 'annual' ? colors.background : colors.primary} 
                 />
@@ -294,7 +294,7 @@ export default function DonationScreen() {
               >
                 <IconSymbol 
                   ios_icon_name="creditcard.fill" 
-                  android_material_icon_name="credit-card" 
+                  android_material_icon_name="credit_card" 
                   size={24} 
                   color={paymentMethod === 'visa' ? colors.background : colors.primary} 
                 />
@@ -307,7 +307,7 @@ export default function DonationScreen() {
               >
                 <IconSymbol 
                   ios_icon_name="creditcard.fill" 
-                  android_material_icon_name="credit-card" 
+                  android_material_icon_name="credit_card" 
                   size={24} 
                   color={paymentMethod === 'mastercard' ? colors.background : colors.primary} 
                 />
@@ -320,7 +320,7 @@ export default function DonationScreen() {
               >
                 <IconSymbol 
                   ios_icon_name="building.columns.fill" 
-                  android_material_icon_name="account-balance" 
+                  android_material_icon_name="account_balance" 
                   size={24} 
                   color={paymentMethod === 'bank_transfer' ? colors.background : colors.primary} 
                 />
