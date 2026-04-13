@@ -35,6 +35,35 @@ interface UpdateMemberBody {
   address?: string;
 }
 
+interface CreateMemberProfileBody {
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  commune: string;
+  profession: string;
+  phone?: string;
+  email?: string;
+  nina?: string;
+  region?: string;
+  cercle?: string;
+  motivation?: string;
+  role?: string;
+}
+
+interface UpdateMemberProfileBody {
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  commune?: string;
+  profession?: string;
+  phone?: string;
+  email?: string;
+  nina?: string;
+  region?: string;
+  cercle?: string;
+  motivation?: string;
+}
+
 function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): boolean {
   const password = request.headers['x-admin-password'];
   if (!password || password !== 'admin123') {
@@ -701,50 +730,79 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/member-profiles - Get all member profiles
-  fastify.get(
+  // GET /api/member-profiles - Get all member profiles (paginated)
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
     '/api/member-profiles',
     {
       schema: {
-        description: 'Get all member profiles',
+        description: 'Get all member profiles (paginated)',
         tags: ['member-profiles'],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'string', default: '1', description: 'Page number (default 1)' },
+            limit: { type: 'string', default: '20', description: 'Items per page (default 20)' },
+          },
+        },
         response: {
-          200: { type: 'array', items: { type: 'object' } },
+          200: {
+            type: 'object',
+            properties: {
+              data: { type: 'array', items: { type: 'object' } },
+              page: { type: 'number' },
+              limit: { type: 'number' },
+              total: { type: 'number' },
+            },
+          },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      app.logger.info('Fetching all member profiles');
+    async (request: FastifyRequest<{ Querystring: { page?: string; limit?: string } }>, reply: FastifyReply) => {
+      const page = Math.max(1, parseInt(request.query.page || '1', 10));
+      const pageLimit = Math.max(1, parseInt(request.query.limit || '20', 10));
+      const offsetValue = (page - 1) * pageLimit;
+
+      app.logger.info({ page, limit: pageLimit }, 'Fetching member profiles');
 
       try {
+        const totalResult = await app.db.select({ count: count() }).from(schema.memberProfiles);
+        const total = totalResult[0]?.count || 0;
+
         const profiles = await app.db
           .select()
           .from(schema.memberProfiles)
-          .orderBy(desc(schema.memberProfiles.createdAt));
+          .orderBy(desc(schema.memberProfiles.createdAt))
+          .limit(pageLimit)
+          .offset(offsetValue);
 
-        app.logger.info({ count: profiles.length }, 'Member profiles retrieved');
+        app.logger.info({ count: profiles.length, page, total }, 'Member profiles retrieved');
 
-        return profiles.map(p => ({
-          id: p.id,
-          first_name: p.firstName,
-          last_name: p.lastName,
-          full_name: p.fullName,
-          email: p.email,
-          phone: p.phone,
-          region: p.region,
-          cercle: p.cercle,
-          commune: p.commune,
-          profession: p.profession,
-          membership_number: p.membershipNumber,
-          role: p.role,
-          status: p.status,
-          nina: p.nina,
-          qr_code: p.qrCode,
-          motivation: p.motivation,
-          user_id: p.userId,
-          created_at: p.createdAt.toISOString(),
-          updated_at: p.updatedAt.toISOString(),
-        }));
+        return {
+          data: profiles.map(p => ({
+            id: p.id,
+            first_name: p.firstName,
+            last_name: p.lastName,
+            full_name: p.fullName,
+            email: p.email,
+            phone: p.phone,
+            region: p.region,
+            cercle: p.cercle,
+            commune: p.commune,
+            profession: p.profession,
+            membership_number: p.membershipNumber,
+            role: p.role,
+            status: p.status,
+            nina: p.nina,
+            qr_code: p.qrCode,
+            motivation: p.motivation,
+            user_id: p.userId,
+            created_at: p.createdAt.toISOString(),
+            updated_at: p.updatedAt.toISOString(),
+          })),
+          page,
+          limit: pageLimit,
+          total,
+        };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch member profiles');
         throw error;
@@ -896,6 +954,455 @@ export function register(app: App, fastify: FastifyInstance) {
         return { error: 'Member not found' };
       } catch (error) {
         app.logger.error({ err: error, phone }, 'Failed to look up member');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/member-profiles/me - Get authenticated user's member profile
+  fastify.get(
+    '/api/member-profiles/me',
+    {
+      schema: {
+        description: 'Get the authenticated user\'s member profile',
+        tags: ['member-profiles'],
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const requireAuth = app.requireAuth();
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const userId = session.user.id;
+      app.logger.info({ userId }, 'Fetching authenticated user\'s member profile');
+
+      try {
+        const profiles = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.userId, userId));
+
+        if (profiles.length === 0) {
+          app.logger.info({ userId }, 'Member profile not found for authenticated user');
+          reply.status(404);
+          return { error: 'Member profile not found' };
+        }
+
+        const p = profiles[0];
+        app.logger.info({ userId, profileId: p.id }, 'Authenticated user\'s member profile retrieved');
+
+        return {
+          id: p.id,
+          first_name: p.firstName,
+          last_name: p.lastName,
+          full_name: p.fullName,
+          email: p.email,
+          phone: p.phone,
+          region: p.region,
+          cercle: p.cercle,
+          commune: p.commune,
+          profession: p.profession,
+          membership_number: p.membershipNumber,
+          role: p.role,
+          status: p.status,
+          nina: p.nina,
+          qr_code: p.qrCode,
+          motivation: p.motivation,
+          user_id: p.userId,
+          created_at: p.createdAt.toISOString(),
+          updated_at: p.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId }, 'Failed to fetch authenticated user\'s member profile');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/member-profiles/:memberId - Get single member profile by ID
+  fastify.get<{ Params: { memberId: string } }>(
+    '/api/member-profiles/:memberId',
+    {
+      schema: {
+        description: 'Get a member profile by ID',
+        tags: ['member-profiles'],
+        params: {
+          type: 'object',
+          required: ['memberId'],
+          properties: { memberId: { type: 'string', format: 'uuid', description: 'Member profile ID' } },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { memberId: string } }>, reply: FastifyReply) => {
+      const { memberId } = request.params;
+      app.logger.info({ memberId }, 'Fetching member profile by ID');
+
+      try {
+        const profiles = await app.db
+          .select()
+          .from(schema.memberProfiles)
+          .where(eq(schema.memberProfiles.id, memberId));
+
+        if (profiles.length === 0) {
+          app.logger.info({ memberId }, 'Member profile not found');
+          reply.status(404);
+          return { error: 'Member profile not found' };
+        }
+
+        const p = profiles[0];
+        app.logger.info({ memberId }, 'Member profile retrieved');
+
+        return {
+          id: p.id,
+          first_name: p.firstName,
+          last_name: p.lastName,
+          full_name: p.fullName,
+          email: p.email,
+          phone: p.phone,
+          region: p.region,
+          cercle: p.cercle,
+          commune: p.commune,
+          profession: p.profession,
+          membership_number: p.membershipNumber,
+          role: p.role,
+          status: p.status,
+          nina: p.nina,
+          qr_code: p.qrCode,
+          motivation: p.motivation,
+          user_id: p.userId,
+          created_at: p.createdAt.toISOString(),
+          updated_at: p.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, memberId }, 'Failed to fetch member profile');
+        throw error;
+      }
+    }
+  );
+
+  // POST /api/member-profiles - Create new member profile
+  fastify.post<{ Body: CreateMemberProfileBody }>(
+    '/api/member-profiles',
+    {
+      schema: {
+        description: 'Create a new member profile',
+        tags: ['member-profiles'],
+        body: {
+          type: 'object',
+          required: ['full_name', 'commune', 'profession'],
+          properties: {
+            full_name: { type: 'string' },
+            first_name: { type: 'string' },
+            last_name: { type: 'string' },
+            commune: { type: 'string' },
+            profession: { type: 'string' },
+            phone: { type: 'string' },
+            email: { type: 'string' },
+            nina: { type: 'string' },
+            region: { type: 'string' },
+            cercle: { type: 'string' },
+            motivation: { type: 'string' },
+            role: { type: 'string' },
+          },
+        },
+        response: {
+          201: { type: 'object' },
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: CreateMemberProfileBody }>, reply: FastifyReply) => {
+      const { full_name, first_name, last_name, commune, profession, phone, email, nina, region, cercle, motivation, role } = request.body;
+
+      if (!full_name || !commune || !profession) {
+        app.logger.warn({ full_name, commune, profession }, 'Validation error: missing required fields for member profile');
+        reply.status(400);
+        return { error: 'full_name, commune, and profession are required' };
+      }
+
+      app.logger.info({ email, full_name }, 'Creating new member profile');
+
+      try {
+        const membershipNumber = generateMembershipNumber();
+        const now = new Date();
+
+        // Try to get user_id from authenticated session
+        let userId: string | null = null;
+        try {
+          const requireAuth = app.requireAuth();
+          const session = await requireAuth(request, reply);
+          if (session) {
+            userId = session.user.id;
+          }
+        } catch {
+          // If authentication fails, continue without user_id
+          userId = null;
+        }
+
+        const result = await app.db
+          .insert(schema.memberProfiles)
+          .values({
+            id: undefined as any,
+            userId,
+            fullName: full_name,
+            firstName: first_name || null,
+            lastName: last_name || null,
+            commune,
+            profession,
+            phone: phone || null,
+            email: email || null,
+            nina: nina || null,
+            region: region || null,
+            cercle: cercle || null,
+            motivation: motivation || null,
+            membershipNumber,
+            qrCode: membershipNumber,
+            status: 'active',
+            role: role || 'member',
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+
+        const p = result[0];
+        app.logger.info({ profileId: p.id, membershipNumber }, 'Member profile created');
+
+        reply.status(201);
+        return {
+          id: p.id,
+          first_name: p.firstName,
+          last_name: p.lastName,
+          full_name: p.fullName,
+          email: p.email,
+          phone: p.phone,
+          region: p.region,
+          cercle: p.cercle,
+          commune: p.commune,
+          profession: p.profession,
+          membership_number: p.membershipNumber,
+          role: p.role,
+          status: p.status,
+          nina: p.nina,
+          qr_code: p.qrCode,
+          motivation: p.motivation,
+          user_id: p.userId,
+          created_at: p.createdAt.toISOString(),
+          updated_at: p.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, full_name, email }, 'Failed to create member profile');
+        throw error;
+      }
+    }
+  );
+
+  // PUT /api/member-profiles/me - Update authenticated user's member profile
+  fastify.put<{ Body: UpdateMemberProfileBody }>(
+    '/api/member-profiles/me',
+    {
+      schema: {
+        description: 'Update the authenticated user\'s member profile',
+        tags: ['member-profiles'],
+        body: {
+          type: 'object',
+          properties: {
+            full_name: { type: 'string' },
+            first_name: { type: 'string' },
+            last_name: { type: 'string' },
+            commune: { type: 'string' },
+            profession: { type: 'string' },
+            phone: { type: 'string' },
+            email: { type: 'string' },
+            nina: { type: 'string' },
+            region: { type: 'string' },
+            cercle: { type: 'string' },
+            motivation: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: UpdateMemberProfileBody }>, reply: FastifyReply) => {
+      const requireAuth = app.requireAuth();
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const userId = session.user.id;
+      app.logger.info({ userId }, 'Updating authenticated user\'s member profile');
+
+      try {
+        const updates: any = {};
+        const body = request.body;
+
+        if (body.full_name !== undefined) updates.fullName = body.full_name;
+        if (body.first_name !== undefined) updates.firstName = body.first_name;
+        if (body.last_name !== undefined) updates.lastName = body.last_name;
+        if (body.commune !== undefined) updates.commune = body.commune;
+        if (body.profession !== undefined) updates.profession = body.profession;
+        if (body.phone !== undefined) updates.phone = body.phone || null;
+        if (body.email !== undefined) updates.email = body.email || null;
+        if (body.nina !== undefined) updates.nina = body.nina || null;
+        if (body.region !== undefined) updates.region = body.region || null;
+        if (body.cercle !== undefined) updates.cercle = body.cercle || null;
+        if (body.motivation !== undefined) updates.motivation = body.motivation || null;
+
+        updates.updatedAt = new Date();
+
+        const result = await app.db
+          .update(schema.memberProfiles)
+          .set(updates)
+          .where(eq(schema.memberProfiles.userId, userId))
+          .returning();
+
+        if (result.length === 0) {
+          app.logger.info({ userId }, 'Member profile not found for authenticated user');
+          reply.status(404);
+          return { error: 'Member profile not found' };
+        }
+
+        const p = result[0];
+        app.logger.info({ userId, profileId: p.id }, 'Authenticated user\'s member profile updated');
+
+        return {
+          id: p.id,
+          first_name: p.firstName,
+          last_name: p.lastName,
+          full_name: p.fullName,
+          email: p.email,
+          phone: p.phone,
+          region: p.region,
+          cercle: p.cercle,
+          commune: p.commune,
+          profession: p.profession,
+          membership_number: p.membershipNumber,
+          role: p.role,
+          status: p.status,
+          nina: p.nina,
+          qr_code: p.qrCode,
+          motivation: p.motivation,
+          user_id: p.userId,
+          created_at: p.createdAt.toISOString(),
+          updated_at: p.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, userId }, 'Failed to update authenticated user\'s member profile');
+        throw error;
+      }
+    }
+  );
+
+  // PUT /api/member-profiles/:memberId - Update member profile by ID (requires authentication)
+  fastify.put<{ Params: { memberId: string }; Body: UpdateMemberProfileBody }>(
+    '/api/member-profiles/:memberId',
+    {
+      schema: {
+        description: 'Update a member profile by ID',
+        tags: ['member-profiles'],
+        params: {
+          type: 'object',
+          required: ['memberId'],
+          properties: { memberId: { type: 'string', format: 'uuid' } },
+        },
+        body: {
+          type: 'object',
+          properties: {
+            full_name: { type: 'string' },
+            first_name: { type: 'string' },
+            last_name: { type: 'string' },
+            commune: { type: 'string' },
+            profession: { type: 'string' },
+            phone: { type: 'string' },
+            email: { type: 'string' },
+            nina: { type: 'string' },
+            region: { type: 'string' },
+            cercle: { type: 'string' },
+            motivation: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'object' },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { memberId: string }; Body: UpdateMemberProfileBody }>, reply: FastifyReply) => {
+      const requireAuth = app.requireAuth();
+      const session = await requireAuth(request, reply);
+      if (!session) return;
+
+      const { memberId } = request.params;
+      app.logger.info({ memberId }, 'Updating member profile');
+
+      try {
+        const updates: any = {};
+        const body = request.body;
+
+        if (body.full_name !== undefined) updates.fullName = body.full_name;
+        if (body.first_name !== undefined) updates.firstName = body.first_name;
+        if (body.last_name !== undefined) updates.lastName = body.last_name;
+        if (body.commune !== undefined) updates.commune = body.commune;
+        if (body.profession !== undefined) updates.profession = body.profession;
+        if (body.phone !== undefined) updates.phone = body.phone || null;
+        if (body.email !== undefined) updates.email = body.email || null;
+        if (body.nina !== undefined) updates.nina = body.nina || null;
+        if (body.region !== undefined) updates.region = body.region || null;
+        if (body.cercle !== undefined) updates.cercle = body.cercle || null;
+        if (body.motivation !== undefined) updates.motivation = body.motivation || null;
+
+        updates.updatedAt = new Date();
+
+        const result = await app.db
+          .update(schema.memberProfiles)
+          .set(updates)
+          .where(eq(schema.memberProfiles.id, memberId))
+          .returning();
+
+        if (result.length === 0) {
+          app.logger.info({ memberId }, 'Member profile not found');
+          reply.status(404);
+          return { error: 'Member profile not found' };
+        }
+
+        const p = result[0];
+        app.logger.info({ memberId }, 'Member profile updated');
+
+        return {
+          id: p.id,
+          first_name: p.firstName,
+          last_name: p.lastName,
+          full_name: p.fullName,
+          email: p.email,
+          phone: p.phone,
+          region: p.region,
+          cercle: p.cercle,
+          commune: p.commune,
+          profession: p.profession,
+          membership_number: p.membershipNumber,
+          role: p.role,
+          status: p.status,
+          nina: p.nina,
+          qr_code: p.qrCode,
+          motivation: p.motivation,
+          user_id: p.userId,
+          created_at: p.createdAt.toISOString(),
+          updated_at: p.updatedAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, memberId }, 'Failed to update member profile');
         throw error;
       }
     }
