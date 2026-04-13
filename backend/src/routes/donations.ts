@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, desc, count } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -101,6 +101,66 @@ export function register(app: App, fastify: FastifyInstance) {
           { err: error, donorEmail },
           'Failed to create donation'
         );
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/donations - Get all donations (public, paginated)
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+    '/api/donations',
+    {
+      schema: {
+        description: 'Get all donations (paginated)',
+        tags: ['donations'],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'string', default: '1', description: 'Page number (default 1)' },
+            limit: { type: 'string', default: '20', description: 'Items per page (default 20)' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              data: { type: 'array', items: { type: 'object' } },
+              page: { type: 'number' },
+              limit: { type: 'number' },
+              total: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { page?: string; limit?: string } }>, reply: FastifyReply) => {
+      const page = Math.max(1, parseInt(request.query.page || '1', 10));
+      const pageLimit = Math.max(1, parseInt(request.query.limit || '20', 10));
+      const offsetValue = (page - 1) * pageLimit;
+
+      app.logger.info({ page, limit: pageLimit }, 'Fetching donations');
+
+      try {
+        const totalResult = await app.db.select({ count: count() }).from(schema.donations);
+        const total = totalResult[0]?.count || 0;
+
+        const result = await app.db
+          .select()
+          .from(schema.donations)
+          .orderBy(desc(schema.donations.createdAt))
+          .limit(pageLimit)
+          .offset(offsetValue);
+
+        app.logger.info({ count: result.length, page, total }, 'Donations fetched successfully');
+
+        return {
+          data: result.map(formatDonation),
+          page,
+          limit: pageLimit,
+          total,
+        };
+      } catch (error) {
+        app.logger.error({ err: error }, 'Failed to fetch donations');
         throw error;
       }
     }

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, count } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -70,32 +70,50 @@ export async function seedEvents(app: App) {
 
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
-  // GET /api/events - Get all events (public)
-  fastify.get(
+  // GET /api/events - Get all events (public, paginated)
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
     '/api/events',
     {
       schema: {
-        description: 'Get all events ordered by date',
+        description: 'Get all events ordered by date (paginated)',
         tags: ['events'],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'string', default: '1', description: 'Page number (default 1)' },
+            limit: { type: 'string', default: '20', description: 'Items per page (default 20)' },
+          },
+        },
         response: {
           200: { type: 'object' },
         },
       },
     },
-    async (request, reply) => {
-      app.logger.info('Fetching all events');
+    async (request: FastifyRequest<{ Querystring: { page?: string; limit?: string } }>, reply) => {
+      const page = Math.max(1, parseInt(request.query.page || '1', 10));
+      const pageLimit = Math.max(1, parseInt(request.query.limit || '20', 10));
+      const offsetValue = (page - 1) * pageLimit;
+
+      app.logger.info({ page, limit: pageLimit }, 'Fetching events');
 
       try {
+        const totalResult = await app.db.select({ count: count() }).from(schema.events);
+        const total = totalResult[0]?.count || 0;
+
         const result = await app.db
           .select()
           .from(schema.events)
-          .orderBy(asc(schema.events.date));
+          .orderBy(asc(schema.events.date))
+          .limit(pageLimit)
+          .offset(offsetValue);
 
-        app.logger.info({ count: result.length }, 'Events fetched successfully');
+        app.logger.info({ count: result.length, page, total }, 'Events fetched successfully');
         return {
           success: true,
           data: result.map(formatEvent),
-          total: result.length,
+          page,
+          limit: pageLimit,
+          total,
         };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch events');

@@ -48,6 +48,7 @@ import * as conferenceVideosRoutes from './routes/conferenceVideos.js';
 import * as memberStatsRoutes from './routes/memberStats.js';
 import * as armMessagesRoutes from './routes/armMessages.js';
 import * as membersAndMessagesRoutes from './routes/membersAndMessages.js';
+import * as cotisationsRoutes from './routes/cotisations.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -167,6 +168,7 @@ directMessagesRoutes.register(app, app.fastify);
 conferenceVideosRoutes.register(app, app.fastify);
 armMessagesRoutes.register(app, app.fastify);
 membersAndMessagesRoutes.register(app, app.fastify);
+cotisationsRoutes.register(app, app.fastify);
 
 // Seed data
 await adminAuthRoutes.seedAdminUser(app);

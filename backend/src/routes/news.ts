@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, count } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -25,39 +25,65 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/news - Get all news articles ordered by created_at DESC
-  fastify.get(
+  // GET /api/news - Get all news articles ordered by created_at DESC (paginated)
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
     '/api/news',
     {
       schema: {
-        description: 'Get all news articles',
+        description: 'Get all news articles (paginated)',
         tags: ['news'],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'string', default: '1', description: 'Page number (default 1)' },
+            limit: { type: 'string', default: '20', description: 'Items per page (default 20)' },
+          },
+        },
         response: {
           200: {
-            type: 'array',
-            items: { type: 'object' },
+            type: 'object',
+            properties: {
+              data: { type: 'array', items: { type: 'object' } },
+              page: { type: 'number' },
+              limit: { type: 'number' },
+              total: { type: 'number' },
+            },
           },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      app.logger.info('Fetching all news articles');
+    async (request: FastifyRequest<{ Querystring: { page?: string; limit?: string } }>, reply: FastifyReply) => {
+      const page = Math.max(1, parseInt(request.query.page || '1', 10));
+      const pageLimit = Math.max(1, parseInt(request.query.limit || '20', 10));
+      const offsetValue = (page - 1) * pageLimit;
+
+      app.logger.info({ page, limit: pageLimit }, 'Fetching news articles');
 
       try {
+        const totalResult = await app.db.select({ count: count() }).from(schema.apiNews);
+        const total = totalResult[0]?.count || 0;
+
         const articles = await app.db
           .select()
           .from(schema.apiNews)
-          .orderBy(desc(schema.apiNews.createdAt));
+          .orderBy(desc(schema.apiNews.createdAt))
+          .limit(pageLimit)
+          .offset(offsetValue);
 
-        app.logger.info({ count: articles.length }, 'News articles retrieved');
+        app.logger.info({ count: articles.length, page, total }, 'News articles retrieved');
 
-        return articles.map(a => ({
-          id: a.id,
-          title: a.title,
-          content: a.content,
-          image_url: a.imageUrl,
-          created_at: a.createdAt.toISOString(),
-        }));
+        return {
+          data: articles.map(a => ({
+            id: a.id,
+            title: a.title,
+            content: a.content,
+            image_url: a.imageUrl,
+            created_at: a.createdAt.toISOString(),
+          })),
+          page,
+          limit: pageLimit,
+          total,
+        };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch news articles');
         throw error;
