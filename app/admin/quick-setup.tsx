@@ -269,7 +269,7 @@ export default function QuickSetupScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
-    router.push('/(tabs)/(home)');
+    router.push('/(tabs)');
   };
 
   return (

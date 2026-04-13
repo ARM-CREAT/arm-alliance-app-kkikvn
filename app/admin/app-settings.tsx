@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import AsyncStorage from '@/lib/async-storage';
 import { colors } from '@/styles/commonStyles';
 import { BACKEND_URL } from '@/utils/api';
@@ -50,9 +50,7 @@ export default function AdminAppSettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const checkAuth = useCallback(async () => {
-    // Auth is handled by the admin layout guard — no redirect needed here
-  }, []);
+
 
   const getAdminHeaders = async () => {
     const password = await AsyncStorage.getItem('admin_password');

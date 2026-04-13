@@ -111,12 +111,7 @@ export default function DonationScreen() {
       setLoading(false);
 
       const formattedAmount = formatCurrency(donationAmount, currency);
-      const contributionTypeText = contributionType === 'monthly' 
-        ? t('monthly').toLowerCase()
-        : contributionType === 'annual' 
-        ? t('annual').toLowerCase()
-        : t('oneTime').toLowerCase();
-      
+
       showModal(
         t('thankYou'),
         t('contributionSuccess', { amount: formattedAmount }),
