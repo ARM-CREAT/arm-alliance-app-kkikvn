@@ -14,7 +14,11 @@ type WidgetContextType = {
   refreshWidget: () => void;
 };
 
-const WidgetContext = createContext<WidgetContextType | null>(null);
+// Safe default so useWidget never throws when called outside the provider
+// (e.g. during web SSR hydration before the tree mounts).
+const WidgetContext = createContext<WidgetContextType>({
+  refreshWidget: () => {},
+});
 
 export function WidgetProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
@@ -44,9 +48,5 @@ export function WidgetProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useWidget = () => {
-  const context = useContext(WidgetContext);
-  if (!context) {
-    throw new Error("useWidget must be used within a WidgetProvider");
-  }
-  return context;
+  return useContext(WidgetContext);
 };

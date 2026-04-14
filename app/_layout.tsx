@@ -41,13 +41,13 @@ function AdminAutoLogout() {
 }
 
 export default function RootLayout() {
-  // Hide splash unconditionally after a short delay — NEVER block render
+  // Hide splash immediately — never block render
   useEffect(() => {
-    const timer = setTimeout(() => {
-      console.log('[RootLayout] Hiding splash screen');
-      SplashScreen.hideAsync().catch(() => {});
-    }, 100);
-    return () => clearTimeout(timer);
+    console.log('[RootLayout] Hiding splash screen');
+    // SplashScreen.hide() is the legacy API; hideAsync() is the SDK 54 API.
+    // Call both so the splash is dismissed regardless of which one is active.
+    try { (SplashScreen as any).hide?.(); } catch { /* ignore */ }
+    SplashScreen.hideAsync().catch(() => {});
   }, []);
 
   const rootStyle = Platform.OS === 'web'
