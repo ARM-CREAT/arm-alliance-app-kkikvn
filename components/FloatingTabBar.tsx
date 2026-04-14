@@ -41,18 +41,25 @@ export default function FloatingTabBar({
 
     tabs.forEach((tab, index) => {
       let score = 0;
-      if (pathname === tab.route) {
+      const routeStr = typeof tab.route === 'string' ? tab.route : '';
+
+      if (pathname === routeStr) {
+        // Exact match — highest priority
         score = 100;
-      } else if (pathname.startsWith(tab.route as string)) {
-        score = 80;
-      } else if (pathname.includes(tab.name)) {
-        score = 60;
       } else if (
-        typeof tab.route === 'string' &&
-        tab.route.includes('/(tabs)/') &&
-        pathname.includes(tab.route.split('/(tabs)/')[1])
+        routeStr.includes('/(tabs)/') &&
+        pathname.startsWith(routeStr)
+      ) {
+        // Only prefix-match routes that have a specific sub-path (not the bare /(tabs) root)
+        score = 80;
+      } else if (
+        routeStr.includes('/(tabs)/') &&
+        pathname.includes(routeStr.split('/(tabs)/')[1])
       ) {
         score = 40;
+      } else if (pathname.includes(tab.name) && tab.name !== 'index') {
+        // name-based match, but never use 'index' as a substring match
+        score = 60;
       }
 
       if (score > bestMatchScore) {
@@ -66,7 +73,7 @@ export default function FloatingTabBar({
 
   const handleTabPress = (route: Href) => {
     console.log('[FloatingTabBar] Tab pressed, navigating to:', route);
-    router.push(route);
+    router.replace(route);
   };
 
   const isDark = theme.dark;
