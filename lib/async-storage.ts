@@ -1,20 +1,19 @@
 // Cross-platform AsyncStorage implementation.
-// Web: uses localStorage. Native: uses expo-secure-store.
-// Falls back gracefully if either is unavailable.
+// Uses @react-native-async-storage/async-storage on native,
+// and localStorage on web.
 
 import { Platform } from 'react-native';
 
-function getSecureStore() {
+// Lazy-require to avoid crashing on web where the native module isn't available.
+function getNativeAsyncStorage() {
   if (Platform.OS === 'web') return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('expo-secure-store');
+    return require('@react-native-async-storage/async-storage').default;
   } catch {
     return null;
   }
 }
-
-const SecureStore = getSecureStore();
 
 const AsyncStorage = {
   getItem: async (key: string): Promise<string | null> => {
@@ -22,9 +21,8 @@ const AsyncStorage = {
       if (Platform.OS === 'web') {
         return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
       }
-      if (SecureStore) {
-        return await SecureStore.getItemAsync(key);
-      }
+      const store = getNativeAsyncStorage();
+      if (store) return await store.getItem(key);
       return null;
     } catch {
       return null;
@@ -37,9 +35,8 @@ const AsyncStorage = {
         if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
         return;
       }
-      if (SecureStore) {
-        await SecureStore.setItemAsync(key, value);
-      }
+      const store = getNativeAsyncStorage();
+      if (store) await store.setItem(key, value);
     } catch {}
   },
 
@@ -49,9 +46,8 @@ const AsyncStorage = {
         if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
         return;
       }
-      if (SecureStore) {
-        await SecureStore.deleteItemAsync(key);
-      }
+      const store = getNativeAsyncStorage();
+      if (store) await store.removeItem(key);
     } catch {}
   },
 
@@ -60,9 +56,10 @@ const AsyncStorage = {
       if (Platform.OS === 'web') {
         return keys.map(k => [k, typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null]);
       }
-      if (SecureStore) {
-        const results = await Promise.all(keys.map(k => SecureStore.getItemAsync(k)));
-        return keys.map((k, i) => [k, results[i] ?? null]);
+      const store = getNativeAsyncStorage();
+      if (store) {
+        const results: [string, string | null][] = await store.multiGet(keys);
+        return results;
       }
       return keys.map(k => [k, null]);
     } catch {
@@ -76,9 +73,8 @@ const AsyncStorage = {
         if (typeof localStorage !== 'undefined') pairs.forEach(([k, v]) => localStorage.setItem(k, v));
         return;
       }
-      if (SecureStore) {
-        await Promise.all(pairs.map(([k, v]) => SecureStore.setItemAsync(k, v)));
-      }
+      const store = getNativeAsyncStorage();
+      if (store) await store.multiSet(pairs);
     } catch {}
   },
 
@@ -88,9 +84,8 @@ const AsyncStorage = {
         if (typeof localStorage !== 'undefined') keys.forEach(k => localStorage.removeItem(k));
         return;
       }
-      if (SecureStore) {
-        await Promise.all(keys.map(k => SecureStore.deleteItemAsync(k)));
-      }
+      const store = getNativeAsyncStorage();
+      if (store) await store.multiRemove(keys);
     } catch {}
   },
 
@@ -98,8 +93,10 @@ const AsyncStorage = {
     try {
       if (Platform.OS === 'web') {
         if (typeof localStorage !== 'undefined') localStorage.clear();
+        return;
       }
-      // SecureStore has no bulk-clear — skip on native
+      const store = getNativeAsyncStorage();
+      if (store) await store.clear();
     } catch {}
   },
 
@@ -107,6 +104,11 @@ const AsyncStorage = {
     try {
       if (Platform.OS === 'web') {
         return typeof localStorage !== 'undefined' ? Object.keys(localStorage) : [];
+      }
+      const store = getNativeAsyncStorage();
+      if (store) {
+        const keys = await store.getAllKeys();
+        return keys ?? [];
       }
       return [];
     } catch {
