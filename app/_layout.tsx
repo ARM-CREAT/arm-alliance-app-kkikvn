@@ -1,6 +1,6 @@
 import { Stack, usePathname } from 'expo-router';
 import { View, Platform } from 'react-native';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { DefaultTheme, Theme, ThemeProvider } from '@react-navigation/native';
@@ -57,6 +57,9 @@ function AdminAutoLogout() {
 }
 
 export default function RootLayout() {
+  // Hard-render gate: after 3s we force-render regardless of font state
+  const [forceReady, setForceReady] = useState(false);
+
   const [fontsLoaded, fontError] = useFonts({
     'SpaceMono-Regular': require('../assets/fonts/SpaceMono-Regular.ttf'),
     'SpaceMono-Bold': require('../assets/fonts/SpaceMono-Bold.ttf'),
@@ -67,20 +70,31 @@ export default function RootLayout() {
   // Hide splash once fonts are ready (or failed) — never block indefinitely
   useEffect(() => {
     if (fontsLoaded || fontError) {
+      console.log('[RootLayout] Fonts ready, hiding splash screen');
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
 
-  // Absolute safety timeout: hide splash after 3 seconds no matter what.
+  // Absolute safety timeout: force render + hide splash after 3 seconds no matter what.
   // This guarantees the app is always visible even if useFonts hangs on Android.
   useEffect(() => {
-    const t = setTimeout(() => SplashScreen.hideAsync().catch(() => {}), 3000);
+    const t = setTimeout(() => {
+      console.log('[RootLayout] 3s timeout — forcing app render');
+      setForceReady(true);
+      SplashScreen.hideAsync().catch(() => {});
+    }, 3000);
     return () => clearTimeout(t);
   }, []);
 
   // CRITICAL: NEVER return null here.
   // On Android, useFonts can hang indefinitely causing a permanent blank white screen.
   // The app must always render immediately. Fonts load in the background.
+  // We only gate on forceReady to ensure the 3s timeout always fires.
+  const isReady = fontsLoaded || fontError || forceReady;
+  if (!isReady) {
+    // Render a transparent placeholder — splash screen is still visible on top
+    return <View style={{ flex: 1 }} />;
+  }
 
   const rootStyle = Platform.OS === 'web'
     ? { flex: 1, width: '100%' as const, height: '100%' as const }
