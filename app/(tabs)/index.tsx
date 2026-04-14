@@ -44,26 +44,31 @@ export default function HomeScreen() {
   const [memberCount, setMemberCount] = useState<number>(0);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchMemberCount = async () => {
       console.log('[Home] GET /api/member-profiles (member count)');
       try {
-        const response = await fetch(`${BACKEND_URL}/api/member-profiles`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const response = await fetch(`${BACKEND_URL}/api/member-profiles`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!response.ok) {
           const text = await response.text();
           console.warn('[Home] Member count API error:', response.status, text);
-          setMemberCount(0);
+          if (isMounted) setMemberCount(0);
           return;
         }
         const data = await response.json();
         const count = Array.isArray(data) ? data.length : 0;
         console.log('[Home] Member count:', count);
-        setMemberCount(count);
+        if (isMounted) setMemberCount(count);
       } catch (err) {
         console.warn('[Home] Failed to fetch member count:', err);
-        setMemberCount(0);
+        if (isMounted) setMemberCount(0);
       }
     };
     fetchMemberCount();
+    return () => { isMounted = false; };
   }, []);
 
   const displayedProgram = PROGRAM_POINTS.slice(0, 6);

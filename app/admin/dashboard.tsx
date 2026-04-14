@@ -118,7 +118,11 @@ export default function AdminDashboardScreen() {
 
   useEffect(() => {
     const checkSetup = async () => {
-      await AsyncStorage.getItem('quick_setup_completed');
+      try {
+        await AsyncStorage.getItem('quick_setup_completed');
+      } catch (err) {
+        console.warn('[AdminDashboard] checkSetup error (non-blocking):', err);
+      }
     };
     checkSetup();
     loadDashboard();

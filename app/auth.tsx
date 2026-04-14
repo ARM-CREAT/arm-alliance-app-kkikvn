@@ -52,8 +52,14 @@ export default function AuthScreen() {
 
   const handleEmailAuth = async () => {
     console.log('User tapped email auth button');
-    if (!email || !password) {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    if (!trimmedEmail || !trimmedPassword) {
       showModal("Erreur", "Veuillez entrer votre email et mot de passe");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      showModal("Erreur", "Veuillez entrer une adresse email valide");
       return;
     }
 
@@ -61,11 +67,11 @@ export default function AuthScreen() {
     try {
       if (mode === "signin") {
         console.log('Signing in with email');
-        await signInWithEmail(email, password);
+        await signInWithEmail(trimmedEmail, trimmedPassword);
         router.replace("/admin/dashboard");
       } else {
         console.log('Signing up with email');
-        await signUpWithEmail(email, password, name);
+        await signUpWithEmail(trimmedEmail, trimmedPassword, name.trim() || undefined);
         showModal(
           "Succès",
           "Compte créé ! Veuillez vérifier votre email pour confirmer votre compte.",
