@@ -1,23 +1,18 @@
-import React, { useEffect, useRef } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
-import { colors } from '@/styles/commonStyles';
 
 function AdminGuard() {
-  const { isAdminAuthenticated, isChecking, logout } = useAdminAuth();
+  const { isAdminAuthenticated, isChecking } = useAdminAuth();
   const router = useRouter();
   const segments = useSegments();
-  const didMountRef = useRef(false);
 
   useEffect(() => {
+    // Only apply guards when we are actually inside the admin section.
+    // If the user navigated away from /admin entirely, do nothing — the
+    // root-level AdminAutoLogout component handles the logout there.
     const isInAdmin = segments[0] === 'admin';
-
-    if (!isInAdmin && didMountRef.current) {
-      console.log('[AdminGuard] Utilisateur a quitté la section admin — déconnexion automatique');
-      logout();
-      return;
-    }
+    if (!isInAdmin) return;
 
     if (!isChecking) {
       const isOnLoginScreen = segments.includes('login' as never);
@@ -27,20 +22,10 @@ function AdminGuard() {
         router.replace('/admin/login');
       } else if (isAdminAuthenticated && isOnLoginScreen) {
         console.log('[AdminGuard] Déjà authentifié, redirection vers dashboard');
-        router.replace('/admin');
+        router.replace('/admin/dashboard');
       }
     }
-
-    didMountRef.current = true;
-  }, [isAdminAuthenticated, isChecking, segments, logout, router]);
-
-  if (isChecking) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
-  }
+  }, [isAdminAuthenticated, isChecking, segments, router]);
 
   return (
     <Stack

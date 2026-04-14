@@ -238,13 +238,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     console.log('[AuthContext] signOut');
+    // Immediately clear local state — never block the UI on network calls
+    setUser(null);
     try {
-      await authClient.signOut();
+      await withTimeout(authClient.signOut(), 3000);
     } catch (error) {
-      console.warn('[AuthContext] Sign out failed (API):', error);
-    } finally {
-      setUser(null);
-      await clearAuthTokens();
+      console.warn('[AuthContext] Sign out API call failed (non-blocking):', error);
+    }
+    try {
+      await withTimeout(clearAuthTokens(), 1000);
+    } catch (error) {
+      console.warn('[AuthContext] clearAuthTokens failed (non-blocking):', error);
     }
   };
 
