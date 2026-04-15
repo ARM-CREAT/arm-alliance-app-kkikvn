@@ -18,6 +18,9 @@ import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { NotificationBell } from '@/components/NotificationBell';
 import { PROGRAM_POINTS } from '@/constants/programData';
 
+// useNativeDriver is not supported on web — always use false there
+const nativeDriver = Platform.OS !== 'web';
+
 function resolveImageSource(
   source: string | number | ImageSourcePropType | undefined
 ): ImageSourcePropType {
@@ -43,13 +46,13 @@ function AnimatedItem({
         toValue: 1,
         duration: 350,
         delay: index * 70,
-        useNativeDriver: true,
+        useNativeDriver: nativeDriver,
       }),
       Animated.timing(translateY, {
         toValue: 0,
         duration: 350,
         delay: index * 70,
-        useNativeDriver: true,
+        useNativeDriver: nativeDriver,
       }),
     ]).start();
   }, [index, opacity, translateY]);
@@ -120,11 +123,11 @@ export default function HomeScreen() {
       Animated.timing(headerOpacity, {
         toValue: 1,
         duration: 400,
-        useNativeDriver: true,
+        useNativeDriver: nativeDriver,
       }),
       Animated.spring(heroScale, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: nativeDriver,
         speed: 14,
         bounciness: 3,
       }),
@@ -164,6 +167,11 @@ export default function HomeScreen() {
   const handleProgramPointPress = (title: string) => {
     console.log('[Home] Programme point appuyé:', title);
     router.push('/program');
+  };
+
+  const handleAdminPress = () => {
+    console.log('[Home] Bouton "Espace Admin" appuyé');
+    router.push('/admin/login');
   };
 
   const logoSource = resolveImageSource(
@@ -347,6 +355,19 @@ export default function HomeScreen() {
               <Ionicons name="arrow-forward" size={20} color="#fff" />
             </View>
           </AnimatedPressable>
+        </AnimatedItem>
+
+        {/* ── Admin access ── */}
+        <AnimatedItem index={11}>
+          <TouchableOpacity
+            onPress={handleAdminPress}
+            style={styles.adminLink}
+            activeOpacity={0.6}
+          >
+            <Ionicons name="shield-outline" size={14} color={colors.textTertiary} />
+            <Text style={styles.adminLinkText}>Espace Admin</Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.textTertiary} />
+          </TouchableOpacity>
         </AnimatedItem>
 
         <View style={{ height: 120 }} />
@@ -634,5 +655,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
+  },
+  // ── Admin link
+  adminLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  adminLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textTertiary,
+    letterSpacing: 0.2,
   },
 });
