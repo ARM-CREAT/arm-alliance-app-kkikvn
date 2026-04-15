@@ -49,6 +49,7 @@ import * as memberStatsRoutes from './routes/memberStats.js';
 import * as armMessagesRoutes from './routes/armMessages.js';
 import * as membersAndMessagesRoutes from './routes/membersAndMessages.js';
 import * as cotisationsRoutes from './routes/cotisations.js';
+import * as adhesionRoutes from './routes/adhesion.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -169,6 +170,7 @@ conferenceVideosRoutes.register(app, app.fastify);
 armMessagesRoutes.register(app, app.fastify);
 membersAndMessagesRoutes.register(app, app.fastify);
 cotisationsRoutes.register(app, app.fastify);
+adhesionRoutes.register(app, app.fastify);
 
 // Seed data
 await adminAuthRoutes.seedAdminUser(app);
@@ -192,6 +194,7 @@ await mediaItemsRoutes.seedMediaItems(app);
 await conferenceVideosRoutes.seedConferenceVideos(app);
 await armMessagesRoutes.seedArmMessages(app);
 await membersAndMessagesRoutes.seedMembersAndMessages(app);
+await adhesionRoutes.seedAdhesion(app);
 
 // Setup WebSocket signaling for conferences
 import {
