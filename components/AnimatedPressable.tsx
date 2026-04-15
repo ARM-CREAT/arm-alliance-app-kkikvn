@@ -20,7 +20,7 @@ export function AnimatedPressable({
   const animateIn = useCallback(() => {
     Animated.spring(scale, {
       toValue: scaleValue,
-      useNativeDriver: false,
+      useNativeDriver: true,
       speed: 50,
       bounciness: 4,
     }).start();
@@ -29,7 +29,7 @@ export function AnimatedPressable({
   const animateOut = useCallback(() => {
     Animated.spring(scale, {
       toValue: 1,
-      useNativeDriver: false,
+      useNativeDriver: true,
       speed: 50,
       bounciness: 4,
     }).start();

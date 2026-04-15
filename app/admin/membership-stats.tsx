@@ -96,7 +96,9 @@ export default function MembershipStatsScreen() {
   }, []);
 
   useEffect(() => {
-    loadStats();
+    let isMounted = true;
+    loadStats().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadStats]);
 
   const onRefresh = useCallback(() => {

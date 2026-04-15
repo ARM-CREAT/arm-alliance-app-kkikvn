@@ -129,7 +129,9 @@ export default function StatsScreen() {
   }, []);
 
   useEffect(() => {
-    fetchStats();
+    let isMounted = true;
+    fetchStats().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [fetchStats]);
 
   const onRefresh = useCallback(async () => {

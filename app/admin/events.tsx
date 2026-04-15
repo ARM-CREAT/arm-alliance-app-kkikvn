@@ -85,7 +85,9 @@ export default function AdminEventsScreen() {
   }, []);
 
   useEffect(() => {
-    loadEvents();
+    let isMounted = true;
+    loadEvents().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadEvents]);
 
   const onRefresh = useCallback(() => {

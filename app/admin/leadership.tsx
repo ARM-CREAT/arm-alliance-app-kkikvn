@@ -132,7 +132,9 @@ export default function AdminLeadershipScreen() {
   }, []);
 
   useEffect(() => {
-    loadMembers();
+    let isMounted = true;
+    loadMembers().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadMembers]);
 
   const onRefresh = useCallback(() => {

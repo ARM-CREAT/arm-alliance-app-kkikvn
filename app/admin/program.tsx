@@ -87,7 +87,9 @@ export default function AdminProgramScreen() {
   }, []);
 
   useEffect(() => {
-    loadPrograms();
+    let isMounted = true;
+    loadPrograms().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadPrograms]);
 
   const onRefresh = useCallback(() => {

@@ -210,7 +210,9 @@ export default function OfflineAccessScreen() {
   const [modalType, setModalType] = useState<'info' | 'success' | 'warning' | 'error' | 'confirm'>('info');
 
   useEffect(() => {
-    loadOfflineStatus();
+    let isMounted = true;
+    loadOfflineStatus().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, []);
 
   const loadOfflineStatus = async () => {

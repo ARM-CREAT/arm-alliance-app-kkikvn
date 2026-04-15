@@ -112,7 +112,9 @@ export default function AdminNotificationsScreen() {
   }, []);
 
   useEffect(() => {
-    loadNotifications();
+    let isMounted = true;
+    loadNotifications().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadNotifications]);
 
   const onRefresh = useCallback(async () => {

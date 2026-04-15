@@ -117,6 +117,7 @@ export default function AdminDashboardScreen() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
     const checkSetup = async () => {
       try {
         await AsyncStorage.getItem('quick_setup_completed');
@@ -125,7 +126,8 @@ export default function AdminDashboardScreen() {
       }
     };
     checkSetup();
-    loadDashboard();
+    loadDashboard().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadDashboard]);
 
   const onRefresh = useCallback(() => {

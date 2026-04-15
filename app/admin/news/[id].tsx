@@ -81,7 +81,9 @@ export default function NewsFormScreen() {
   }, [id, isNew]);
 
   useEffect(() => {
-    loadArticle();
+    let isMounted = true;
+    loadArticle().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadArticle]);
 
   const handleSave = async () => {

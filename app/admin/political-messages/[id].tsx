@@ -78,7 +78,9 @@ export default function PoliticalMessageFormScreen() {
   }, [id, isNew]);
 
   useEffect(() => {
-    loadMessage();
+    let isMounted = true;
+    loadMessage().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadMessage]);
 
   const handleSave = async () => {

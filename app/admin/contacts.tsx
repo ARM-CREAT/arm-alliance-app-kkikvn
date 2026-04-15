@@ -111,7 +111,9 @@ export default function AdminContactsScreen() {
   }, [fetchContacts]);
 
   useEffect(() => {
-    loadData();
+    let isMounted = true;
+    loadData().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadData]);
 
   const openCreate = () => {
@@ -405,7 +407,7 @@ const styles = StyleSheet.create({
   loader: { marginTop: 60 },
   list: { padding: 16, paddingBottom: 40 },
   errorContainer: { marginVertical: 12, backgroundColor: '#FFF3F3', borderRadius: 10, padding: 16, alignItems: 'center', gap: 10 },
-  errorText: { color: colors.error, fontSize: 14, textAlign: 'center' },
+  errorText: { color: colors.danger, fontSize: 14, textAlign: 'center' },
   retryBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8 },
   retryBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   emptyText: { color: colors.textSecondary, textAlign: 'center', marginTop: 40, fontSize: 16 },
@@ -431,7 +433,7 @@ const styles = StyleSheet.create({
   cardActions: { flexDirection: 'row', marginTop: 12, gap: 8 },
   editBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
   editBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  deleteBtn: { flex: 1, backgroundColor: colors.error, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
+  deleteBtn: { flex: 1, backgroundColor: colors.danger, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
   deleteBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   headerBtn: { marginRight: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8 },
   headerBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
@@ -471,5 +473,5 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: 15, color: colors.text, fontWeight: '600' },
   saveBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   saveBtnText: { fontSize: 15, color: '#fff', fontWeight: '600' },
-  deleteConfirmBtn: { flex: 1, backgroundColor: colors.error, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  deleteConfirmBtn: { flex: 1, backgroundColor: colors.danger, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
 });

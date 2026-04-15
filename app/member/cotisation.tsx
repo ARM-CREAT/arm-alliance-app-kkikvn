@@ -126,7 +126,9 @@ export default function CotisationScreen() {
   }, []);
 
   useEffect(() => {
-    loadHistory();
+    let isMounted = true;
+    loadHistory().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadHistory]);
 
   const onRefresh = useCallback(() => {

@@ -91,7 +91,9 @@ export default function MemberMessagesScreen() {
   }, []);
 
   useEffect(() => {
-    loadMessages();
+    let isMounted = true;
+    loadMessages().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadMessages]);
 
   const onRefresh = useCallback(() => {

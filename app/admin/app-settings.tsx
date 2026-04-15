@@ -86,12 +86,14 @@ export default function AdminAppSettingsScreen() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
     const load = async () => {
       setLoading(true);
       await fetchSettings();
-      setLoading(false);
+      if (isMounted) setLoading(false);
     };
     load();
+    return () => { isMounted = false; };
   }, [fetchSettings]);
 
   const handleSave = async () => {
@@ -253,14 +255,14 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorBanner: {
-    backgroundColor: colors.error + '20',
+    backgroundColor: colors.danger + '20',
     borderRadius: 10,
     padding: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: colors.error,
+    borderColor: colors.danger,
   },
-  errorText: { color: colors.error, fontSize: 14 },
+  errorText: { color: colors.danger, fontSize: 14 },
   section: {
     backgroundColor: colors.card,
     borderRadius: 14,

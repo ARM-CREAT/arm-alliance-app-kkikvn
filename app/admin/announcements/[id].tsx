@@ -83,7 +83,9 @@ export default function AnnouncementFormScreen() {
   }, [id, isNew]);
 
   useEffect(() => {
-    loadAnnouncement();
+    let isMounted = true;
+    loadAnnouncement().finally(() => { if (!isMounted) return; });
+    return () => { isMounted = false; };
   }, [loadAnnouncement]);
 
   const handleSave = async () => {

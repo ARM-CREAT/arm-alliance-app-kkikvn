@@ -15,14 +15,15 @@ const PRIMARY_LIGHT = '#b7e4c7';
 const BG = '#f0f4f0';
 const WHITE = '#ffffff';
 const TEXT_DARK = '#1a1a1a';
+const TEXT_MUTED = '#666666';
 
-const cards = [
-  { title: '📰 Actualités', subtitle: 'Dernières nouvelles', route: '/program' },
-  { title: '👥 Membres', subtitle: 'Notre communauté', route: '/members-list' },
-  { title: '📋 Programme', subtitle: 'Nos engagements', route: '/program' },
-  { title: '🏛️ Idéologie', subtitle: 'Nos valeurs', route: '/ideology' },
-  { title: '📞 Contact', subtitle: 'Nous joindre', route: '/contact' },
-  { title: '💚 Don', subtitle: 'Soutenir ARM', route: '/donation' },
+const CARDS = [
+  { emoji: '📰', title: 'Actualités', subtitle: 'Dernières nouvelles', route: '/program' },
+  { emoji: '👥', title: 'Membres', subtitle: 'Notre communauté', route: '/members-list' },
+  { emoji: '📋', title: 'Programme', subtitle: 'Nos engagements', route: '/program' },
+  { emoji: '🏛️', title: 'Idéologie', subtitle: 'Nos valeurs', route: '/ideology' },
+  { emoji: '📞', title: 'Contact', subtitle: 'Nous joindre', route: '/contact' },
+  { emoji: '💚', title: 'Don', subtitle: 'Soutenir ARM', route: '/donation' },
 ];
 
 export default function HomeScreen() {
@@ -48,7 +49,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.joinBtn}
             onPress={() => {
-              console.log('Button pressed: Adhérer maintenant');
+              console.log('[Home] Bouton Adhérer maintenant appuyé');
               router.push('/member/register' as any);
             }}
             activeOpacity={0.85}
@@ -57,37 +58,35 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Cards grid */}
+        {/* Section titre */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Explorer</Text>
         </View>
+
+        {/* Grille de cartes */}
         <View style={styles.grid}>
-          {cards.map((card) => {
-            const cardEmoji = card.title.split(' ')[0];
-            const cardLabel = card.title.split(' ').slice(1).join(' ');
-            return (
-              <TouchableOpacity
-                key={card.title}
-                style={styles.card}
-                onPress={() => {
-                  console.log(`Card pressed: ${card.title}, navigating to ${card.route}`);
-                  router.push(card.route as any);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.cardEmoji}>{cardEmoji}</Text>
-                <Text style={styles.cardTitle}>{cardLabel}</Text>
-                <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {CARDS.map((card) => (
+            <TouchableOpacity
+              key={card.title}
+              style={styles.card}
+              onPress={() => {
+                console.log('[Home] Carte appuyée:', card.title, '-> navigating to', card.route);
+                router.push(card.route as any);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cardEmoji}>{card.emoji}</Text>
+              <Text style={styles.cardTitle}>{card.title}</Text>
+              <Text style={styles.cardSubtitle}>{card.subtitle}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* Admin button */}
+        {/* Bouton Admin */}
         <TouchableOpacity
           style={styles.adminBtn}
           onPress={() => {
-            console.log('Button pressed: Espace Admin');
+            console.log('[Home] Bouton Espace Admin appuyé');
             router.push('/admin' as any);
           }}
           activeOpacity={0.8}
@@ -204,7 +203,7 @@ const styles = StyleSheet.create({
   },
   cardSubtitle: {
     fontSize: 12,
-    color: '#666',
+    color: TEXT_MUTED,
   },
   adminBtn: {
     marginHorizontal: 16,
