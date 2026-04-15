@@ -115,7 +115,7 @@ export default function MemberDetailScreen() {
     setActionLoading('approve');
     try {
       const res = await fetch(`${BACKEND_URL}/api/members/${params.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: ADMIN_HEADERS,
         body: JSON.stringify({ status: 'active' }),
       });
@@ -140,7 +140,7 @@ export default function MemberDetailScreen() {
     setActionLoading('suspend');
     try {
       const res = await fetch(`${BACKEND_URL}/api/members/${params.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: ADMIN_HEADERS,
         body: JSON.stringify({ status: 'suspended' }),
       });

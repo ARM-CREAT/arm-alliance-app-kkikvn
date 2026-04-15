@@ -323,7 +323,7 @@ export default function AdminMembershipsScreen() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const loadMembers = useCallback(async (isRefresh = false) => {
-    console.log('[AdminMemberships] GET /api/member-profiles');
+    console.log('[AdminMemberships] GET /api/members');
     if (!isRefresh) setLoading(true);
     setError(null);
 
@@ -331,7 +331,10 @@ export default function AdminMembershipsScreen() {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const membersRes = await fetch(`${BACKEND_URL}/api/member-profiles`, { signal: controller.signal });
+      const membersRes = await fetch(`${BACKEND_URL}/api/members`, {
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': 'admin123' },
+      });
       clearTimeout(timeoutId);
 
       if (!membersRes.ok) {
@@ -429,13 +432,13 @@ export default function AdminMembershipsScreen() {
   };
 
   const handleApprove = async (member: Member) => {
-    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> approved');
+    console.log('[AdminMemberships] PATCH /api/members/' + member.id + ' -> active');
     setActionLoading('approve');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
         method: 'PATCH',
         headers: ADMIN_HEADERS,
-        body: JSON.stringify({ status: 'approved' }),
+        body: JSON.stringify({ status: 'active' }),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -455,13 +458,13 @@ export default function AdminMembershipsScreen() {
   };
 
   const handleReject = async (member: Member) => {
-    console.log('[AdminMemberships] PATCH /api/members/' + member.id + '/status -> rejected');
+    console.log('[AdminMemberships] PATCH /api/members/' + member.id + ' -> suspended');
     setActionLoading('reject');
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}/status`, {
+      const res = await fetch(`${BACKEND_URL}/api/members/${member.id}`, {
         method: 'PATCH',
         headers: ADMIN_HEADERS,
-        body: JSON.stringify({ status: 'rejected' }),
+        body: JSON.stringify({ status: 'suspended' }),
       });
       if (!res.ok) {
         const text = await res.text();

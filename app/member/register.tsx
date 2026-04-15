@@ -103,11 +103,11 @@ export default function RegisterScreen() {
       ...(message.trim() ? { message: message.trim() } : {}),
     };
 
-    console.log('[Register] POST /api/members', JSON.stringify(payload));
+    console.log('[Register] POST /api/adhesion', JSON.stringify(payload));
     setLoading(true);
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/members`, {
+      const res = await fetch(`${BACKEND_URL}/api/adhesion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -147,11 +147,12 @@ export default function RegisterScreen() {
       try { data = JSON.parse(text); } catch { /* ignore */ }
       console.log('[Register] Inscription réussie:', JSON.stringify(data));
 
-      // Navigate to member card with returned data
-      const memberParam = JSON.stringify(data);
+      // Navigate to success screen with membership number and name
+      const membershipNumber = String(data.membership_number ?? data.member_number ?? '');
+      const fullName = String(data.full_name ?? `${trimmedFirst} ${trimmedLast}`.trim());
       router.replace({
-        pathname: '/member/card',
-        params: { member: memberParam },
+        pathname: '/member/success',
+        params: { membership_number: membershipNumber, full_name: fullName },
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -25,7 +25,7 @@ const Haptics = {
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 };
 
-const BACKEND_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
+
 
 type PaymentMethod = 'orange_money' | 'moov_money' | 'virement';
 type CotisationType = 'mensuelle' | 'trimestrielle' | 'annuelle';
