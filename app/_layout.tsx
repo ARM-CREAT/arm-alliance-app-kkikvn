@@ -11,16 +11,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   useEffect(() => {
-    // Hide splash immediately — never wait for async data before showing the app.
     SplashScreen.hideAsync().catch(() => {});
-
-    // Hard fallback: force hide after 2s in case the first call is ignored
-    // (can happen when the app is backgrounded/resumed or on slow devices).
-    const fallback = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
-    }, 2000);
-
-    return () => clearTimeout(fallback);
   }, []);
 
   return (

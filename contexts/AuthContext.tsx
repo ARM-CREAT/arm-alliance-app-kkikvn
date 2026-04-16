@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Platform } from 'react-native';
-import * as Linking from 'expo-linking';
 import { authClient, setBearerToken, clearAuthTokens } from '@/lib/auth';
 
 interface User {
@@ -105,18 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(safetyTimer);
     });
 
-    const subscription = Linking.addEventListener('url', (_event) => {
-      setTimeout(() => fetchUserSilent(), 500);
-    });
-
-    const intervalId = setInterval(() => {
-      fetchUserSilent();
-    }, 5 * 60 * 1000);
-
     return () => {
       isMountedRef.current = false;
-      subscription.remove();
-      clearInterval(intervalId);
       clearTimeout(safetyTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
