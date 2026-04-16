@@ -48,10 +48,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Safety net: never block on AsyncStorage for more than 500ms
+    // Hard safety net: never block on AsyncStorage for more than 500ms
     const safetyTimer = setTimeout(() => {
       setIsChecking(false);
     }, 500);
+
     recheck().finally(() => clearTimeout(safetyTimer));
   }, [recheck]);
 

@@ -82,7 +82,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  // Always start as false — never block render
+  // Always start as false — never block render on auth state
   const [loading, setLoading] = useState(false);
   const isFetchingRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
@@ -95,11 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => { isMountedRef.current = false; };
     }
 
-    // Safety net: always resolve within 2s no matter what
+    // Hard safety net: loading MUST become false within 1.5s no matter what
     const safetyTimer = setTimeout(() => {
-      console.warn('[AuthContext] Safety timer fired — forcing loading=false after 2s');
+      console.warn('[AuthContext] Safety timer fired — forcing loading=false after 1.5s');
       if (isMountedRef.current) setLoading(false);
-    }, 2000);
+    }, 1500);
 
     initAuth().finally(() => {
       clearTimeout(safetyTimer);
@@ -124,8 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const initAuth = async () => {
     try {
-      // 1.5s timeout — must be shorter than the 2s safety timer above
-      const session = await withTimeout(authClient.getSession(), 1500);
+      // 1s timeout — must be shorter than the 1.5s safety timer above
+      const session = await withTimeout(authClient.getSession(), 1000);
       if (!isMountedRef.current) return;
       if (session?.data?.user) {
         setUser(session.data.user as User);
