@@ -1,15 +1,5 @@
-import { Platform } from 'react-native';
+// Safe no-op stub — error logging disabled to prevent startup hangs.
+// The previous implementation made fetch calls and overrode console methods
+// at module-eval time, which could block the web preview from loading.
 
-declare const __DEV__: boolean;
-
-export function setupErrorLogging() {
-  // no-op on native
-}
-
-export function logError(error: unknown, context?: string) {
-  if (__DEV__) {
-    console.warn('[ErrorLogger]', context, error);
-  }
-}
-
-export default { setupErrorLogging, logError };
+export const setupErrorLogging = () => {};

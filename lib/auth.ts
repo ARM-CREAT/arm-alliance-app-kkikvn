@@ -1,47 +1,83 @@
-// Web-safe auth client — no SecureStore, no expoClient plugin.
-// Native uses lib/auth.native.ts which has the full expoClient setup.
-//
-// IMPORTANT: better-auth/react uses Node.js internals that can crash the web
-// Metro bundler. We lazy-require it inside a function so the import is deferred
-// until runtime (after the web polyfills are in place), not at module-eval time.
+// Web-safe auth client — pure fetch, no better-auth/react dependency.
+// This avoids the ESM/Node.js crash that better-auth causes in Metro web bundles.
 
 export const API_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 export const BEARER_TOKEN_KEY = 'alliance-arm_bearer_token';
 
-// Build a minimal no-op auth client that satisfies the AuthContext interface
-// without making any network calls. Used as a fallback if better-auth fails.
-function makeNoopClient() {
-  const noopSession = { data: null, error: null };
-  return {
-    getSession: async () => noopSession,
-    signIn: {
-      email: async (_opts: { email: string; password: string }) => ({ error: { message: 'Auth not available on web' } }),
-      social: async (_opts: { provider: string; callbackURL?: string }) => ({ error: null }),
-    },
-    signUp: {
-      email: async (_opts: { email: string; password: string; name?: string }) => ({ error: { message: 'Auth not available on web' } }),
-    },
-    signOut: async () => ({ error: null }),
-  };
-}
-
-function buildAuthClient() {
+function getStorage() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createAuthClient } = require('better-auth/react');
-    return createAuthClient({ baseURL: API_URL });
-  } catch (e) {
-    console.warn('[auth.web] better-auth/react failed to load, using noop client:', e);
-    return makeNoopClient();
+    return typeof localStorage !== 'undefined' ? localStorage : null;
+  } catch {
+    return null;
   }
 }
 
-export const authClient = buildAuthClient();
+async function apiFetch(path: string, options?: RequestInit) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      credentials: 'include',
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      const text = await res.text().catch(() => `HTTP ${res.status}`);
+      let msg = text;
+      try { msg = JSON.parse(text)?.message || JSON.parse(text)?.error || text; } catch {}
+      return { data: null, error: { message: msg, code: String(res.status) } };
+    }
+    const data = await res.json().catch(() => null);
+    return { data, error: null };
+  } catch (e: any) {
+    clearTimeout(timer);
+    return { data: null, error: { message: e?.message || 'Network error', code: 'NETWORK_ERROR' } };
+  }
+}
+
+export const authClient = {
+  getSession: async () => {
+    const result = await apiFetch('/api/auth/get-session');
+    if (result.error || !result.data) return { data: null, error: result.error };
+    return { data: result.data, error: null };
+  },
+  signIn: {
+    email: async (opts: { email: string; password: string }) => {
+      console.log('[auth.web] signIn.email', opts.email);
+      return apiFetch('/api/auth/sign-in/email', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      });
+    },
+    social: async (opts: { provider: string; callbackURL?: string }) => {
+      console.log('[auth.web] signIn.social', opts.provider);
+      return apiFetch('/api/auth/sign-in/social', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      });
+    },
+  },
+  signUp: {
+    email: async (opts: { email: string; password: string; name?: string }) => {
+      console.log('[auth.web] signUp.email', opts.email);
+      return apiFetch('/api/auth/sign-up/email', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      });
+    },
+  },
+  signOut: async () => {
+    console.log('[auth.web] signOut');
+    return apiFetch('/api/auth/sign-out', { method: 'POST' });
+  },
+};
 
 export async function setBearerToken(token: string) {
-  try { localStorage.setItem(BEARER_TOKEN_KEY, token); } catch {}
+  try { getStorage()?.setItem(BEARER_TOKEN_KEY, token); } catch {}
 }
 
 export async function clearAuthTokens() {
-  try { localStorage.removeItem(BEARER_TOKEN_KEY); } catch {}
+  try { getStorage()?.removeItem(BEARER_TOKEN_KEY); } catch {}
 }

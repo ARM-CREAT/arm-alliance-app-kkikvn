@@ -1,11 +1,9 @@
-// Native (iOS/Android) auth client with expoClient plugin and SecureStore.
-// IMPORTANT: All imports of better-auth and expo-secure-store are lazy (require)
-// so a missing or crashing native module never kills the JS bundle at eval time.
+// Native (iOS/Android) auth client — pure fetch + SecureStore, no better-auth/react.
+// This avoids the ESM/Node.js crash that better-auth causes in Metro bundles.
 
 export const API_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 export const BEARER_TOKEN_KEY = 'alliance-arm_bearer_token';
 
-// Lazy-require SecureStore so a missing native module never crashes the JS bundle.
 function getSecureStore() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -15,69 +13,73 @@ function getSecureStore() {
   }
 }
 
-// Build a storage adapter for expoClient.
-// Falls back to a no-op if SecureStore is unavailable (e.g. Expo Go on some devices).
-function buildStorage() {
-  const SS = getSecureStore();
-  if (!SS) {
-    return {
-      getItem: async (_key: string) => null,
-      setItem: async (_key: string, _value: string) => {},
-      removeItem: async (_key: string) => {},
-    };
-  }
-  return {
-    getItem: (key: string) => SS.getItemAsync(key),
-    setItem: (key: string, value: string) => SS.setItemAsync(key, value),
-    removeItem: (key: string) => SS.deleteItemAsync(key),
-  };
-}
-
-// Minimal no-op client used as fallback if better-auth fails to load.
-function makeNoopClient() {
-  const noopSession = { data: null, error: null };
-  return {
-    getSession: async () => noopSession,
-    signIn: {
-      email: async (_opts: { email: string; password: string }) => ({ error: { message: 'Auth not available' } }),
-      social: async (_opts: { provider: string; callbackURL?: string }) => ({ error: null }),
-    },
-    signUp: {
-      email: async (_opts: { email: string; password: string; name?: string }) => ({ error: { message: 'Auth not available' } }),
-    },
-    signOut: async () => ({ error: null }),
-  };
-}
-
-// Build the auth client — ALL requires are lazy so module-eval never throws.
-function buildAuthClient() {
+async function apiFetch(path: string, options?: RequestInit) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createAuthClient } = require('better-auth/react');
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { expoClient } = require('@better-auth/expo/client');
-      return createAuthClient({
-        baseURL: API_URL,
-        plugins: [
-          expoClient({
-            scheme: 'alliancearm',
-            storagePrefix: 'alliancearm',
-            storage: buildStorage(),
-          }),
-        ],
-      });
-    } catch (e) {
-      console.warn('[auth.native] expoClient failed, falling back to base client:', e);
-      return createAuthClient({ baseURL: API_URL });
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      credentials: 'include',
+    });
+    clearTimeout(timer);
+    if (!res.ok) {
+      const text = await res.text().catch(() => `HTTP ${res.status}`);
+      let msg = text;
+      try { msg = JSON.parse(text)?.message || JSON.parse(text)?.error || text; } catch {}
+      return { data: null, error: { message: msg, code: String(res.status) } };
     }
-  } catch (e) {
-    console.warn('[auth.native] better-auth/react failed to load, using noop client:', e);
-    return makeNoopClient();
+    const data = await res.json().catch(() => null);
+    return { data, error: null };
+  } catch (e: any) {
+    clearTimeout(timer);
+    return { data: null, error: { message: e?.message || 'Network error', code: 'NETWORK_ERROR' } };
   }
 }
 
-export const authClient = buildAuthClient();
+export const authClient = {
+  getSession: async () => {
+    // Attach bearer token if available
+    const SS = getSecureStore();
+    let token: string | null = null;
+    try { if (SS) token = await SS.getItemAsync(BEARER_TOKEN_KEY); } catch {}
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const result = await apiFetch('/api/auth/get-session', { headers });
+    if (result.error || !result.data) return { data: null, error: result.error };
+    return { data: result.data, error: null };
+  },
+  signIn: {
+    email: async (opts: { email: string; password: string }) => {
+      console.log('[auth.native] signIn.email', opts.email);
+      return apiFetch('/api/auth/sign-in/email', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      });
+    },
+    social: async (opts: { provider: string; callbackURL?: string }) => {
+      console.log('[auth.native] signIn.social', opts.provider);
+      return apiFetch('/api/auth/sign-in/social', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      });
+    },
+  },
+  signUp: {
+    email: async (opts: { email: string; password: string; name?: string }) => {
+      console.log('[auth.native] signUp.email', opts.email);
+      return apiFetch('/api/auth/sign-up/email', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      });
+    },
+  },
+  signOut: async () => {
+    console.log('[auth.native] signOut');
+    return apiFetch('/api/auth/sign-out', { method: 'POST' });
+  },
+};
 
 export async function setBearerToken(token: string) {
   try {
