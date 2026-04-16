@@ -1,6 +1,6 @@
 // Native (iOS/Android) auth client with expoClient plugin and SecureStore.
-
-import { createAuthClient } from 'better-auth/react';
+// IMPORTANT: All imports of better-auth and expo-secure-store are lazy (require)
+// so a missing or crashing native module never kills the JS bundle at eval time.
 
 export const API_URL = 'https://q4thnc8stu4bc4fcm2ekabu3ahgaahtu.app.specular.dev';
 export const BEARER_TOKEN_KEY = 'alliance-arm_bearer_token';
@@ -33,24 +33,47 @@ function buildStorage() {
   };
 }
 
-// Build the auth client — wrap in try/catch so a plugin failure never crashes the app.
+// Minimal no-op client used as fallback if better-auth fails to load.
+function makeNoopClient() {
+  const noopSession = { data: null, error: null };
+  return {
+    getSession: async () => noopSession,
+    signIn: {
+      email: async (_opts: { email: string; password: string }) => ({ error: { message: 'Auth not available' } }),
+      social: async (_opts: { provider: string; callbackURL?: string }) => ({ error: null }),
+    },
+    signUp: {
+      email: async (_opts: { email: string; password: string; name?: string }) => ({ error: { message: 'Auth not available' } }),
+    },
+    signOut: async () => ({ error: null }),
+  };
+}
+
+// Build the auth client — ALL requires are lazy so module-eval never throws.
 function buildAuthClient() {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { expoClient } = require('@better-auth/expo/client');
-    return createAuthClient({
-      baseURL: API_URL,
-      plugins: [
-        expoClient({
-          scheme: 'alliancearm',
-          storagePrefix: 'alliancearm',
-          storage: buildStorage(),
-        }),
-      ],
-    });
+    const { createAuthClient } = require('better-auth/react');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { expoClient } = require('@better-auth/expo/client');
+      return createAuthClient({
+        baseURL: API_URL,
+        plugins: [
+          expoClient({
+            scheme: 'alliancearm',
+            storagePrefix: 'alliancearm',
+            storage: buildStorage(),
+          }),
+        ],
+      });
+    } catch (e) {
+      console.warn('[auth.native] expoClient failed, falling back to base client:', e);
+      return createAuthClient({ baseURL: API_URL });
+    }
   } catch (e) {
-    console.warn('[auth.native] expoClient failed, falling back to base client:', e);
-    return createAuthClient({ baseURL: API_URL });
+    console.warn('[auth.native] better-auth/react failed to load, using noop client:', e);
+    return makeNoopClient();
   }
 }
 

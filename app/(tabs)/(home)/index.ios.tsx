@@ -29,7 +29,7 @@ function resolveImageSource(source: string | number | ImageSourcePropType | unde
   return source as ImageSourcePropType;
 }
 
-const LOGO = require('@/assets/images/logo.png');
+const LOGO = require('@/assets/images/0be5c379-285b-4791-9ed0-c19c441eb117.png');
 
 export default function HomeScreenIOS() {
   const router = useRouter();

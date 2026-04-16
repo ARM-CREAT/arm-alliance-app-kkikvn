@@ -26,7 +26,7 @@ export default function TabLayoutIOS() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="(home)"
         options={{
           title: 'Accueil',
           tabBarIcon: ({ color }) => (
