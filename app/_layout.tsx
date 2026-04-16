@@ -11,7 +11,14 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   useEffect(() => {
+    // Hide immediately — never wait for async data before showing the app.
+    // Belt-and-suspenders: also fire after 1s in case the first call is ignored
+    // by the OS (can happen when the app is backgrounded and resumed).
     SplashScreen.hideAsync().catch(() => {});
+    const fallback = setTimeout(() => {
+      SplashScreen.hideAsync().catch(() => {});
+    }, 1000);
+    return () => clearTimeout(fallback);
   }, []);
 
   return (

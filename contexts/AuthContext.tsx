@@ -95,10 +95,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => { isMountedRef.current = false; };
     }
 
-    // Safety net: always resolve within 5s no matter what
+    // Safety net: always resolve within 2s no matter what
     const safetyTimer = setTimeout(() => {
+      console.warn('[AuthContext] Safety timer fired — forcing loading=false after 2s');
       if (isMountedRef.current) setLoading(false);
-    }, 5000);
+    }, 2000);
 
     initAuth().finally(() => {
       clearTimeout(safetyTimer);
@@ -123,8 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const initAuth = async () => {
     try {
-      // 3s timeout — generous enough for Android cold start, tight enough to not block
-      const session = await withTimeout(authClient.getSession(), 3000);
+      // 1.5s timeout — must be shorter than the 2s safety timer above
+      const session = await withTimeout(authClient.getSession(), 1500);
       if (!isMountedRef.current) return;
       if (session?.data?.user) {
         setUser(session.data.user as User);
