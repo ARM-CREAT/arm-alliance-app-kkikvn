@@ -1,8 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
-
 export interface ProgramPoint {
   title: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   color: string;
   subpoints: { title: string; description: string }[];
 }

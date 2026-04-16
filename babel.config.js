@@ -1,5 +1,5 @@
 module.exports = function (api) {
-  api.cache(true);
+  api.cache.using(() => process.env.EXPO_PUBLIC_ENABLE_EDIT_MODE + '_' + process.env.NODE_ENV);
 
   const EDITABLE_COMPONENTS =
     process.env.EXPO_PUBLIC_ENABLE_EDIT_MODE === "TRUE" &&

@@ -1,10 +1,11 @@
 import { Tabs } from 'expo-router';
+import { Platform } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { IconSymbol } from '@/components/IconSymbol';
 
 const C = Colors.light;
 
-export default function TabLayoutIOS() {
+export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
@@ -15,9 +16,9 @@ export default function TabLayoutIOS() {
           backgroundColor: '#ffffff',
           borderTopColor: C.border,
           borderTopWidth: 1,
-          paddingBottom: 20,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
           paddingTop: 8,
-          height: 84,
+          height: Platform.OS === 'ios' ? 84 : 64,
         },
         tabBarLabelStyle: {
           fontSize: 11,

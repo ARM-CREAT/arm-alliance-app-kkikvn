@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { BACKEND_URL } from '@/utils/api-helpers';
+import { BACKEND_URL } from '@/utils/api';
 const Haptics = {
   notificationAsync: async (_type?: unknown) => {},
   NotificationFeedbackType: { Success: 'success', Error: 'error', Warning: 'warning' } as const,
