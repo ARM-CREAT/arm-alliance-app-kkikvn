@@ -89,17 +89,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     isMountedRef.current = true;
+    console.log('[AuthContext] Initializing auth state, platform:', Platform.OS);
 
     // On web: skip session check entirely — auth client is a stub
     if (Platform.OS === 'web') {
+      console.log('[AuthContext] Web platform — skipping session check');
       return () => { isMountedRef.current = false; };
     }
 
-    // Hard safety net: loading MUST become false within 1.5s no matter what
+    // Hard safety net: loading MUST become false within 5s no matter what
     const safetyTimer = setTimeout(() => {
-      console.warn('[AuthContext] Safety timer fired — forcing loading=false after 1.5s');
-      if (isMountedRef.current) setLoading(false);
-    }, 1500);
+      console.warn('[AuthContext] Hard 5s safety timer fired — forcing loading=false');
+      if (isMountedRef.current) {
+        setLoading(false);
+        setUser(null);
+      }
+    }, 5000);
 
     initAuth().finally(() => {
       clearTimeout(safetyTimer);
@@ -155,8 +160,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUser = async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
+    console.log('[AuthContext] fetchUser called');
 
     const safetyTimer = setTimeout(() => {
+      console.warn('[AuthContext] fetchUser safety timer fired — forcing loading=false');
       if (isMountedRef.current) setLoading(false);
       isFetchingRef.current = false;
     }, 3000);
@@ -231,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('[AuthContext] signOut');
     // Immediately clear local state — never block the UI on network calls
     setUser(null);
+    setLoading(false);
     try {
       await withTimeout(authClient.signOut(), 3000);
     } catch (error) {
@@ -241,6 +249,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.warn('[AuthContext] clearAuthTokens failed (non-blocking):', error);
     }
+    // Final guarantee: loading is false after sign out
+    if (isMountedRef.current) setLoading(false);
   };
 
   return (

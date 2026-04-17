@@ -6,7 +6,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
@@ -26,7 +25,7 @@ const ADMIN_PASSWORD = 'admin123';
 
 export default function AdminLoginScreen() {
   const router = useRouter();
-  const { login, isChecking } = useAdminAuth();
+  const { login } = useAdminAuth();
 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -62,14 +61,8 @@ export default function AdminLoginScreen() {
     }
   };
 
-  if (isChecking) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
-  }
-
+  // Never gate on isChecking — it starts false and the form is safe to render immediately.
+  // The AdminGuard in _layout.tsx handles redirects once the check resolves.
   const isDisabled = !password.trim();
 
   return (
@@ -145,12 +138,6 @@ export default function AdminLoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
   container: {
     flex: 1,
     backgroundColor: colors.background,

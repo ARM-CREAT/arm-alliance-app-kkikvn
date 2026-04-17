@@ -21,7 +21,7 @@ type Mode = "signin" | "signup";
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGitHub, loading: authLoading } =
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGitHub } =
     useAuth();
 
   const [mode, setMode] = useState<Mode>("signin");
@@ -42,13 +42,9 @@ export default function AuthScreen() {
     setModalVisible(true);
   };
 
-  if (authLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
+  // NOTE: Never gate the auth screen on authLoading — that causes the
+  // "Loading preview" stuck screen. The auth screen must always render.
+  // Individual button actions show their own local loading spinner instead.
 
   const handleEmailAuth = async () => {
     console.log('User tapped email auth button');
@@ -236,12 +232,6 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
     backgroundColor: colors.background,
   },
   scrollContent: {

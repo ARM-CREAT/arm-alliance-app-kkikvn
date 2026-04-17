@@ -90,7 +90,7 @@ export const getBearerToken = async (): Promise<string | null> => {
 const fetchWithTimeout = async (
   url: string,
   options?: RequestInit,
-  timeoutMs: number = 10000
+  timeoutMs: number = 5000
 ): Promise<Response> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -162,7 +162,7 @@ export const apiCall = async <T = any>(
       }
 
       // Use fetchWithTimeout instead of regular fetch
-      const response = await fetchWithTimeout(url, fetchOptions, 10000);
+      const response = await fetchWithTimeout(url, fetchOptions, 5000);
 
       if (!response.ok) {
         let errorText = '';

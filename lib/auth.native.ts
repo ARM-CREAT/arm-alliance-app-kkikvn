@@ -15,7 +15,7 @@ function getSecureStore() {
 
 async function apiFetch(path: string, options?: RequestInit) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
+  const timer = setTimeout(() => controller.abort(), 3000);
   try {
     const res = await fetch(`${API_URL}${path}`, {
       ...options,
