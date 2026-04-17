@@ -109,11 +109,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
-    if (typeof window !== 'undefined') {
-      window.location.reload();
-    } else {
-      this.setState({ hasError: false, error: null, errorInfo: null, showTrace: false });
-    }
+    this.setState({ hasError: false, error: null, errorInfo: null, showTrace: false });
   };
 
   toggleTrace = () => {
