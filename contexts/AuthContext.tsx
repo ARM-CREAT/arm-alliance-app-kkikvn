@@ -97,14 +97,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => { isMountedRef.current = false; };
     }
 
-    // Hard safety net: loading MUST become false within 5s no matter what
+    // Hard safety net: loading MUST become false within 2s no matter what
     const safetyTimer = setTimeout(() => {
-      console.warn('[AuthContext] Hard 5s safety timer fired — forcing loading=false');
+      console.warn('[AuthContext] Hard 2s safety timer fired — forcing loading=false');
       if (isMountedRef.current) {
         setLoading(false);
         setUser(null);
       }
-    }, 5000);
+    }, 2000);
 
     initAuth().finally(() => {
       clearTimeout(safetyTimer);
