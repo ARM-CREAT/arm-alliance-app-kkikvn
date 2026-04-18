@@ -240,7 +240,52 @@ const stringifyArgs = (args: any[]): string => {
   }).join(' ');
 };
 
-// Auto-reconnect logic removed for security — no automatic reload/refresh.
+// Auto-reconnect to Metro when it disconnects.
+// Only reloads if the bundle compiles successfully (not 500).
+// This prevents wiping Metro's error overlay when there's a compile error.
+let _reconnectPoll: ReturnType<typeof setInterval> | null = null;
+
+const attemptMetroReconnect = () => {
+  if (_reconnectPoll) return;
+
+  let attempts = 0;
+  const MAX_ATTEMPTS = 10;
+
+  _reconnectPoll = setInterval(async () => {
+    attempts++;
+
+    if (attempts > MAX_ATTEMPTS) {
+      clearInterval(_reconnectPoll!);
+      _reconnectPoll = null;
+      return;
+    }
+
+    try {
+      if (typeof window === 'undefined') return;
+      const origin = window.location.origin;
+
+      const bundleUrl = `${origin}/index.ts.bundle?platform=web&dev=true`;
+      const res = await fetch(bundleUrl, { method: 'HEAD' });
+
+      if (res.ok) {
+        // Bundle compiles fine — app is still running, just lost HMR.
+        // Don't reload (reloading causes white screen flashes).
+        // Metro will reconnect HMR on its own.
+        clearInterval(_reconnectPoll!);
+        _reconnectPoll = null;
+      } else if (res.status === 500) {
+        // Compile error — reload so metro.config.js error UI takes over
+        // (it has its own auto-recovery polling for when the error is fixed).
+        clearInterval(_reconnectPoll!);
+        _reconnectPoll = null;
+        window.location.reload();
+      }
+      // Other non-OK statuses (502, 503, etc.) are transient — keep polling
+    } catch {
+      // Network error — Metro is down, keep polling
+    }
+  }, 2000);
+};
 
 export const setupErrorLogging = () => {
   // Don't initialize in production builds - no need for log forwarding
@@ -282,7 +327,10 @@ export const setupErrorLogging = () => {
     const source = getCallerInfo();
     queueLog('warn', message, source);
 
-    // Note: auto-reconnect on Metro disconnect removed for security.
+    // Auto-reconnect when Metro disconnects (only reloads if bundle compiles)
+    if (message.includes('Disconnected from Metro')) {
+      attemptMetroReconnect();
+    }
   };
 
   // Override console.error to capture and send to server
@@ -329,8 +377,6 @@ export const setupErrorLogging = () => {
   }
 };
 
-// Auto-initialize logging when this module is imported
-// Only run in development mode - production apps don't need log forwarding
-if (__DEV__) {
-  setupErrorLogging();
-}
+// NOTE: Do NOT auto-initialize at module load time — that causes side effects
+// during bundling/import that can crash the app before React mounts.
+// Call setupErrorLogging() explicitly from app/_layout.tsx useEffect instead.

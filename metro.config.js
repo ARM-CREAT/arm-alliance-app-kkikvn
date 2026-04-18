@@ -108,16 +108,21 @@ config.server.enhanceMiddleware = (middleware) => {
       const originalEnd = res.end.bind(res);
       let interceptedStatus = null;
       let interceptedContentType = null;
+      let headersDeferred = false;
+      let deferredArgs = null;
 
       res.writeHead = (status, ...args) => {
         interceptedStatus = status;
-        const headers = args[0];
+        // Extract content-type from headers argument (may be string reason or object)
+        const headers = args.length > 0 && typeof args[args.length - 1] === 'object' ? args[args.length - 1] : null;
         if (headers) {
-          const ct = typeof headers === 'object' ? (headers['Content-Type'] || headers['content-type']) : null;
-          if (ct) interceptedContentType = ct;
+          const ct = headers['Content-Type'] || headers['content-type'];
+          if (ct) interceptedContentType = String(ct);
         }
-        // Don't send headers yet if this is a JSON error — we'll rewrite it
-        if (status >= 400 && interceptedContentType && interceptedContentType.includes('application/json')) {
+        // Defer sending headers if this might be a JSON error we want to rewrite
+        if (status >= 400) {
+          headersDeferred = true;
+          deferredArgs = [status, ...args];
           return res;
         }
         return originalWriteHead(status, ...args);
@@ -263,6 +268,11 @@ config.server.enhanceMiddleware = (middleware) => {
 `;
           originalWriteHead(200, { 'Content-Type': 'application/javascript; charset=UTF-8' });
           return originalEnd(errorScript, ...args);
+        }
+        // Not a JSON error — flush any deferred headers then pass through
+        if (headersDeferred && deferredArgs) {
+          originalWriteHead(...deferredArgs);
+          headersDeferred = false;
         }
         return originalEnd(body, ...args);
       };
