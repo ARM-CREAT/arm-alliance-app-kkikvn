@@ -71,6 +71,7 @@ function openOAuthPopup(provider: string): Promise<string> {
   });
 }
 
+/** Race a promise against a timeout. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -78,6 +79,24 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)
     ),
   ]);
+}
+
+/** Fire-and-forget token storage — never blocks the auth flow. */
+async function safeSetBearerToken(token: string) {
+  try {
+    await withTimeout(setBearerToken(token), 500);
+  } catch {
+    // Non-fatal — token storage failure doesn't break auth
+  }
+}
+
+/** Fire-and-forget token clear — never blocks the auth flow. */
+async function safeClearAuthTokens() {
+  try {
+    await withTimeout(clearAuthTokens(), 500);
+  } catch {
+    // Non-fatal
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -97,7 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return () => { isMountedRef.current = false; };
     }
 
-    // Hard safety net: loading MUST become false within 2s no matter what
+    // Hard safety net: loading MUST become false within 2 s no matter what.
+    // This fires even if initAuth hangs indefinitely.
     const safetyTimer = setTimeout(() => {
       console.warn('[AuthContext] Hard 2s safety timer fired — forcing loading=false');
       if (isMountedRef.current) {
@@ -119,17 +139,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const initAuth = async () => {
     try {
-      // 1s timeout — must be shorter than the 1.5s safety timer above
+      // 1 s timeout — must be shorter than the 2 s safety timer above
       const session = await withTimeout(authClient.getSession(), 1000);
       if (!isMountedRef.current) return;
       if (session?.data?.user) {
         setUser(session.data.user as User);
+        // Fire-and-forget — never await token storage in the critical path
         if (session.data.session?.token) {
-          await setBearerToken(session.data.session.token);
+          safeSetBearerToken(session.data.session.token);
         }
       } else {
         setUser(null);
-        await clearAuthTokens();
+        safeClearAuthTokens();
       }
     } catch (error) {
       console.warn('[AuthContext] initAuth failed (non-blocking):', error);
@@ -139,29 +160,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchUserSilent = async () => {
-    try {
-      const session = await withTimeout(authClient.getSession(), 5000);
-      if (!isMountedRef.current) return;
-      if (session?.data?.user) {
-        setUser(session.data.user as User);
-        if (session.data.session?.token) {
-          await setBearerToken(session.data.session.token);
-        }
-      } else {
-        setUser(null);
-        await clearAuthTokens();
-      }
-    } catch (error) {
-      console.warn('[AuthContext] Silent session refresh failed (non-blocking):', error);
-    }
-  };
-
   const fetchUser = async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     console.log('[AuthContext] fetchUser called');
 
+    // Hard safety net for fetchUser
     const safetyTimer = setTimeout(() => {
       console.warn('[AuthContext] fetchUser safety timer fired — forcing loading=false');
       if (isMountedRef.current) setLoading(false);
@@ -174,11 +178,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.data?.user) {
         setUser(session.data.user as User);
         if (session.data.session?.token) {
-          await setBearerToken(session.data.session.token);
+          safeSetBearerToken(session.data.session.token);
         }
       } else {
         setUser(null);
-        await clearAuthTokens();
+        safeClearAuthTokens();
       }
     } catch (error) {
       console.warn('[AuthContext] Failed to fetch user (non-blocking):', error);
@@ -217,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (Platform.OS === 'web') {
         const token = await openOAuthPopup(provider);
-        await setBearerToken(token);
+        await safeSetBearerToken(token);
         await fetchUser();
       } else {
         const callbackURL = Linking.createURL('/admin/dashboard');
@@ -244,11 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.warn('[AuthContext] Sign out API call failed (non-blocking):', error);
     }
-    try {
-      await withTimeout(clearAuthTokens(), 1000);
-    } catch (error) {
-      console.warn('[AuthContext] clearAuthTokens failed (non-blocking):', error);
-    }
+    safeClearAuthTokens();
     // Final guarantee: loading is false after sign out
     if (isMountedRef.current) setLoading(false);
   };

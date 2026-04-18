@@ -378,4 +378,6 @@ export const setupErrorLogging = () => {
 };
 
 // NOTE: Do NOT auto-initialize here. setupErrorLogging() is called explicitly
-// from app/_layout.tsx useEffect to avoid side effects during bundling.
+// from app/_layout.tsx inside a useEffect, after React has mounted.
+// Calling it at module load time overrides console.* before React is ready
+// and can prevent the app from rendering at all.

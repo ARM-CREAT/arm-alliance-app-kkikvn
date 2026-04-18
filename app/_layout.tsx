@@ -5,9 +5,12 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { AdminAuthProvider } from '@/contexts/AdminAuthContext';
 import { LocalizationProvider } from '@/contexts/LocalizationContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
-import { setupErrorLogging } from '@/utils/errorLogger';
+import { WidgetProvider } from '@/contexts/WidgetContext';
 
-// Hide splash screen immediately — never block rendering on it
+// ---------------------------------------------------------------------------
+// Splash screen — hide immediately and unconditionally after 3 s max.
+// Never block rendering on splash state.
+// ---------------------------------------------------------------------------
 let splashHidden = false;
 function hideSplash() {
   if (splashHidden) return;
@@ -19,24 +22,42 @@ function hideSplash() {
   } catch {}
 }
 
+// Hard fallback: hide splash after 3 s no matter what
+setTimeout(hideSplash, 3000);
+
 export default function RootLayout() {
   useEffect(() => {
     console.log('[RootLayout] App startup');
+    // Hide splash immediately on mount — do not wait for any async work
     hideSplash();
-    // Initialize error logging here (not at module load time) to avoid
-    // side effects during bundling that crash the app before React mounts.
-    try {
-      setupErrorLogging();
-    } catch {}
+
+    // Initialize error logging AFTER React has mounted so console overrides
+    // don't interfere with the initial render cycle.
+    const timer = setTimeout(() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { setupErrorLogging } = require('@/utils/errorLogger');
+        setupErrorLogging();
+      } catch (e) {
+        // Non-fatal — app still works without error logging
+        console.warn('[RootLayout] setupErrorLogging failed (non-blocking):', e);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, []);
 
+  // IMPORTANT: Never return null or a loading spinner here.
+  // Always render children immediately so the app is never stuck on a blank screen.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <LocalizationProvider>
         <AuthProvider>
           <AdminAuthProvider>
             <NotificationProvider>
-              <Stack screenOptions={{ headerShown: false }} />
+              <WidgetProvider>
+                <Stack screenOptions={{ headerShown: false }} />
+              </WidgetProvider>
             </NotificationProvider>
           </AdminAuthProvider>
         </AuthProvider>

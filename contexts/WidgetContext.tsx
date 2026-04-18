@@ -4,11 +4,17 @@ import { Platform } from "react-native";
 
 // @bacons/apple-targets is iOS-native only. Lazy-require inside a try/catch
 // so any module-resolution failure is silently swallowed on all platforms.
-const appleTargets: any = (() => {
+// IMPORTANT: Do NOT call require() at module evaluation time — it runs before
+// React mounts and can crash the bundler on web. Defer to call time instead.
+function getAppleTargets() {
   if (Platform.OS !== "ios") return null;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  try { return require("@bacons/apple-targets"); } catch { return null; }
-})();
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("@bacons/apple-targets");
+  } catch {
+    return null;
+  }
+}
 
 type WidgetContextType = {
   refreshWidget: () => void;
@@ -23,18 +29,20 @@ const WidgetContext = createContext<WidgetContextType>({
 export function WidgetProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     // Widget refresh is only supported on iOS native builds
-    if (Platform.OS !== "ios" || !appleTargets) return;
+    if (Platform.OS !== "ios") return;
     try {
-      appleTargets.ExtensionStorage.reloadWidget();
+      const appleTargets = getAppleTargets();
+      if (appleTargets) appleTargets.ExtensionStorage.reloadWidget();
     } catch {
-      // Not available in this environment
+      // Not available in this environment (Expo Go, simulator, etc.)
     }
   }, []);
 
   const refreshWidget = useCallback(() => {
-    if (Platform.OS !== "ios" || !appleTargets) return;
+    if (Platform.OS !== "ios") return;
     try {
-      appleTargets.ExtensionStorage.reloadWidget();
+      const appleTargets = getAppleTargets();
+      if (appleTargets) appleTargets.ExtensionStorage.reloadWidget();
     } catch {
       // Not available in this environment
     }

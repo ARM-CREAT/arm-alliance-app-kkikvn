@@ -108,23 +108,52 @@ config.server.enhanceMiddleware = (middleware) => {
       const originalEnd = res.end.bind(res);
       let interceptedStatus = null;
       let interceptedContentType = null;
+      // Buffer the body only when we might need to rewrite it
+      let bodyBuffer = null;
 
-      res.writeHead = (status, ...args) => {
+      // Metro calls writeHead as either:
+      //   writeHead(statusCode, headers)          — 2-arg form
+      //   writeHead(statusCode, message, headers) — 3-arg form (Node.js standard)
+      // We must handle both forms correctly.
+      res.writeHead = function(status) {
         interceptedStatus = status;
-        const headers = args[0];
-        if (headers) {
-          const ct = typeof headers === 'object' ? (headers['Content-Type'] || headers['content-type']) : null;
+
+        // Normalise arguments to extract the headers object regardless of form
+        let headersObj = null;
+        if (arguments.length === 2 && arguments[1] && typeof arguments[1] === 'object') {
+          // 2-arg: writeHead(status, headers)
+          headersObj = arguments[1];
+        } else if (arguments.length >= 3 && arguments[2] && typeof arguments[2] === 'object') {
+          // 3-arg: writeHead(status, statusMessage, headers)
+          headersObj = arguments[2];
+        }
+
+        if (headersObj) {
+          const ct = headersObj['Content-Type'] || headersObj['content-type'];
           if (ct) interceptedContentType = ct;
         }
-        // Don't send headers yet if this is a JSON error — we'll rewrite it
-        if (status >= 400 && interceptedContentType && interceptedContentType.includes('application/json')) {
+
+        // If this looks like a JSON error response, hold off sending headers —
+        // we will rewrite the body in res.end.
+        if (
+          interceptedStatus >= 400 &&
+          interceptedContentType &&
+          interceptedContentType.includes('application/json')
+        ) {
+          // Don't forward headers yet; we'll send them rewritten in res.end
           return res;
         }
-        return originalWriteHead(status, ...args);
+
+        // Pass through unchanged for all non-error responses
+        return originalWriteHead.apply(res, arguments);
       };
 
-      res.end = (body, ...args) => {
-        if (interceptedStatus >= 400 && interceptedContentType && interceptedContentType.includes('application/json')) {
+      res.end = function(body) {
+        if (
+          interceptedStatus >= 400 &&
+          interceptedContentType &&
+          interceptedContentType.includes('application/json')
+        ) {
           // Metro returned a JSON error for a bundle request.
           // Rewrite as executable JS that displays the error using safe DOM methods.
           let errorMessage = 'Build error';
@@ -262,9 +291,9 @@ config.server.enhanceMiddleware = (middleware) => {
 })();
 `;
           originalWriteHead(200, { 'Content-Type': 'application/javascript; charset=UTF-8' });
-          return originalEnd(errorScript, ...args);
+          return originalEnd(errorScript);
         }
-        return originalEnd(body, ...args);
+        return originalEnd.apply(res, arguments);
       };
     }
 

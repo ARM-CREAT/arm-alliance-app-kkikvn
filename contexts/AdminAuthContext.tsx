@@ -3,6 +3,9 @@ import AsyncStorage from '@/lib/async-storage';
 
 export const ADMIN_AUTH_KEY = 'admin_authenticated';
 
+// Max time to wait for AsyncStorage before giving up
+const STORAGE_TIMEOUT_MS = 800;
+
 interface AdminAuthContextType {
   isAdminAuthenticated: boolean;
   isChecking: boolean;
@@ -13,6 +16,14 @@ interface AdminAuthContextType {
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
 
+/** Race a promise against a timeout — returns null on timeout. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   // Always false — never block render
@@ -20,7 +31,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   const recheck = useCallback(async () => {
     try {
-      const flag = await AsyncStorage.getItem(ADMIN_AUTH_KEY);
+      const flag = await withTimeout(AsyncStorage.getItem(ADMIN_AUTH_KEY), STORAGE_TIMEOUT_MS);
       setIsAdminAuthenticated(flag === 'true');
     } catch (err) {
       console.error('[AdminAuthContext] Erreur lecture AsyncStorage:', err);
@@ -32,26 +43,30 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async () => {
     console.log('[AdminAuthContext] login');
-    await AsyncStorage.setItem(ADMIN_AUTH_KEY, 'true');
-    setIsAdminAuthenticated(true);
+    setIsAdminAuthenticated(true); // Optimistic update — don't wait for storage
+    try {
+      await withTimeout(AsyncStorage.setItem(ADMIN_AUTH_KEY, 'true'), STORAGE_TIMEOUT_MS);
+    } catch (err) {
+      console.warn('[AdminAuthContext] Failed to persist login state:', err);
+    }
   }, []);
 
   const logout = useCallback(async () => {
     console.log('[AdminAuthContext] logout');
+    setIsAdminAuthenticated(false); // Optimistic update — don't wait for storage
     try {
-      await AsyncStorage.removeItem(ADMIN_AUTH_KEY);
+      await withTimeout(AsyncStorage.removeItem(ADMIN_AUTH_KEY), STORAGE_TIMEOUT_MS);
     } catch (err) {
-      console.error('[AdminAuthContext] Erreur suppression session:', err);
-    } finally {
-      setIsAdminAuthenticated(false);
+      console.warn('[AdminAuthContext] Erreur suppression session:', err);
     }
   }, []);
 
   useEffect(() => {
-    // Hard safety net: never block on AsyncStorage for more than 500ms
+    // Hard safety net: never block on AsyncStorage for more than 800 ms
     const safetyTimer = setTimeout(() => {
+      console.warn('[AdminAuthContext] Safety timer fired — forcing isChecking=false');
       setIsChecking(false);
-    }, 500);
+    }, STORAGE_TIMEOUT_MS + 100);
 
     recheck().finally(() => clearTimeout(safetyTimer));
   }, [recheck]);

@@ -43,16 +43,16 @@ function translate(
 export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<Language>('fr');
   const [currency, setCurrencyState] = useState<Currency>('XOF');
-  // Always false — never block render
+  // Always false — never block render on loading state
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // On web: use localStorage-backed AsyncStorage (lib/async-storage.ts) — safe to call
-    // but skip I18nManager.forceRTL which is native-only
+    // Hard safety net: preferences must resolve within 800 ms.
+    // If AsyncStorage hangs, we fall back to defaults and keep the app running.
     const safetyTimer = setTimeout(() => {
-      console.warn('[Localization] Safety timer fired — forcing loading=false');
+      console.warn('[Localization] Safety timer fired — using default preferences');
       setLoading(false);
-    }, 500);
+    }, 800);
 
     const loadPreferences = async () => {
       console.log('[Localization] Loading preferences...');
@@ -75,7 +75,7 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
 
         console.log('[Localization] Preferences loaded:', { language: savedLanguage, currency: savedCurrency });
       } catch (err) {
-        console.error('[Localization] Failed to load preferences:', err);
+        console.error('[Localization] Failed to load preferences (using defaults):', err);
       } finally {
         clearTimeout(safetyTimer);
         setLoading(false);
@@ -89,8 +89,12 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
 
   const setLanguage = useCallback(async (lang: Language) => {
     console.log('[Localization] Changing language to:', lang);
-    await saveLanguagePreference(lang);
-    setLanguageState(lang);
+    setLanguageState(lang); // Update state immediately — don't wait for storage
+    try {
+      await saveLanguagePreference(lang);
+    } catch (err) {
+      console.warn('[Localization] Failed to save language preference:', err);
+    }
 
     if (Platform.OS !== 'web') {
       const shouldBeRTL = lang === 'ar';
@@ -102,8 +106,12 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
 
   const setCurrency = useCallback(async (curr: Currency) => {
     console.log('[Localization] Changing currency to:', curr);
-    await saveCurrencyPreference(curr);
-    setCurrencyState(curr);
+    setCurrencyState(curr); // Update state immediately — don't wait for storage
+    try {
+      await saveCurrencyPreference(curr);
+    } catch (err) {
+      console.warn('[Localization] Failed to save currency preference:', err);
+    }
   }, []);
 
   const t = useCallback(
