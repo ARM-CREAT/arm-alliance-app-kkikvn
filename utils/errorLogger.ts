@@ -377,6 +377,5 @@ export const setupErrorLogging = () => {
   }
 };
 
-// NOTE: Do NOT auto-initialize at module load time — that causes side effects
-// during bundling/import that can crash the app before React mounts.
-// Call setupErrorLogging() explicitly from app/_layout.tsx useEffect instead.
+// NOTE: Do NOT auto-initialize here. setupErrorLogging() is called explicitly
+// from app/_layout.tsx useEffect to avoid side effects during bundling.
