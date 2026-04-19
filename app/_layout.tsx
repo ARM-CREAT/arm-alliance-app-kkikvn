@@ -1,7 +1,9 @@
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
+import 'react-native-gesture-handler';
 import { useEffect } from 'react';
+import { Slot } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { LocalizationProvider } from '@/contexts/LocalizationContext';
 import { AdminAuthProvider } from '@/contexts/AdminAuthContext';
@@ -12,25 +14,27 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => {});
-    }, 300);
-    return () => clearTimeout(t);
+    }, 1500);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <LocalizationProvider>
-        <AuthProvider>
-          <AdminAuthProvider>
-            <NotificationProvider>
-              <WidgetProvider>
-                <Stack screenOptions={{ headerShown: false }} />
-              </WidgetProvider>
-            </NotificationProvider>
-          </AdminAuthProvider>
-        </AuthProvider>
-      </LocalizationProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <LocalizationProvider>
+          <AuthProvider>
+            <AdminAuthProvider>
+              <NotificationProvider>
+                <WidgetProvider>
+                  <Slot />
+                </WidgetProvider>
+              </NotificationProvider>
+            </AdminAuthProvider>
+          </AuthProvider>
+        </LocalizationProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

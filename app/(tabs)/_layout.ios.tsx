@@ -10,7 +10,6 @@ export default function TabLayout() {
         tabBarInactiveTintColor: '#888',
         tabBarStyle: { backgroundColor: '#fff' },
       }}
-      initialRouteName="(home)"
     >
       <Tabs.Screen
         name="(home)"
