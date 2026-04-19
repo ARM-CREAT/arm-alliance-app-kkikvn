@@ -1,104 +1,218 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
-import type { ImageSourcePropType } from 'react-native';
-
-function resolveImageSource(source: string | number | ImageSourcePropType | undefined): ImageSourcePropType {
-  if (!source) return { uri: '' };
-  if (typeof source === 'string') return { uri: source };
-  return source as ImageSourcePropType;
-}
-
-const LOGO = require('@/assets/images/c1a61b41-ad59-4c54-a7a6-e989df1049e3.jpeg');
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  const handleSettings = () => {
-    console.log('[Home] Paramètres pressed');
-    router.push('/settings' as any);
-  };
-
-  const handleProgram = () => {
-    console.log('[Home] Notre Programme pressed');
-    router.push('/program' as any);
-  };
-
-  const handleIdeologie = () => {
-    console.log('[Home] Idéologie pressed');
-    router.push('/ideology' as any);
-  };
-
-  const handleContact = () => {
-    console.log('[Home] Contact pressed');
-    router.push('/contact' as any);
-  };
-
-  const handleDon = () => {
-    console.log('[Home] Faire un Don pressed');
-    router.push('/donation' as any);
-  };
-
-  const settingsIcon = '⚙️';
+  const paddingTop = insets.top + 16;
+  const paddingBottom = insets.bottom + 80;
 
   return (
-    <View style={styles.root}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          headerTransparent: false,
-          headerStyle: { backgroundColor: '#1B7A3E' },
-          headerTintColor: '#FFFFFF',
-          title: '',
-          headerRight: () => (
-            <TouchableOpacity onPress={handleSettings} style={styles.headerBtn}>
-              <Text style={styles.headerBtnText}>{settingsIcon}</Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <Image source={resolveImageSource(LOGO)} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.title}>A.R.M</Text>
-          <Text style={styles.subtitle}>Alliance pour le Rassemblement Malien</Text>
-          <Text style={styles.motto}>Fraternité • Liberté • Égalité</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop, paddingBottom }]}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Alliance ARM</Text>
+        <Text style={styles.headerSubtitle}>Alliance pour la République du Mali</Text>
+      </View>
+
+      {/* Quick Actions */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Actions rapides</Text>
+        <View style={styles.actionsGrid}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => {
+              console.log('[HomeScreen] Adhérer pressed');
+              router.push('/member/register');
+            }}
+          >
+            <Text style={styles.actionIcon}>📋</Text>
+            <Text style={styles.actionLabel}>Adhérer</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => {
+              console.log('[HomeScreen] Soutenir pressed');
+              router.push('/donation');
+            }}
+          >
+            <Text style={styles.actionIcon}>💚</Text>
+            <Text style={styles.actionLabel}>Soutenir</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => {
+              console.log('[HomeScreen] Programme pressed');
+              router.push('/program');
+            }}
+          >
+            <Text style={styles.actionIcon}>📖</Text>
+            <Text style={styles.actionLabel}>Programme</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => {
+              console.log('[HomeScreen] Contact pressed');
+              router.push('/contact');
+            }}
+          >
+            <Text style={styles.actionIcon}>📞</Text>
+            <Text style={styles.actionLabel}>Contact</Text>
+          </TouchableOpacity>
         </View>
-        <View style={styles.actions}>
-          <TouchableOpacity style={styles.btn} onPress={handleProgram} activeOpacity={0.85}>
-            <Text style={styles.btnText}>Notre Programme</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} onPress={handleIdeologie} activeOpacity={0.85}>
-            <Text style={styles.btnText}>Idéologie</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} onPress={handleContact} activeOpacity={0.85}>
-            <Text style={styles.btnText}>Contact</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btn} onPress={handleDon} activeOpacity={0.85}>
-            <Text style={styles.btnText}>Faire un Don</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.btnSecondary} onPress={handleSettings} activeOpacity={0.85}>
-            <Text style={styles.btnSecondaryText}>⚙️  Paramètres</Text>
-          </TouchableOpacity>
+      </View>
+
+      {/* About Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Notre mission</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardText}>
+            L'Alliance pour la République du Mali (ARM) est un parti politique engagé pour la démocratie,
+            la justice sociale et le développement durable du Mali.
+          </Text>
         </View>
-      </ScrollView>
-    </View>
+      </View>
+
+      {/* Links */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>En savoir plus</Text>
+        <TouchableOpacity
+          style={styles.listItem}
+          onPress={() => {
+            console.log('[HomeScreen] Idéologie pressed');
+            router.push('/ideology');
+          }}
+        >
+          <Text style={styles.listItemText}>Notre idéologie</Text>
+          <Text style={styles.listItemArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.listItem}
+          onPress={() => {
+            console.log('[HomeScreen] Membres pressed');
+            router.push('/members-list');
+          }}
+        >
+          <Text style={styles.listItemText}>Nos membres</Text>
+          <Text style={styles.listItemArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.listItem}
+          onPress={() => {
+            console.log('[HomeScreen] Don pressed');
+            router.push('/donation');
+          }}
+        >
+          <Text style={styles.listItemText}>Faire un don</Text>
+          <Text style={styles.listItemArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
-  scroll: { flex: 1 },
-  content: { paddingBottom: 40 },
-  hero: { backgroundColor: '#1B7A3E', alignItems: 'center', paddingTop: 32, paddingBottom: 40, paddingHorizontal: 24 },
-  logo: { width: 160, height: 160, marginBottom: 20, borderRadius: 16 },
-  title: { fontSize: 40, fontWeight: 'bold', color: '#FFFFFF', letterSpacing: 3, marginBottom: 8 },
-  subtitle: { fontSize: 15, color: 'rgba(255,255,255,0.9)', textAlign: 'center', marginBottom: 12 },
-  motto: { fontSize: 14, fontWeight: '700', color: '#F5C518', fontStyle: 'italic' },
-  actions: { padding: 20, gap: 12 },
-  btn: { backgroundColor: '#1B7A3E', borderRadius: 12, padding: 16, alignItems: 'center' },
-  btnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  btnSecondary: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1.5, borderColor: '#1B7A3E' },
-  btnSecondaryText: { color: '#1B7A3E', fontSize: 16, fontWeight: '600' },
-  headerBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  headerBtnText: { fontSize: 22 },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  content: {
+    padding: 16,
+    gap: 24,
+  },
+  header: {
+    backgroundColor: '#1a3a6b',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+  },
+  section: {
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a3a6b',
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  actionCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionIcon: {
+    fontSize: 28,
+  },
+  actionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a3a6b',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardText: {
+    fontSize: 15,
+    color: '#444',
+    lineHeight: 22,
+  },
+  listItem: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  listItemText: {
+    fontSize: 15,
+    color: '#333',
+    fontWeight: '500',
+  },
+  listItemArrow: {
+    fontSize: 20,
+    color: '#999',
+  },
 });

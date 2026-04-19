@@ -1,16 +1,5 @@
-import * as React from 'react';
-import { createContext, useCallback, useContext } from 'react';
+import React, { createContext, useCallback, useContext } from 'react';
 import { Platform } from 'react-native';
-
-function getAppleTargets() {
-  if (Platform.OS !== 'ios') return null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('@bacons/apple-targets');
-  } catch {
-    return null;
-  }
-}
 
 type WidgetContextType = {
   refreshWidget: () => void;
@@ -20,25 +9,22 @@ const WidgetContext = createContext<WidgetContextType>({
   refreshWidget: () => {},
 });
 
-export function WidgetProvider({ children }: { children: React.ReactNode }) {
-  React.useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    try {
-      const appleTargets = getAppleTargets();
-      if (appleTargets) appleTargets.ExtensionStorage.reloadWidget();
-    } catch {
-      // Not available in this environment
+function tryReloadWidget() {
+  if (Platform.OS !== 'ios') return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const appleTargets = require('@bacons/apple-targets');
+    if (appleTargets && appleTargets.ExtensionStorage) {
+      appleTargets.ExtensionStorage.reloadWidget();
     }
-  }, []);
+  } catch {
+    // Not available in Expo Go — silently ignore
+  }
+}
 
+export function WidgetProvider({ children }: { children: React.ReactNode }) {
   const refreshWidget = useCallback(() => {
-    if (Platform.OS !== 'ios') return;
-    try {
-      const appleTargets = getAppleTargets();
-      if (appleTargets) appleTargets.ExtensionStorage.reloadWidget();
-    } catch {
-      // Not available in this environment
-    }
+    tryReloadWidget();
   }, []);
 
   return (
@@ -48,6 +34,6 @@ export function WidgetProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const useWidget = () => {
-  return useContext(WidgetContext);
-};
+export const useWidget = () => useContext(WidgetContext);
+
+export default WidgetContext;

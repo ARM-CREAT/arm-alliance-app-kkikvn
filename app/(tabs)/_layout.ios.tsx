@@ -1,42 +1,23 @@
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
-import { Colors } from '@/constants/Colors';
-import { IconSymbol } from '@/components/IconSymbol';
-
-const C = Colors.light;
+import { Ionicons } from '@expo/vector-icons';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: C.primary,
-        tabBarInactiveTintColor: C.tabIconDefault,
-        tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: C.border,
-          borderTopWidth: 1,
-          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-          paddingTop: 8,
-          height: Platform.OS === 'ios' ? 84 : 64,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-        },
+        tabBarActiveTintColor: '#1a3a6b',
+        tabBarInactiveTintColor: '#888',
+        tabBarStyle: { backgroundColor: '#fff' },
       }}
+      initialRouteName="(home)"
     >
       <Tabs.Screen
         name="(home)"
         options={{
           title: 'Accueil',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol
-              ios_icon_name="house.fill"
-              android_material_icon_name="home"
-              size={24}
-              color={color}
-            />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" size={size} color={color} />
           ),
         }}
       />
@@ -44,16 +25,12 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Adhésion',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol
-              ios_icon_name="person.fill"
-              android_material_icon_name="person"
-              size={24}
-              color={color}
-            />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
           ),
         }}
       />
+      <Tabs.Screen name="index" options={{ href: null }} />
     </Tabs>
   );
 }

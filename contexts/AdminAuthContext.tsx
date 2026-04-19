@@ -1,9 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import AsyncStorage from '@/lib/async-storage';
+
+// Lazy-load AsyncStorage to prevent module-level crashes
+function getStorage() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('@/lib/async-storage').default;
+  } catch {
+    return null;
+  }
+}
 
 export const ADMIN_AUTH_KEY = 'admin_authenticated';
-
-const STORAGE_TIMEOUT_MS = 800;
 
 interface AdminAuthContextType {
   isAdminAuthenticated: boolean;
@@ -13,14 +20,15 @@ interface AdminAuthContextType {
   recheck: () => Promise<void>;
 }
 
-const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
+const defaultContext: AdminAuthContextType = {
+  isAdminAuthenticated: false,
+  isChecking: false,
+  login: async () => {},
+  logout: async () => {},
+  recheck: async () => {},
+};
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([
-    promise,
-    new Promise<null>(resolve => setTimeout(() => resolve(null), ms)),
-  ]);
-}
+const AdminAuthContext = createContext<AdminAuthContextType>(defaultContext);
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
@@ -28,10 +36,18 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   const recheck = useCallback(async () => {
     try {
-      const flag = await withTimeout(AsyncStorage.getItem(ADMIN_AUTH_KEY), STORAGE_TIMEOUT_MS);
+      const storage = getStorage();
+      if (!storage) {
+        setIsAdminAuthenticated(false);
+        return;
+      }
+      const flag = await Promise.race([
+        storage.getItem(ADMIN_AUTH_KEY),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 800)),
+      ]);
       setIsAdminAuthenticated(flag === 'true');
     } catch (err) {
-      console.error('[AdminAuthContext] Erreur lecture AsyncStorage:', err);
+      console.warn('[AdminAuthContext] recheck failed:', err);
       setIsAdminAuthenticated(false);
     } finally {
       setIsChecking(false);
@@ -42,7 +58,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     console.log('[AdminAuthContext] login');
     setIsAdminAuthenticated(true);
     try {
-      await withTimeout(AsyncStorage.setItem(ADMIN_AUTH_KEY, 'true'), STORAGE_TIMEOUT_MS);
+      const storage = getStorage();
+      if (storage) {
+        await Promise.race([
+          storage.setItem(ADMIN_AUTH_KEY, 'true'),
+          new Promise<void>(resolve => setTimeout(resolve, 800)),
+        ]);
+      }
     } catch (err) {
       console.warn('[AdminAuthContext] Failed to persist login state:', err);
     }
@@ -52,9 +74,15 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     console.log('[AdminAuthContext] logout');
     setIsAdminAuthenticated(false);
     try {
-      await withTimeout(AsyncStorage.removeItem(ADMIN_AUTH_KEY), STORAGE_TIMEOUT_MS);
+      const storage = getStorage();
+      if (storage) {
+        await Promise.race([
+          storage.removeItem(ADMIN_AUTH_KEY),
+          new Promise<void>(resolve => setTimeout(resolve, 800)),
+        ]);
+      }
     } catch (err) {
-      console.warn('[AdminAuthContext] Erreur suppression session:', err);
+      console.warn('[AdminAuthContext] Failed to clear login state:', err);
     }
   }, []);
 
@@ -75,7 +103,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAdminAuth() {
-  const ctx = useContext(AdminAuthContext);
-  if (!ctx) throw new Error('useAdminAuth must be used within AdminAuthProvider');
-  return ctx;
+  return useContext(AdminAuthContext);
 }
+
+export default AdminAuthContext;
