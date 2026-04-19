@@ -542,11 +542,11 @@ export function register(app: App, fastify: FastifyInstance) {
 
 export async function seedAdhesion(app: App) {
   try {
-    // Check if we already have members
+    // Check if we already have members - only seed if table is empty
     const existing = await app.db.select({ count: count() }).from(schema.members);
     const existingCount = existing[0]?.count || 0;
 
-    if (existingCount < 3) {
+    if (existingCount === 0) {
       app.logger.info('Seeding members table');
 
       const now = new Date();
@@ -624,15 +624,15 @@ export async function seedAdhesion(app: App) {
         },
       ];
 
-      await app.db.insert(schema.members).values(seedData.slice(existingCount));
-      app.logger.info({ count: seedData.length - existingCount }, 'Members seeded');
+      await app.db.insert(schema.members).values(seedData);
+      app.logger.info({ count: seedData.length }, 'Members seeded');
     }
 
-    // Seed memberships table
+    // Seed memberships table - only seed if table is empty
     const existingMemberships = await app.db.select({ count: count() }).from(schema.memberships);
     const membershipCount = existingMemberships[0]?.count || 0;
 
-    if (membershipCount < 3) {
+    if (membershipCount === 0) {
       app.logger.info('Seeding memberships table');
 
       const now = new Date();
@@ -689,8 +689,8 @@ export async function seedAdhesion(app: App) {
         },
       ];
 
-      await app.db.insert(schema.memberships).values(membershipSeedData.slice(membershipCount));
-      app.logger.info({ count: membershipSeedData.length - membershipCount }, 'Memberships seeded');
+      await app.db.insert(schema.memberships).values(membershipSeedData);
+      app.logger.info({ count: membershipSeedData.length }, 'Memberships seeded');
     }
   } catch (error) {
     app.logger.error({ err: error }, 'Failed to seed adhesion data');
