@@ -71,7 +71,6 @@ function openOAuthPopup(provider: string): Promise<string> {
   });
 }
 
-/** Race a promise against a timeout. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -81,16 +80,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-/** Fire-and-forget token storage — never blocks the auth flow. */
 async function safeSetBearerToken(token: string) {
   try {
     await withTimeout(setBearerToken(token), 500);
   } catch {
-    // Non-fatal — token storage failure doesn't break auth
+    // Non-fatal
   }
 }
 
-/** Fire-and-forget token clear — never blocks the auth flow. */
 async function safeClearAuthTokens() {
   try {
     await withTimeout(clearAuthTokens(), 500);
@@ -101,7 +98,6 @@ async function safeClearAuthTokens() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  // Always start as false — never block render on auth state
   const [loading, setLoading] = useState(false);
   const isFetchingRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
@@ -110,14 +106,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isMountedRef.current = true;
     console.log('[AuthContext] Initializing auth state, platform:', Platform.OS);
 
-    // On web: skip session check entirely — auth client is a stub
-    if (Platform.OS === 'web') {
-      console.log('[AuthContext] Web platform — skipping session check');
-      return () => { isMountedRef.current = false; };
-    }
-
-    // Hard safety net: loading MUST become false within 2 s no matter what.
-    // This fires even if initAuth hangs indefinitely.
     const safetyTimer = setTimeout(() => {
       console.warn('[AuthContext] Hard 2s safety timer fired — forcing loading=false');
       if (isMountedRef.current) {
@@ -126,9 +114,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 2000);
 
-    initAuth().finally(() => {
+    if (Platform.OS === 'web') {
+      console.log('[AuthContext] Web platform — skipping session check');
       clearTimeout(safetyTimer);
-    });
+      return () => {
+        isMountedRef.current = false;
+      };
+    }
+
+    const initAuth = async () => {
+      try {
+        const session = await withTimeout(authClient.getSession(), 1000);
+        if (!isMountedRef.current) return;
+        if (session?.data?.user) {
+          setUser(session.data.user as User);
+          if (session.data.session?.token) {
+            safeSetBearerToken(session.data.session.token);
+          }
+        } else {
+          setUser(null);
+          safeClearAuthTokens();
+        }
+      } catch (error) {
+        console.warn('[AuthContext] initAuth failed (non-blocking):', error);
+        if (isMountedRef.current) setUser(null);
+      } finally {
+        clearTimeout(safetyTimer);
+        if (isMountedRef.current) setLoading(false);
+      }
+    };
+
+    initAuth();
 
     return () => {
       isMountedRef.current = false;
@@ -137,35 +153,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const initAuth = async () => {
-    try {
-      // 1 s timeout — must be shorter than the 2 s safety timer above
-      const session = await withTimeout(authClient.getSession(), 1000);
-      if (!isMountedRef.current) return;
-      if (session?.data?.user) {
-        setUser(session.data.user as User);
-        // Fire-and-forget — never await token storage in the critical path
-        if (session.data.session?.token) {
-          safeSetBearerToken(session.data.session.token);
-        }
-      } else {
-        setUser(null);
-        safeClearAuthTokens();
-      }
-    } catch (error) {
-      console.warn('[AuthContext] initAuth failed (non-blocking):', error);
-      if (isMountedRef.current) setUser(null);
-    } finally {
-      if (isMountedRef.current) setLoading(false);
-    }
-  };
-
   const fetchUser = async () => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     console.log('[AuthContext] fetchUser called');
 
-    // Hard safety net for fetchUser
     const safetyTimer = setTimeout(() => {
       console.warn('[AuthContext] fetchUser safety timer fired — forcing loading=false');
       if (isMountedRef.current) setLoading(false);
@@ -196,24 +188,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     console.log('[AuthContext] signInWithEmail:', email);
-    const result = await authClient.signIn.email({ email, password });
-    if (result?.error) {
-      const msg = result.error.message || result.error.code || 'Échec de la connexion';
-      console.error('[AuthContext] signIn.email error:', msg);
-      throw new Error(msg);
+    try {
+      const result = await authClient.signIn.email({ email, password });
+      if (result?.error) {
+        const msg = result.error.message || result.error.code || 'Échec de la connexion';
+        console.error('[AuthContext] signIn.email error:', msg);
+        throw new Error(msg);
+      }
+      await fetchUser();
+    } finally {
+      if (isMountedRef.current) setLoading(false);
     }
-    await fetchUser();
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
     console.log('[AuthContext] signUpWithEmail:', email);
-    const result = await authClient.signUp.email({ email, password, name });
-    if (result?.error) {
-      const msg = result.error.message || result.error.code || 'Échec de la création du compte';
-      console.error('[AuthContext] signUp.email error:', msg);
-      throw new Error(msg);
+    try {
+      const result = await authClient.signUp.email({ email, password, name });
+      if (result?.error) {
+        const msg = result.error.message || result.error.code || 'Échec de la création du compte';
+        console.error('[AuthContext] signUp.email error:', msg);
+        throw new Error(msg);
+      }
+      await fetchUser();
+    } finally {
+      if (isMountedRef.current) setLoading(false);
     }
-    await fetchUser();
   };
 
   const signInWithSocial = async (provider: 'google' | 'apple' | 'github') => {
@@ -231,6 +231,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error(`[AuthContext] ${provider} sign in failed:`, error);
       throw error;
+    } finally {
+      if (isMountedRef.current) setLoading(false);
     }
   };
 
@@ -240,17 +242,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     console.log('[AuthContext] signOut');
-    // Immediately clear local state — never block the UI on network calls
     setUser(null);
     setLoading(false);
     try {
       await withTimeout(authClient.signOut(), 3000);
     } catch (error) {
       console.warn('[AuthContext] Sign out API call failed (non-blocking):', error);
+    } finally {
+      safeClearAuthTokens();
+      if (isMountedRef.current) setLoading(false);
     }
-    safeClearAuthTokens();
-    // Final guarantee: loading is false after sign out
-    if (isMountedRef.current) setLoading(false);
   };
 
   return (

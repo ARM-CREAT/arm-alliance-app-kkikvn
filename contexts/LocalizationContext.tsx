@@ -43,16 +43,13 @@ function translate(
 export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
   const [language, setLanguageState] = useState<Language>('fr');
   const [currency, setCurrencyState] = useState<Currency>('XOF');
-  // Always false — never block render on loading state
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Hard safety net: preferences must resolve within 800 ms.
-    // If AsyncStorage hangs, we fall back to defaults and keep the app running.
-    const safetyTimer = setTimeout(() => {
+    const t = setTimeout(() => {
       console.warn('[Localization] Safety timer fired — using default preferences');
       setLoading(false);
-    }, 800);
+    }, 2000);
 
     const loadPreferences = async () => {
       console.log('[Localization] Loading preferences...');
@@ -65,7 +62,6 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
         setLanguageState(savedLanguage);
         setCurrencyState(savedCurrency);
 
-        // RTL only applies on native
         if (Platform.OS !== 'web') {
           const shouldBeRTL = savedLanguage === 'ar';
           if (I18nManager.isRTL !== shouldBeRTL) {
@@ -77,19 +73,19 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
       } catch (err) {
         console.error('[Localization] Failed to load preferences (using defaults):', err);
       } finally {
-        clearTimeout(safetyTimer);
+        clearTimeout(t);
         setLoading(false);
       }
     };
 
     loadPreferences();
 
-    return () => clearTimeout(safetyTimer);
+    return () => clearTimeout(t);
   }, []);
 
   const setLanguage = useCallback(async (lang: Language) => {
     console.log('[Localization] Changing language to:', lang);
-    setLanguageState(lang); // Update state immediately — don't wait for storage
+    setLanguageState(lang);
     try {
       await saveLanguagePreference(lang);
     } catch (err) {
@@ -106,7 +102,7 @@ export const LocalizationProvider = ({ children }: { children: ReactNode }) => {
 
   const setCurrency = useCallback(async (curr: Currency) => {
     console.log('[Localization] Changing currency to:', curr);
-    setCurrencyState(curr); // Update state immediately — don't wait for storage
+    setCurrencyState(curr);
     try {
       await saveCurrencyPreference(curr);
     } catch (err) {

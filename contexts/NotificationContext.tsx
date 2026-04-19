@@ -1,12 +1,4 @@
-/**
- * NotificationContext — default (web-safe) stub.
- *
- * The real OneSignal implementation lives in NotificationContext.native.tsx,
- * which Metro loads on iOS/Android. This file is the fallback for web where
- * react-native-onesignal would crash at import time.
- */
-
-import React, { createContext, useContext, ReactNode } from "react";
+import React, { createContext, useContext } from 'react';
 
 interface NotificationContextType {
   hasPermission: boolean;
@@ -19,7 +11,7 @@ interface NotificationContextType {
   lastNotification: Record<string, unknown> | null;
 }
 
-const NotificationContext = createContext<NotificationContextType>({
+const defaultValue: NotificationContextType = {
   hasPermission: false,
   permissionDenied: false,
   loading: false,
@@ -28,29 +20,24 @@ const NotificationContext = createContext<NotificationContextType>({
   sendTag: () => {},
   deleteTag: () => {},
   lastNotification: null,
-});
+};
 
-export function NotificationProvider({ children }: { children: ReactNode }) {
-  return (
-    <NotificationContext.Provider
-      value={{
-        hasPermission: false,
-        permissionDenied: false,
-        loading: false,
-        isWeb: true,
-        requestPermission: async () => false,
-        sendTag: () => {},
-        deleteTag: () => {},
-        lastNotification: null,
-      }}
-    >
-      {children}
-    </NotificationContext.Provider>
-  );
+const NotificationContext = createContext<NotificationContextType>(defaultValue);
+
+export function useNotification() {
+  return useContext(NotificationContext);
 }
 
 export function useNotifications() {
   return useContext(NotificationContext);
+}
+
+export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <NotificationContext.Provider value={defaultValue}>
+      {children}
+    </NotificationContext.Provider>
+  );
 }
 
 export default NotificationContext;

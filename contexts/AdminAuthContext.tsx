@@ -3,7 +3,6 @@ import AsyncStorage from '@/lib/async-storage';
 
 export const ADMIN_AUTH_KEY = 'admin_authenticated';
 
-// Max time to wait for AsyncStorage before giving up
 const STORAGE_TIMEOUT_MS = 800;
 
 interface AdminAuthContextType {
@@ -16,7 +15,6 @@ interface AdminAuthContextType {
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined);
 
-/** Race a promise against a timeout — returns null on timeout. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
     promise,
@@ -26,7 +24,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  // Always false — never block render
   const [isChecking, setIsChecking] = useState(false);
 
   const recheck = useCallback(async () => {
@@ -43,7 +40,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async () => {
     console.log('[AdminAuthContext] login');
-    setIsAdminAuthenticated(true); // Optimistic update — don't wait for storage
+    setIsAdminAuthenticated(true);
     try {
       await withTimeout(AsyncStorage.setItem(ADMIN_AUTH_KEY, 'true'), STORAGE_TIMEOUT_MS);
     } catch (err) {
@@ -53,7 +50,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     console.log('[AdminAuthContext] logout');
-    setIsAdminAuthenticated(false); // Optimistic update — don't wait for storage
+    setIsAdminAuthenticated(false);
     try {
       await withTimeout(AsyncStorage.removeItem(ADMIN_AUTH_KEY), STORAGE_TIMEOUT_MS);
     } catch (err) {
@@ -62,11 +59,10 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Hard safety net: never block on AsyncStorage for more than 800 ms
     const safetyTimer = setTimeout(() => {
       console.warn('[AdminAuthContext] Safety timer fired — forcing isChecking=false');
       setIsChecking(false);
-    }, STORAGE_TIMEOUT_MS + 100);
+    }, 2000);
 
     recheck().finally(() => clearTimeout(safetyTimer));
   }, [recheck]);
