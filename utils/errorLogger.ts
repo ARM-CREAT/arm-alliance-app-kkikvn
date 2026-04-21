@@ -377,5 +377,8 @@ export const setupErrorLogging = () => {
   }
 };
 
-// NOTE: Auto-initialization removed — call setupErrorLogging() explicitly
-// to avoid module-level side effects that can crash the app on import.
+// Auto-initialize logging when this module is imported
+// Only run in development mode - production apps don't need log forwarding
+if (__DEV__) {
+  setupErrorLogging();
+}
