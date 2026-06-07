@@ -7,7 +7,9 @@ import {
   decimal,
   jsonb,
   boolean,
+  index,
 } from 'drizzle-orm/pg-core';
+import { desc } from 'drizzle-orm';
 
 // Members table - Member registry with sequential member numbers
 export const members = pgTable('members', {
@@ -541,3 +543,17 @@ export const inboxMessages = pgTable('inbox_messages', {
   isRead: boolean('is_read').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Per-user notifications table
+export const userNotifications = pgTable('user_notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  category: text('category').notNull(), // 'announcements', 'news', 'events', 'political-messages'
+  data: jsonb('data').notNull().default({}),
+  readAt: timestamp('read_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  userIdCreatedAtIdx: index('user_id_created_at_idx').on(table.userId, desc(table.createdAt)),
+}));

@@ -50,6 +50,7 @@ import * as armMessagesRoutes from './routes/armMessages.js';
 import * as membersAndMessagesRoutes from './routes/membersAndMessages.js';
 import * as cotisationsRoutes from './routes/cotisations.js';
 import * as adhesionRoutes from './routes/adhesion.js';
+import * as userNotificationsRoutes from './routes/userNotifications.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -171,6 +172,7 @@ armMessagesRoutes.register(app, app.fastify);
 membersAndMessagesRoutes.register(app, app.fastify);
 cotisationsRoutes.register(app, app.fastify);
 adhesionRoutes.register(app, app.fastify);
+userNotificationsRoutes.register(app, app.fastify);
 
 // Seed data
 await adminAuthRoutes.seedAdminUser(app);
