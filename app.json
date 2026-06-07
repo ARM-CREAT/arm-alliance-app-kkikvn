@@ -4,13 +4,13 @@
     "slug": "alliance-arm",
     "version": "1.0.38",
     "orientation": "portrait",
-    "icon": "./assets/images/SAVE_20251219_163224.jpg",
+    "icon": "./assets/images/f017b698-5f03-4bb9-bbf0-a9094cbe948a.jpeg",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/images/SAVE_20251219_163224.jpg",
+      "image": "./assets/images/f017b698-5f03-4bb9-bbf0-a9094cbe948a.jpeg",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#1B7A3E"
     },
     "ios": {
       "supportsTablet": true,
@@ -21,8 +21,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/SAVE_20251219_163224.jpg",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/images/f017b698-5f03-4bb9-bbf0-a9094cbe948a.jpeg",
+        "backgroundColor": "#F5C518"
       },
       "package": "com.armmali.app",
       "versionCode": 39
