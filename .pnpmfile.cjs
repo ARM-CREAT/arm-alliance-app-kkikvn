@@ -26,7 +26,6 @@ function readPackage(pkg) {
     'react-native-webview',
     'react-native-css-interop',
     'react-native-url-polyfill',
-    '@react-native-async-storage/async-storage',
   ];
 
   if (pkg.name === 'arm-alliance-app-kkikvn') {
