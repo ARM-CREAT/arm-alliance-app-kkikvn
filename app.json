@@ -4,7 +4,7 @@
     "slug": "alliance-arm",
     "version": "1.0.39",
     "orientation": "portrait",
-    "icon": "./assets/images/f017b698-5f03-4bb9-bbf0-a9094cbe948a.jpeg",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
