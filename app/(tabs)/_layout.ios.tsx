@@ -1,33 +1,47 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '@/styles/commonStyles';
+
+const ARM_GREEN = '#1B7A3E';
+const ARM_YELLOW = '#F5C518';
+const GREY = '#9CA3AF';
+const WHITE = '#FFFFFF';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarActiveTintColor: ARM_GREEN,
+        tabBarInactiveTintColor: GREY,
         tabBarStyle: {
-          backgroundColor: colors.surface,
+          backgroundColor: WHITE,
           borderTopWidth: 3,
-          borderTopColor: colors.secondary,
+          borderTopColor: ARM_YELLOW,
         },
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="(home)"
         options={{
           title: 'Accueil',
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Adhésion',
-          tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" size={size} color={color} />,
+          title: 'Profil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-circle-outline" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>

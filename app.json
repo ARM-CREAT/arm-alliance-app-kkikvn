@@ -1,14 +1,14 @@
 {
   "expo": {
     "name": "Alliance ARM",
-    "slug": "arm-alliance-app-kkikvn",
+    "slug": "alliance-arm",
     "version": "1.0.43",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/images/f017b698-5f03-4bb9-bbf0-a9094cbe948a.jpeg",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#1B7A3E"
     },
@@ -21,7 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/f017b698-5f03-4bb9-bbf0-a9094cbe948a.jpeg",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#F5C518"
       },
       "package": "com.armmali.app",

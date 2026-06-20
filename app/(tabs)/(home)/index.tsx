@@ -1,396 +1,542 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect } from 'react';
 import {
-  StyleSheet,
   View,
   Text,
+  StyleSheet,
   ScrollView,
-  Pressable,
-  Animated,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
   Dimensions,
-} from "react-native";
-import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import { IconSymbol } from "@/components/IconSymbol";
-import { colors } from "@/styles/commonStyles";
-import { useAdminAuth } from "@/contexts/AdminAuthContext";
+  ImageSourcePropType,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useRealtimeApi } from '@/hooks/useRealtimeApi';
 
-const logoSource = require("@/assets/images/f017b698-5f03-4bb9-bbf0-a9094cbe948a.jpeg");
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+// ─── Constants ────────────────────────────────────────────────────────────────
+const ARM_GREEN = '#1B7A3E';
+const ARM_GREEN_DARK = '#0D5C2E';
+const ARM_YELLOW = '#F5C518';
+const ARM_BLACK = '#0D0D0D';
+const ARM_WHITE = '#FFFFFF';
+const ARM_RED = '#DC2626';
+const ARM_BLUE = '#2563EB';
+const GREY = '#9CA3AF';
+const BG = '#F7FAF8';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 16 * 2 - 12) / 2;
 
-// ─── Animated card wrapper ───────────────────────────────────────────────────
-function FadeCard({
-  index,
-  children,
-  style,
+// ─── Image helper ─────────────────────────────────────────────────────────────
+function resolveImageSource(
+  source: string | number | ImageSourcePropType | undefined
+): ImageSourcePropType {
+  if (!source) return { uri: '' };
+  if (typeof source === 'string') return { uri: source };
+  return source as ImageSourcePropType;
+}
+
+const logoSource = require('@/assets/images/15eeca6b-b1c8-4619-80b4-a98acd035b28.jpeg');
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface NewsItem {
+  id: string | number;
+  title: string;
+  created_at?: string;
+  date?: string;
+  category?: string;
+}
+
+interface EventItem {
+  id: string | number;
+  title: string;
+  date?: string;
+  start_date?: string;
+  location?: string;
+  lieu?: string;
+}
+
+interface PollItem {
+  id: string | number;
+  question?: string;
+  title?: string;
+  total_votes?: number;
+  options?: { text?: string; label?: string; votes?: number; count?: number }[];
+}
+
+interface NewsResponse {
+  news?: NewsItem[];
+  data?: NewsItem[];
+  items?: NewsItem[];
+}
+
+interface EventsResponse {
+  events?: EventItem[];
+  data?: EventItem[];
+  items?: EventItem[];
+}
+
+interface PollsResponse {
+  polls?: PollItem[];
+  data?: PollItem[];
+  items?: PollItem[];
+}
+
+// ─── Section header ───────────────────────────────────────────────────────────
+function SectionHeader({
+  title,
+  linkLabel,
+  onLink,
 }: {
-  index: number;
-  children: React.ReactNode;
-  style?: object;
+  title: string;
+  linkLabel?: string;
+  onLink?: () => void;
 }) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(16)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 300,
-        delay: index * 50,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 300,
-        delay: index * 50,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [index, opacity, translateY]);
-
   return (
-    <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>
-      {children}
-    </Animated.View>
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {linkLabel && onLink ? (
+        <TouchableOpacity onPress={onLink} activeOpacity={0.7}>
+          <Text style={styles.sectionLink}>{linkLabel}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
   );
 }
 
-// ─── Section title ────────────────────────────────────────────────────────────
-function SectionTitle({ title }: { title: string }) {
-  return <Text style={styles.sectionTitle}>{title}</Text>;
-}
-
-// ─── Grid card (icon + label) ─────────────────────────────────────────────────
-function GridCard({
+// ─── Quick action card ────────────────────────────────────────────────────────
+function QuickCard({
   icon,
-  iconColor,
   label,
-  description,
+  borderColor,
   onPress,
-  index,
 }: {
-  icon: React.ComponentProps<typeof IconSymbol>["android_material_icon_name"];
-  iconColor: string;
+  icon: string;
   label: string;
-  description?: string;
+  borderColor: string;
   onPress: () => void;
-  index: number;
 }) {
-  const iconBg = iconColor + "22";
   return (
-    <FadeCard index={index} style={{ width: CARD_WIDTH }}>
-      <Pressable
-        style={({ pressed }) => [styles.gridCard, pressed && styles.pressed]}
-        onPress={onPress}
-      >
-        <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-          <IconSymbol
-            android_material_icon_name={icon}
-            size={22}
-            color={iconColor}
-          />
-        </View>
-        {description ? (
-          <Text style={styles.gridCardDesc}>{description}</Text>
-        ) : null}
-        <Text style={styles.gridCardLabel}>{label}</Text>
-      </Pressable>
-    </FadeCard>
+    <TouchableOpacity
+      style={[styles.quickCard, { borderLeftColor: borderColor }]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={styles.quickCardIcon}>{icon}</Text>
+      <Text style={styles.quickCardLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
-// ─── List row ─────────────────────────────────────────────────────────────────
-function ListRow({
+// ─── More grid item ───────────────────────────────────────────────────────────
+function MoreItem({
   icon,
-  iconColor,
   label,
-  description,
   onPress,
-  isLast,
-  index,
 }: {
-  icon: React.ComponentProps<typeof IconSymbol>["android_material_icon_name"];
-  iconColor: string;
+  icon: string;
   label: string;
-  description?: string;
   onPress: () => void;
-  isLast?: boolean;
-  index: number;
 }) {
-  const iconBg = iconColor + "22";
   return (
-    <FadeCard index={index}>
-      <Pressable
-        style={({ pressed }) => [
-          styles.listRow,
-          !isLast && styles.listRowBorder,
-          pressed && styles.pressed,
-        ]}
-        onPress={onPress}
-      >
-        <View style={[styles.iconCircle, { backgroundColor: iconBg }]}>
-          <IconSymbol
-            android_material_icon_name={icon}
-            size={20}
-            color={iconColor}
-          />
-        </View>
-        <View style={styles.listRowContent}>
-          <Text style={styles.listRowLabel}>{label}</Text>
-          {description ? (
-            <Text style={styles.listRowDesc}>{description}</Text>
-          ) : null}
-        </View>
-        <Text style={styles.chevron}>›</Text>
-      </Pressable>
-    </FadeCard>
+    <TouchableOpacity style={styles.moreItem} onPress={onPress} activeOpacity={0.8}>
+      <Text style={styles.moreItemIcon}>{icon}</Text>
+      <Text style={styles.moreItemLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const router = useRouter();
-  const { isAdminAuthenticated } = useAdminAuth();
 
   function nav(route: string) {
-    console.log("[Home] Navigating to:", route);
+    console.log('[HomeScreen] Navigating to:', route);
     router.push(route as never);
   }
 
-  // Quick access items
-  const quickItems: {
-    icon: React.ComponentProps<typeof IconSymbol>["android_material_icon_name"];
-    iconColor: string;
-    label: string;
-    route: string;
-  }[] = [
-    { icon: "favorite", iconColor: "#DC2626", label: "Faire un don", route: "/donation" },
-    { icon: "credit-card", iconColor: colors.primary, label: "Cotisations", route: "/member/cotisation" },
-    { icon: "notifications", iconColor: colors.secondary, label: "Notifications", route: "/notification-preferences" },
-    { icon: "qr-code", iconColor: colors.info, label: "Ma carte", route: "/member/card" },
-  ];
+  // ── API calls ──
+  const {
+    data: newsRaw,
+    loading: newsLoading,
+    error: newsError,
+  } = useRealtimeApi<NewsResponse | NewsItem[]>('/api/news?limit=3', { intervalSeconds: 30 });
 
-  // AI items
-  const aiItems: {
-    icon: React.ComponentProps<typeof IconSymbol>["android_material_icon_name"];
-    iconColor: string;
-    label: string;
-    description: string;
-    route: string;
-  }[] = [
-    {
-      icon: "chat",
-      iconColor: colors.aiAccent,
-      label: "Assistant IA",
-      description: "Posez vos questions sur le programme",
-      route: "/chat-ia",
-    },
-    {
-      icon: "mic",
-      iconColor: "#9333EA",
-      label: "Voix IA",
-      description: "Parlez à l'application",
-      route: "/voice-assistant",
-    },
-  ];
+  const {
+    data: eventsRaw,
+    loading: eventsLoading,
+    error: eventsError,
+  } = useRealtimeApi<EventsResponse | EventItem[]>('/api/events?limit=2&upcoming=true', {
+    intervalSeconds: 60,
+  });
 
-  // News & events items
-  const newsItems: {
-    icon: React.ComponentProps<typeof IconSymbol>["android_material_icon_name"];
-    iconColor: string;
-    label: string;
-    route: string;
-  }[] = [
-    { icon: "article", iconColor: colors.primary, label: "Actualités", route: "/news" },
-    { icon: "campaign", iconColor: colors.secondary, label: "Annonces", route: "/announcements" },
-    { icon: "event", iconColor: colors.info, label: "Événements", route: "/events" },
-    { icon: "forum", iconColor: "#065F46", label: "Messages politiques", route: "/political-messages" },
-  ];
+  const {
+    data: pollsRaw,
+    loading: pollsLoading,
+    error: pollsError,
+  } = useRealtimeApi<PollsResponse | PollItem[]>('/api/polls?status=active&limit=1', {
+    intervalSeconds: 15,
+  });
 
-  // Party items
-  const partyItems: {
-    icon: React.ComponentProps<typeof IconSymbol>["android_material_icon_name"];
-    iconColor: string;
-    label: string;
-    description: string;
-    route: string;
-    adminOnly?: boolean;
-  }[] = [
-    { icon: "description", iconColor: colors.primary, label: "Notre programme", description: "Découvrez notre vision", route: "/program" },
-    { icon: "menu-book", iconColor: colors.secondary, label: "Notre idéologie", description: "Nos valeurs fondatrices", route: "/ideology" },
-    { icon: "groups", iconColor: colors.primary, label: "Direction du parti", description: "Les responsables nationaux", route: "/admin/leadership", adminOnly: true },
-    { icon: "people", iconColor: colors.secondary, label: "Liste des membres", description: "Annuaire des adhérents", route: "/members-list" },
-  ];
+  // ── Normalise API responses ──
+  function extractArray<T>(raw: any, keys: string[]): T[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw as T[];
+    for (const k of keys) {
+      if (Array.isArray(raw[k])) return raw[k] as T[];
+    }
+    return [];
+  }
 
-  const visiblePartyItems = partyItems.filter(
-    (item) => !item.adminOnly || isAdminAuthenticated
-  );
+  const newsList = extractArray<NewsItem>(newsRaw, ['news', 'data', 'items']);
+  const eventsList = extractArray<EventItem>(eventsRaw, ['events', 'data', 'items']);
+  const pollsList = extractArray<PollItem>(pollsRaw, ['polls', 'data', 'items']);
+  const activePoll = pollsList.length > 0 ? pollsList[0] : null;
+
+  // ── Poll progress ──
+  const pollTitle = activePoll ? (activePoll.question || activePoll.title || '') : '';
+  const pollOptions = activePoll?.options || [];
+  const pollTotal = activePoll?.total_votes || pollOptions.reduce((s, o) => s + (o.votes || o.count || 0), 0) || 0;
+
+  // ── News date formatter ──
+  function formatDate(raw?: string): string {
+    if (!raw) return '';
+    try {
+      return new Date(raw).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return raw;
+    }
+  }
+
+  // ── Event date badge ──
+  function eventDateBadge(item: EventItem): string {
+    const d = item.start_date || item.date || '';
+    if (!d) return '—';
+    try {
+      const dt = new Date(d);
+      const day = dt.getDate().toString().padStart(2, '0');
+      const month = dt.toLocaleDateString('fr-FR', { month: 'short' }).toUpperCase();
+      return `${day}\n${month}`;
+    } catch {
+      return d;
+    }
+  }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* ── Hero ── */}
-      <View style={styles.hero}>
-        <Image source={logoSource} style={styles.logo} contentFit="cover" />
-        <Text style={styles.title}>Alliance ARM</Text>
-        <Text style={styles.subtitle}>Fraternité · Liberté · Égalité</Text>
-      </View>
-
-      {/* ── Section 1 — CTA Adhérer ── */}
-      <FadeCard index={0} style={styles.ctaWrapper}>
-        <Pressable
-          style={({ pressed }) => [styles.ctaCard, pressed && styles.pressed]}
-          onPress={() => nav("/member/register")}
-        >
-          <View style={styles.ctaTextBlock}>
-            <Text style={styles.ctaTitle}>Rejoignez l'Alliance</Text>
-            <Text style={styles.ctaSubtitle}>Devenez membre dès aujourd'hui</Text>
-          </View>
-          <Text style={styles.ctaChevron}>›</Text>
-        </Pressable>
-      </FadeCard>
-
-      {/* ── Section 2 — Accès rapides ── */}
-      <SectionTitle title="Accès rapides" />
-      <View style={styles.grid}>
-        {quickItems.map((item, i) => (
-          <GridCard
-            key={item.route}
-            icon={item.icon}
-            iconColor={item.iconColor}
-            label={item.label}
-            onPress={() => nav(item.route)}
-            index={i + 1}
-          />
-        ))}
-      </View>
-
-      {/* ── Section 3 — Intelligence Artificielle ── */}
-      <SectionTitle title="Intelligence Artificielle" />
-      <View style={styles.grid}>
-        {aiItems.map((item, i) => (
-          <GridCard
-            key={item.route}
-            icon={item.icon}
-            iconColor={item.iconColor}
-            label={item.label}
-            description={item.description}
-            onPress={() => nav(item.route)}
-            index={i + 5}
-          />
-        ))}
-      </View>
-
-      {/* ── Section 4 — Démocratie interne ── */}
-      <SectionTitle title="Démocratie interne" />
-      <FadeCard index={7} style={styles.horizontalCardWrapper}>
-        <Pressable
-          style={({ pressed }) => [styles.horizontalCard, pressed && styles.pressed]}
-          onPress={() => nav("/polls")}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: colors.primary + "22" }]}>
-            <IconSymbol
-              android_material_icon_name="bar-chart"
-              size={22}
-              color={colors.primary}
-            />
-          </View>
-          <View style={styles.horizontalCardText}>
-            <Text style={styles.horizontalCardTitle}>Sondages et votes</Text>
-            <Text style={styles.horizontalCardDesc}>
-              Participez aux consultations des membres
-            </Text>
-          </View>
-          <Text style={styles.chevron}>›</Text>
-        </Pressable>
-      </FadeCard>
-
-      {/* ── Section 5 — Actualités & événements ── */}
-      <SectionTitle title="Actualités & événements" />
-      <View style={styles.grid}>
-        {newsItems.map((item, i) => (
-          <GridCard
-            key={item.route}
-            icon={item.icon}
-            iconColor={item.iconColor}
-            label={item.label}
-            onPress={() => nav(item.route)}
-            index={i + 8}
-          />
-        ))}
-      </View>
-
-      {/* ── Section 6 — Le parti ── */}
-      <SectionTitle title="Le parti" />
-      <View style={styles.listCard}>
-        {visiblePartyItems.map((item, i) => (
-          <ListRow
-            key={item.route}
-            icon={item.icon}
-            iconColor={item.iconColor}
-            label={item.label}
-            description={item.description}
-            onPress={() => nav(item.route)}
-            isLast={i === visiblePartyItems.length - 1}
-            index={i + 12}
-          />
-        ))}
-      </View>
-
-      {/* ── Section 7 — Aide & contact ── */}
-      <SectionTitle title="Aide & contact" />
-      <View style={styles.grid}>
-        <FadeCard index={16} style={{ width: CARD_WIDTH }}>
-          <Pressable
-            style={({ pressed }) => [styles.gridCard, pressed && styles.pressed]}
-            onPress={() => nav("/contact")}
-          >
-            <View style={[styles.iconCircle, { backgroundColor: colors.primary + "22" }]}>
-              <IconSymbol
-                android_material_icon_name="email"
-                size={22}
-                color={colors.primary}
-              />
-            </View>
-            <Text style={styles.gridCardLabel}>Nous contacter</Text>
-          </Pressable>
-        </FadeCard>
-        <FadeCard index={17} style={{ width: CARD_WIDTH }}>
-          <Pressable
-            style={({ pressed }) => [styles.gridCard, pressed && styles.pressed]}
-            onPress={() => nav("/settings")}
-          >
-            <View style={[styles.iconCircle, { backgroundColor: "#6B728022" }]}>
-              <IconSymbol
-                android_material_icon_name="settings"
-                size={22}
-                color="#6B7280"
-              />
-            </View>
-            <Text style={styles.gridCardLabel}>Paramètres</Text>
-          </Pressable>
-        </FadeCard>
-      </View>
-
-      {/* ── Section 8 — Lien admin discret ── */}
-      <Pressable
-        onPress={() => nav("/admin/login")}
-        style={({ pressed }) => [styles.adminLink, pressed && { opacity: 0.5 }]}
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.adminLinkText}>Espace administrateur</Text>
-      </Pressable>
-    </ScrollView>
+        {/* ── Hero ── */}
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <Image
+              source={resolveImageSource(logoSource)}
+              style={styles.heroLogo}
+              resizeMode="cover"
+            />
+            <Text style={styles.heroTitle}>A.R.M</Text>
+            <Text style={styles.heroSubtitle}>Fraternité · Liberté · Égalité</Text>
+          </View>
+          <View style={styles.heroBanner}>
+            <Text style={styles.heroBannerText}>Alliance pour le Rassemblement Malien</Text>
+          </View>
+        </View>
+
+        {/* ── Stats bar ── */}
+        <View style={styles.statsBar}>
+          <View style={styles.statItem}>
+            <Text style={styles.statFlag}>🇲🇱</Text>
+            <Text style={styles.statValue}>Mali</Text>
+            <Text style={styles.statLabel}>Pays</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statFlag}>👥</Text>
+            <Text style={styles.statValue}>Membres</Text>
+            <Text style={styles.statLabel}>Adhérents</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statFlag}>🌍</Text>
+            <Text style={styles.statValue}>Diaspora</Text>
+            <Text style={styles.statLabel}>Monde</Text>
+          </View>
+        </View>
+
+        {/* ── Actions rapides ── */}
+        <SectionHeader title="⚡ Actions rapides" />
+        <View style={styles.quickGrid}>
+          <QuickCard
+            icon="📋"
+            label="Adhérer"
+            borderColor={ARM_GREEN}
+            onPress={() => {
+              console.log('[HomeScreen] Action rapide: Adhérer');
+              nav('/member/register');
+            }}
+          />
+          <QuickCard
+            icon="💰"
+            label="Contribuer"
+            borderColor={ARM_RED}
+            onPress={() => {
+              console.log('[HomeScreen] Action rapide: Contribuer');
+              nav('/donation');
+            }}
+          />
+          <QuickCard
+            icon="🗳️"
+            label="Sondages"
+            borderColor={ARM_YELLOW}
+            onPress={() => {
+              console.log('[HomeScreen] Action rapide: Sondages');
+              nav('/polls');
+            }}
+          />
+          <QuickCard
+            icon="💬"
+            label="Chat IA"
+            borderColor={ARM_BLUE}
+            onPress={() => {
+              console.log('[HomeScreen] Action rapide: Chat IA');
+              nav('/chat-ia');
+            }}
+          />
+        </View>
+
+        {/* ── Actualités ── */}
+        <SectionHeader
+          title="📰 Actualités"
+          linkLabel="Voir tout"
+          onLink={() => {
+            console.log('[HomeScreen] Voir tout actualités');
+            nav('/news');
+          }}
+        />
+        {newsLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={ARM_GREEN} />
+          </View>
+        ) : newsError ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>Impossible de charger les actualités</Text>
+          </View>
+        ) : newsList.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>Aucune actualité pour le moment</Text>
+          </View>
+        ) : (
+          <View style={styles.newsContainer}>
+            {newsList.map((item) => {
+              const newsDate = formatDate(item.created_at || item.date);
+              const newsCategory = item.category || 'Actualité';
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.newsCard}
+                  onPress={() => {
+                    console.log('[HomeScreen] Actualité pressed:', item.id, item.title);
+                    nav('/news');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.newsCardContent}>
+                    <View style={styles.newsCardMeta}>
+                      <View style={styles.newsCategoryBadge}>
+                        <Text style={styles.newsCategoryText}>{newsCategory}</Text>
+                      </View>
+                      <Text style={styles.newsDate}>{newsDate}</Text>
+                    </View>
+                    <Text style={styles.newsTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                  </View>
+                  <Text style={styles.newsChevron}>›</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* ── Événements ── */}
+        <SectionHeader
+          title="📅 Événements"
+          linkLabel="Voir tout"
+          onLink={() => {
+            console.log('[HomeScreen] Voir tout événements');
+            nav('/events');
+          }}
+        />
+        {eventsLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={ARM_GREEN} />
+          </View>
+        ) : eventsError ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>Impossible de charger les événements</Text>
+          </View>
+        ) : eventsList.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>Aucun événement à venir</Text>
+          </View>
+        ) : (
+          <View style={styles.eventsContainer}>
+            {eventsList.map((item) => {
+              const dateBadge = eventDateBadge(item);
+              const eventLocation = item.location || item.lieu || '';
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.eventCard}
+                  onPress={() => {
+                    console.log('[HomeScreen] Événement pressed:', item.id, item.title);
+                    nav('/events');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.eventDateBadge}>
+                    <Text style={styles.eventDateText}>{dateBadge}</Text>
+                  </View>
+                  <View style={styles.eventInfo}>
+                    <Text style={styles.eventTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    {eventLocation ? (
+                      <Text style={styles.eventLocation} numberOfLines={1}>
+                        📍 {eventLocation}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.newsChevron}>›</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* ── Sondage du moment ── */}
+        <SectionHeader title="🗳️ Sondage du moment" />
+        {pollsLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={ARM_GREEN} />
+          </View>
+        ) : pollsError ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>Impossible de charger le sondage</Text>
+          </View>
+        ) : !activePoll ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>Aucun sondage actif pour le moment</Text>
+          </View>
+        ) : (
+          <View style={styles.pollCard}>
+            <Text style={styles.pollQuestion}>{pollTitle}</Text>
+            {pollOptions.slice(0, 3).map((opt, idx) => {
+              const optLabel = opt.text || opt.label || `Option ${idx + 1}`;
+              const optVotes = opt.votes || opt.count || 0;
+              const pct = pollTotal > 0 ? Math.round((optVotes / pollTotal) * 100) : 0;
+              const pctLabel = `${pct}%`;
+              const pctWidth = `${pct}%` as `${number}%`;
+              return (
+                <View key={idx} style={styles.pollOption}>
+                  <View style={styles.pollOptionHeader}>
+                    <Text style={styles.pollOptionLabel}>{optLabel}</Text>
+                    <Text style={styles.pollOptionPct}>{pctLabel}</Text>
+                  </View>
+                  <View style={styles.pollBar}>
+                    <View style={[styles.pollBarFill, { width: pctWidth }]} />
+                  </View>
+                </View>
+              );
+            })}
+            <TouchableOpacity
+              style={styles.pollVoteBtn}
+              onPress={() => {
+                console.log('[HomeScreen] Voter maintenant pressed, poll:', activePoll.id);
+                nav('/polls');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.pollVoteBtnText}>Voter maintenant</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Plus ── */}
+        <SectionHeader title="🔗 Plus" />
+        <View style={styles.moreGrid}>
+          <MoreItem
+            icon="📢"
+            label="Annonces"
+            onPress={() => {
+              console.log('[HomeScreen] Plus: Annonces');
+              nav('/announcements');
+            }}
+          />
+          <MoreItem
+            icon="💬"
+            label="Messages"
+            onPress={() => {
+              console.log('[HomeScreen] Plus: Messages politiques');
+              nav('/political-messages');
+            }}
+          />
+          <MoreItem
+            icon="🌟"
+            label="Idéologie"
+            onPress={() => {
+              console.log('[HomeScreen] Plus: Idéologie');
+              nav('/ideology');
+            }}
+          />
+          <MoreItem
+            icon="📞"
+            label="Contact"
+            onPress={() => {
+              console.log('[HomeScreen] Plus: Contact');
+              nav('/contact');
+            }}
+          />
+          <MoreItem
+            icon="📖"
+            label="Programme"
+            onPress={() => {
+              console.log('[HomeScreen] Plus: Programme');
+              nav('/program');
+            }}
+          />
+          <MoreItem
+            icon="⚙️"
+            label="Paramètres"
+            onPress={() => {
+              console.log('[HomeScreen] Plus: Paramètres');
+              nav('/settings');
+            }}
+          />
+        </View>
+
+        {/* ── Footer ── */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>© 2025 Alliance pour le Rassemblement Malien</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: ARM_GREEN,
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: BG,
   },
   content: {
     paddingBottom: 40,
@@ -398,219 +544,362 @@ const styles = StyleSheet.create({
 
   // Hero
   hero: {
-    width: "100%",
-    alignItems: "center",
-    paddingTop: 60,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    backgroundColor: colors.primary,
-    borderBottomWidth: 4,
-    borderBottomColor: colors.secondary,
+    backgroundColor: ARM_GREEN,
   },
-  logo: {
+  heroTop: {
+    alignItems: 'center',
+    paddingTop: 28,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
+    backgroundColor: ARM_GREEN,
+  },
+  heroLogo: {
     width: 100,
     height: 100,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: ARM_YELLOW,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: colors.surface,
-    marginTop: 16,
-    textAlign: "center",
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: ARM_WHITE,
+    marginTop: 12,
+    letterSpacing: 2,
   },
-  subtitle: {
+  heroSubtitle: {
     fontSize: 14,
-    color: colors.secondary,
-    marginTop: 6,
-    textAlign: "center",
+    color: ARM_YELLOW,
+    fontStyle: 'italic',
+    marginTop: 4,
+    letterSpacing: 0.5,
+  },
+  heroBanner: {
+    backgroundColor: ARM_YELLOW,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  heroBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: ARM_BLACK,
+    textAlign: 'center',
     letterSpacing: 0.5,
   },
 
-  // Section title
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.text,
-    marginLeft: 16,
-    marginTop: 24,
-    marginBottom: 12,
-  },
-
-  // CTA card
-  ctaWrapper: {
-    marginHorizontal: 16,
-    marginTop: 20,
-  },
-  ctaCard: {
-    backgroundColor: colors.secondary,
-    borderRadius: 16,
-    padding: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
+  // Stats bar
+  statsBar: {
+    flexDirection: 'row',
+    backgroundColor: ARM_WHITE,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    marginBottom: 4,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowRadius: 4,
     elevation: 2,
   },
-  ctaTextBlock: {
+  statItem: {
     flex: 1,
+    alignItems: 'center',
   },
-  ctaTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.text,
+  statFlag: {
+    fontSize: 20,
+    marginBottom: 2,
   },
-  ctaSubtitle: {
+  statValue: {
     fontSize: 13,
-    color: colors.text,
-    marginTop: 4,
-    opacity: 0.7,
+    fontWeight: '700',
+    color: ARM_GREEN,
   },
-  ctaChevron: {
-    fontSize: 28,
-    color: colors.text,
-    fontWeight: "300",
-    marginLeft: 8,
+  statLabel: {
+    fontSize: 11,
+    color: GREY,
+    marginTop: 1,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4,
   },
 
-  // Grid
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  // Section header
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: ARM_BLACK,
+  },
+  sectionLink: {
+    fontSize: 13,
+    color: ARM_GREEN,
+    fontWeight: '600',
+  },
+
+  // Quick actions grid
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 16,
     gap: 12,
   },
-  gridCard: {
-    backgroundColor: colors.surface,
+  quickCard: {
+    width: CARD_WIDTH,
+    backgroundColor: ARM_WHITE,
     borderRadius: 12,
     padding: 16,
-    minHeight: 110,
-    justifyContent: "space-between",
-    shadowColor: "#000",
+    borderLeftWidth: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 2,
   },
-  gridCardLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
-    marginTop: 8,
-  },
-  gridCardDesc: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 6,
-    lineHeight: 15,
-    flex: 1,
-  },
-
-  // Icon circle
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // Horizontal card (polls)
-  horizontalCardWrapper: {
-    marginHorizontal: 16,
-  },
-  horizontalCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  horizontalCardText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  horizontalCardTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  horizontalCardDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 3,
-  },
-
-  // List card (Le parti)
-  listCard: {
-    marginHorizontal: 16,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  listRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 64,
-  },
-  listRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  listRowContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  listRowLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  listRowDesc: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  chevron: {
+  quickCardIcon: {
     fontSize: 22,
-    color: colors.textTertiary,
-    fontWeight: "300",
+  },
+  quickCardLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: ARM_BLACK,
+    flex: 1,
+  },
+
+  // Loading / empty
+  loadingBox: {
+    marginHorizontal: 16,
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  emptyBox: {
+    marginHorizontal: 16,
+    paddingVertical: 20,
+    backgroundColor: ARM_WHITE,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: GREY,
+    textAlign: 'center',
+  },
+
+  // News
+  newsContainer: {
+    marginHorizontal: 16,
+    gap: 8,
+  },
+  newsCard: {
+    backgroundColor: ARM_WHITE,
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  newsCardContent: {
+    flex: 1,
+  },
+  newsCardMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  newsCategoryBadge: {
+    backgroundColor: ARM_GREEN + '20',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  newsCategoryText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: ARM_GREEN,
+    textTransform: 'uppercase',
+  },
+  newsDate: {
+    fontSize: 11,
+    color: GREY,
+  },
+  newsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: ARM_BLACK,
+    lineHeight: 20,
+  },
+  newsChevron: {
+    fontSize: 22,
+    color: GREY,
     marginLeft: 8,
   },
 
-  // Admin link
-  adminLink: {
-    marginTop: 32,
-    marginBottom: 16,
-    alignItems: "center",
+  // Events
+  eventsContainer: {
+    marginHorizontal: 16,
+    gap: 8,
   },
-  adminLinkText: {
+  eventCard: {
+    backgroundColor: ARM_WHITE,
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  eventDateBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: ARM_GREEN,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  eventDateText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: ARM_WHITE,
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+  eventInfo: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: ARM_BLACK,
+    lineHeight: 20,
+  },
+  eventLocation: {
     fontSize: 12,
-    color: colors.textTertiary,
-    textAlign: "center",
-    textDecorationLine: "underline",
+    color: GREY,
+    marginTop: 3,
   },
 
-  // Pressed state
-  pressed: {
-    opacity: 0.75,
+  // Poll
+  pollCard: {
+    marginHorizontal: 16,
+    backgroundColor: ARM_WHITE,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  pollQuestion: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: ARM_BLACK,
+    marginBottom: 14,
+    lineHeight: 22,
+  },
+  pollOption: {
+    marginBottom: 10,
+  },
+  pollOptionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  pollOptionLabel: {
+    fontSize: 13,
+    color: ARM_BLACK,
+    flex: 1,
+  },
+  pollOptionPct: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: ARM_GREEN,
+    marginLeft: 8,
+  },
+  pollBar: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  pollBarFill: {
+    height: 6,
+    backgroundColor: ARM_GREEN,
+    borderRadius: 3,
+  },
+  pollVoteBtn: {
+    marginTop: 14,
+    backgroundColor: ARM_GREEN,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  pollVoteBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: ARM_WHITE,
+  },
+
+  // More grid
+  moreGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  moreItem: {
+    width: CARD_WIDTH,
+    backgroundColor: ARM_WHITE,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  moreItemIcon: {
+    fontSize: 24,
+  },
+  moreItemLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: ARM_BLACK,
+    textAlign: 'center',
+  },
+
+  // Footer
+  footer: {
+    marginTop: 28,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 11,
+    color: GREY,
+    textAlign: 'center',
   },
 });
