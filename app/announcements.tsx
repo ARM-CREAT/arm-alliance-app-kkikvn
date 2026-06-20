@@ -65,7 +65,7 @@ export default function AnnouncementsScreen() {
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<Announcement[] | { items?: Announcement[]; data?: Announcement[] }>("/api/public/announcements");
+      const data = await apiGet<Announcement[] | { items?: Announcement[]; data?: Announcement[] }>("/api/announcements");
       const list = Array.isArray(data) ? data : (data as any).items || (data as any).data || [];
       console.log("[Announcements] Fetched", list.length, "items");
       setItems(list);

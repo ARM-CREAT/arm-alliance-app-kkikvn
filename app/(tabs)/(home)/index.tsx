@@ -175,7 +175,7 @@ export default function HomeScreen() {
     data: pollsRaw,
     loading: pollsLoading,
     error: pollsError,
-  } = useRealtimeApi<PollsResponse | PollItem[]>('/api/polls?status=active&limit=1', {
+  } = useRealtimeApi<PollsResponse | PollItem[]>('/api/polls', {
     intervalSeconds: 15,
   });
 

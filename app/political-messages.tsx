@@ -75,7 +75,7 @@ export default function PoliticalMessagesScreen() {
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<PoliticalMessage[] | { items?: PoliticalMessage[]; data?: PoliticalMessage[] }>("/api/public/political-messages");
+      const data = await apiGet<PoliticalMessage[] | { items?: PoliticalMessage[]; data?: PoliticalMessage[] }>("/api/political-messages");
       const list = Array.isArray(data) ? data : (data as any).items || (data as any).data || [];
       console.log("[PoliticalMessages] Fetched", list.length, "messages");
       setItems(list);

@@ -68,7 +68,7 @@ export default function EventsScreen() {
     if (!isRefresh) setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<EventItem[] | { items?: EventItem[]; data?: EventItem[] }>("/api/public/events");
+      const data = await apiGet<EventItem[] | { items?: EventItem[]; data?: EventItem[] }>("/api/events");
       const list = Array.isArray(data) ? data : (data as any).items || (data as any).data || [];
       console.log("[Events] Fetched", list.length, "events");
       setItems(list);
