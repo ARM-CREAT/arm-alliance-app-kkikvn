@@ -557,3 +557,17 @@ export const userNotifications = pgTable('user_notifications', {
 }, (table) => ({
   userIdCreatedAtIdx: index('user_id_created_at_idx').on(table.userId, desc(table.createdAt)),
 }));
+
+// Polls table
+export const polls = pgTable('polls', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(),
+  description: text('description'),
+  options: jsonb('options').notNull().default([]),
+  status: text('status').notNull().default('active'),
+  totalVotes: integer('total_votes').notNull().default(0),
+  createdBy: text('created_by'),
+  endsAt: timestamp('ends_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
