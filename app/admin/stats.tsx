@@ -95,12 +95,12 @@ export default function StatsScreen() {
   const [search, setSearch] = useState('');
 
   const fetchStats = useCallback(async () => {
-    console.log('[Stats] GET /api/stats/members');
+    console.log('[Stats] GET /api/members/stats');
     setError(null);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/stats/members`, {
+      const res = await fetch(`${BACKEND_URL}/api/members/stats`, {
         headers: {
           'Content-Type': 'application/json',
           'x-admin-password': 'admin123',
