@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, asc, count } from 'drizzle-orm';
+import { eq, asc, count, desc, gte } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -35,26 +35,26 @@ export async function seedEvents(app: App) {
 
     const sampleEvents = [
       {
-        title: 'Congrès National de l\'Alliance ARM',
-        description: 'Grand rassemblement des membres de l\'Alliance ARM pour discuter des orientations politiques.',
-        date: new Date('2025-03-15'),
-        location: 'Bamako, Mali',
+        title: 'Congrès National ARM 2025',
+        description: 'Grand congrès annuel de l\'Alliance pour la République et la Modernité. Rassemblement des délégués de toutes les régions du Mali.',
+        date: new Date('2025-09-15T09:00:00Z'),
+        location: 'Bamako, Palais des Congrès',
         imageUrl: 'https://picsum.photos/seed/event1/800/400',
         createdBy: 'system',
       },
       {
-        title: 'Meeting Régional de Sikasso',
-        description: 'Rencontre des membres de la région de Sikasso pour renforcer l\'organisation locale.',
-        date: new Date('2025-04-20'),
-        location: 'Sikasso, Mali',
+        title: 'Assemblée Régionale de Kayes',
+        description: 'Réunion des membres ARM de la région de Kayes pour discuter des enjeux locaux et préparer les prochaines élections.',
+        date: new Date('2025-10-20T10:00:00Z'),
+        location: 'Kayes, Maison des Jeunes',
         imageUrl: 'https://picsum.photos/seed/event2/800/400',
         createdBy: 'system',
       },
       {
-        title: 'Forum des Jeunes Alliance ARM',
-        description: 'Forum dédié à la jeunesse militante de l\'Alliance ARM.',
-        date: new Date('2025-05-10'),
-        location: 'Mopti, Mali',
+        title: 'Forum Jeunesse ARM 2026',
+        description: 'Forum national dédié à la jeunesse ARM. Ateliers, débats et élection du bureau national des jeunes.',
+        date: new Date('2026-02-10T08:00:00Z'),
+        location: 'Sikasso, Centre Culturel',
         imageUrl: 'https://picsum.photos/seed/event3/800/400',
         createdBy: 'system',
       },
@@ -71,52 +71,67 @@ export async function seedEvents(app: App) {
 export function register(app: App, fastify: FastifyInstance) {
   const requireAuth = app.requireAuth();
   // GET /api/events - Get all events (public, paginated)
-  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
+  fastify.get<{ Querystring: { page?: string; limit?: string; upcoming?: string } }>(
     '/api/events',
     {
       schema: {
-        description: 'Get all events ordered by date (paginated)',
+        description: 'Get all events ordered by date (paginated). Use ?upcoming=true to filter future events, ?limit=N for page size (default 20), ?page=N for pagination.',
         tags: ['events'],
         querystring: {
           type: 'object',
           properties: {
             page: { type: 'string', default: '1', description: 'Page number (default 1)' },
             limit: { type: 'string', default: '20', description: 'Items per page (default 20)' },
+            upcoming: { type: 'string', description: 'Filter upcoming events: true or false' },
           },
         },
         response: {
-          200: { type: 'object' },
+          200: {
+            type: 'object',
+            properties: {
+              data: { type: 'array', items: { type: 'object' } },
+              page: { type: 'number' },
+              limit: { type: 'number' },
+              total: { type: 'number' },
+            },
+          },
         },
       },
     },
-    async (request: FastifyRequest<{ Querystring: { page?: string; limit?: string } }>, reply) => {
+    async (request: FastifyRequest<{ Querystring: { page?: string; limit?: string; upcoming?: string } }>, reply) => {
       const page = Math.max(1, parseInt(request.query.page || '1', 10));
       const pageLimit = Math.max(1, parseInt(request.query.limit || '20', 10));
       const offsetValue = (page - 1) * pageLimit;
+      const upcoming = request.query.upcoming === 'true';
 
-      app.logger.info({ page, limit: pageLimit }, 'Fetching events');
+      app.logger.info({ page, limit: pageLimit, upcoming }, 'Fetching events');
 
       try {
-        const totalResult = await app.db.select({ count: count() }).from(schema.events);
+        const now = new Date();
+
+        // Build query with conditional filter
+        const whereCondition = upcoming ? gte(schema.events.date, now) : undefined;
+
+        const totalResult = whereCondition
+          ? await app.db.select({ count: count() }).from(schema.events).where(whereCondition)
+          : await app.db.select({ count: count() }).from(schema.events);
         const total = totalResult[0]?.count || 0;
 
-        const result = await app.db
-          .select()
-          .from(schema.events)
-          .orderBy(asc(schema.events.date))
-          .limit(pageLimit)
-          .offset(offsetValue);
+        // Build result query
+        const orderBy = upcoming ? asc(schema.events.date) : desc(schema.events.date);
+        const resultQuery = whereCondition
+          ? await app.db.select().from(schema.events).where(whereCondition).orderBy(orderBy).limit(pageLimit).offset(offsetValue)
+          : await app.db.select().from(schema.events).orderBy(orderBy).limit(pageLimit).offset(offsetValue);
 
-        app.logger.info({ count: result.length, page, total }, 'Events fetched successfully');
+        app.logger.info({ count: resultQuery.length, page, total, upcoming }, 'Events fetched successfully');
         return {
-          success: true,
-          data: result.map(formatEvent),
+          data: resultQuery.map(formatEvent),
           page,
           limit: pageLimit,
           total,
         };
       } catch (error) {
-        app.logger.error({ err: error }, 'Failed to fetch events');
+        app.logger.error({ err: error, upcoming }, 'Failed to fetch events');
         throw error;
       }
     }

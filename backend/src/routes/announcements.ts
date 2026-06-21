@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, count } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { App } from '../index.js';
 
@@ -23,13 +23,20 @@ function verifyAdminPassword(request: FastifyRequest, reply: FastifyReply): bool
 }
 
 export function register(app: App, fastify: FastifyInstance) {
-  // GET /api/announcements - Get all announcements ordered by created_at DESC
-  fastify.get(
+  // GET /api/announcements - Get published announcements (paginated)
+  fastify.get<{ Querystring: { limit?: string; page?: string } }>(
     '/api/announcements',
     {
       schema: {
-        description: 'Get all announcements',
+        description: 'Get published announcements (paginated). Filter by published=true, ordered by created_at DESC.',
         tags: ['announcements'],
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'string', default: '20', description: 'Items per page (default 20)' },
+            page: { type: 'string', default: '1', description: 'Page number (default 1)' },
+          },
+        },
         response: {
           200: {
             type: 'array',
@@ -38,25 +45,84 @@ export function register(app: App, fastify: FastifyInstance) {
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      app.logger.info('Fetching all announcements');
+    async (request: FastifyRequest<{ Querystring: { limit?: string; page?: string } }>, reply: FastifyReply) => {
+      const pageLimit = Math.max(1, parseInt(request.query.limit || '20', 10));
+      const page = Math.max(1, parseInt(request.query.page || '1', 10));
+      const pageOffset = (page - 1) * pageLimit;
+
+      app.logger.info({ limit: pageLimit, page }, 'Fetching announcements');
 
       try {
         const announcements = await app.db
           .select()
           .from(schema.announcements)
-          .orderBy(desc(schema.announcements.createdAt));
+          .where(eq(schema.announcements.published, true))
+          .orderBy(desc(schema.announcements.createdAt))
+          .limit(pageLimit)
+          .offset(pageOffset);
 
-        app.logger.info({ count: announcements.length }, 'Announcements retrieved');
+        app.logger.info({ count: announcements.length, page }, 'Announcements retrieved');
 
         return announcements.map(a => ({
           id: a.id,
           title: a.title,
           content: a.body, // Map body column to content field
+          published: a.published,
           created_at: a.createdAt.toISOString(),
         }));
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch announcements');
+        throw error;
+      }
+    }
+  );
+
+  // GET /api/announcements/:id - Get single announcement
+  fastify.get<{ Params: { id: string } }>(
+    '/api/announcements/:id',
+    {
+      schema: {
+        description: 'Get a single published announcement by ID',
+        tags: ['announcements'],
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: { id: { type: 'string', format: 'uuid' } },
+        },
+        response: {
+          200: { type: 'object' },
+          404: { type: 'object' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      app.logger.info({ announcementId: id }, 'Fetching announcement');
+
+      try {
+        const result = await app.db
+          .select()
+          .from(schema.announcements)
+          .where(eq(schema.announcements.id, id));
+
+        if (result.length === 0) {
+          app.logger.warn({ announcementId: id }, 'Announcement not found');
+          reply.status(404);
+          return { error: 'Not found' };
+        }
+
+        const a = result[0];
+        app.logger.info({ announcementId: id }, 'Announcement retrieved');
+
+        return {
+          id: a.id,
+          title: a.title,
+          content: a.body,
+          published: a.published,
+          created_at: a.createdAt.toISOString(),
+        };
+      } catch (error) {
+        app.logger.error({ err: error, announcementId: id }, 'Failed to fetch announcement');
         throw error;
       }
     }
@@ -248,24 +314,16 @@ export async function seedAnnouncements(app: App) {
       const now = new Date();
       const seedData = [
         {
-          title: 'Réunion du bureau exécutif',
-          body: "Le bureau exécutif de l'Alliance ARM se réunira le 15 du mois prochain. Tous les membres du bureau sont priés d'être présents.",
+          title: 'Ouverture des adhésions 2025',
+          body: 'L\'Alliance ARM ouvre officiellement les adhésions pour l\'année 2025. Rejoignez le mouvement et participez à la construction d\'un Mali moderne et prospère. Les inscriptions sont ouvertes dans toutes les régions.',
           priority: 'high',
           published: true,
           createdAt: now,
           updatedAt: now,
         },
         {
-          title: 'Collecte de cotisations',
-          body: 'La période de collecte des cotisations annuelles est ouverte. Les membres sont invités à régulariser leur situation avant la fin du mois.',
-          priority: 'normal',
-          published: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          title: 'Journée de solidarité',
-          body: "L'Alliance ARM organise une journée de solidarité en faveur des populations vulnérables. Votre participation est la bienvenue.",
+          title: 'Réunion du Bureau Politique',
+          body: 'Le Bureau Politique de l\'ARM se réunira le 30 juillet 2025 à Bamako pour examiner la situation politique nationale et définir la stratégie du parti pour les prochains mois.',
           priority: 'normal',
           published: true,
           createdAt: now,
