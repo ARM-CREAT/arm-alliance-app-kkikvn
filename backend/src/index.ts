@@ -6,7 +6,7 @@ import * as schema from './db/schema.js';
 import * as membershipRoutes from './routes/membership.js';
 import * as leadershipRoutes from './routes/leadership.js';
 import * as donationRoutes from './routes/donations.js';
-// Disabled: import * as eventRoutes from './routes/events.js';
+import * as eventRoutes from './routes/events.js';
 import * as newsRoutes from './routes/news.js'; // API news using api_news table
 // Disabled: import * as messageRoutes from './routes/messages.js';
 // Disabled: import * as chatRoutes from './routes/chat.js';
@@ -33,7 +33,7 @@ import * as settingsRoutes from './routes/settings.js';
 import * as conversationRoutes from './routes/conversations.js';
 import * as extendedProgramRoutes from './routes/programs.js';
 import * as membershipsRoutes from './routes/memberships.js';
-// Disabled: import * as notificationsRoutes from './routes/notifications.js';
+import * as notificationsRoutes from './routes/notifications.js';
 import * as membersApiRoutes from './routes/membersApi.js';
 import * as directionRoutes from './routes/direction.js';
 import * as cmsNewsRoutes from './routes/cms-news.js';
@@ -52,6 +52,7 @@ import * as cotisationsRoutes from './routes/cotisations.js';
 import * as adhesionRoutes from './routes/adhesion.js';
 import * as userNotificationsRoutes from './routes/userNotifications.js';
 import * as pollsRoutes from './routes/polls.js';
+import * as publicChatRoutes from './routes/publicChat.js';
 import { initializeData } from './routes/init.js';
 
 // Create application with schema for full database type support
@@ -133,7 +134,7 @@ healthRoutes.register(app, app.fastify);
 membershipRoutes.register(app, app.fastify);
 leadershipRoutes.register(app, app.fastify);
 donationRoutes.register(app, app.fastify);
-// eventRoutes.register(app, app.fastify); // Disabled
+eventRoutes.register(app, app.fastify);
 newsRoutes.register(app, app.fastify); // API news using api_news table
 // messageRoutes.register(app, app.fastify); // Disabled
 // chatRoutes.register(app, app.fastify); // Disabled
@@ -158,7 +159,7 @@ settingsRoutes.register(app, app.fastify);
 conversationRoutes.register(app, app.fastify);
 extendedProgramRoutes.register(app, app.fastify);
 membershipsRoutes.register(app, app.fastify);
-// notificationsRoutes.register(app, app.fastify); // Disabled
+notificationsRoutes.register(app, app.fastify);
 membersApiRoutes.register(app, app.fastify);
 // memberStatsRoutes.register(app, app.fastify); // Disabled: GET /api/stats/members already defined in membersApiRoutes
 directionRoutes.register(app, app.fastify);
@@ -175,16 +176,17 @@ cotisationsRoutes.register(app, app.fastify);
 adhesionRoutes.register(app, app.fastify);
 userNotificationsRoutes.register(app, app.fastify);
 pollsRoutes.register(app, app.fastify);
+publicChatRoutes.register(app, app.fastify);
 
 // Seed data
 await adminAuthRoutes.seedAdminUser(app);
 await conferenceRoutes.seedDefaultConference(app);
 await settingsRoutes.seedSettings(app);
-// await eventRoutes.seedEvents(app); // Disabled
+await eventRoutes.seedEvents(app);
 await newsRoutes.seedApiNews(app); // Seed api_news table
 await leadershipRoutes.seedLeadership(app);
 await extendedProgramRoutes.seedPrograms(app);
-// await notificationsRoutes.seedNotifications(app); // Disabled
+await notificationsRoutes.seedNotifications(app);
 await programRoutes.seedProgramSections(app);
 await membersApiRoutes.seedMembers(app);
 await directionRoutes.seedDirection(app);
@@ -200,6 +202,7 @@ await armMessagesRoutes.seedArmMessages(app);
 await membersAndMessagesRoutes.seedMembersAndMessages(app);
 await adhesionRoutes.seedAdhesion(app);
 await pollsRoutes.seedPolls(app);
+await eventRoutes.seedEvents(app);
 
 // Setup WebSocket signaling for conferences
 import {

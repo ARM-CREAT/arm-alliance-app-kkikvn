@@ -166,35 +166,58 @@ export function register(app: App, fastify: FastifyInstance) {
     }
   );
 
-  // GET /api/admin/donations - Get all donations (admin)
-  fastify.get(
+  // GET /api/admin/donations - Get all donations (admin, authenticated, paginated)
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>(
     '/api/admin/donations',
     {
       schema: {
-        description: 'Get all donations (admin only)',
+        description: 'Get all donations (admin only, paginated)',
         tags: ['admin', 'donations'],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'string', default: '1', description: 'Page number (default 1)' },
+            limit: { type: 'string', default: '50', description: 'Items per page (default 50)' },
+          },
+        },
         response: {
-          200: { type: 'object' },
+          200: {
+            type: 'object',
+            properties: {
+              data: { type: 'array', items: { type: 'object' } },
+              total: { type: 'number' },
+            },
+          },
           401: { type: 'object' },
         },
       },
     },
-    async (request, reply) => {
-      if (!verifyAdminPassword(request, reply)) return;
+    async (request: FastifyRequest<{ Querystring: { page?: string; limit?: string } }>, reply: FastifyReply) => {
+      const session = await app.requireAuth()(request, reply);
+      if (!session) return;
 
-      app.logger.info('Fetching all donations');
+      const page = Math.max(1, parseInt(request.query.page || '1', 10));
+      const pageLimit = Math.max(1, parseInt(request.query.limit || '50', 10));
+      const offsetValue = (page - 1) * pageLimit;
+
+      app.logger.info({ page, limit: pageLimit }, 'Admin fetching all donations');
 
       try {
+        const totalResult = await app.db.select({ count: count() }).from(schema.donations);
+        const total = totalResult[0]?.count || 0;
+
         const result = await app.db
           .select()
           .from(schema.donations)
-          .orderBy(schema.donations.createdAt);
+          .orderBy(desc(schema.donations.createdAt))
+          .limit(pageLimit)
+          .offset(offsetValue);
 
         app.logger.info(
-          { count: result.length },
-          'Donations fetched successfully'
+          { count: result.length, page, total },
+          'Admin donations fetched successfully'
         );
-        return { donations: result.map(formatDonation) };
+        return { data: result.map(formatDonation), total };
       } catch (error) {
         app.logger.error({ err: error }, 'Failed to fetch donations');
         throw error;
